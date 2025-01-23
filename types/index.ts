@@ -1,11 +1,24 @@
-// ====== USER PARAMS
 export type CreateUserParams = {
   clerkId: string;
+  username: string;
   firstName: string;
   lastName: string;
-  username: string;
   email: string;
   photo: string;
+  bio?: string;
+  phone?: string;
+  address?: string;
+  accountNumber?: string;
+  bankName?: string;
+  socialLinks?: { platform: string; url: string }[];
+  role?: string | 'user' | 'organizer' | 'admin';
+  organizerProfile?: {
+    organizationName?: string;
+    bio?: string;
+    website?: string;
+  };
+  isVerified?: boolean;
+  eventsHosted?: string[];
 };
 
 export type UpdateUserParams = {
@@ -13,6 +26,20 @@ export type UpdateUserParams = {
   lastName: string;
   username: string;
   photo: string;
+  bio?: string;
+  phone?: string;
+  address?: string;
+  accountNumber?: string;
+  bankName?: string;
+  socialLinks?: { platform: string; url: string }[];
+  role?: string | 'user' | 'organizer' | 'admin';
+  organizerProfile?: {
+    organizationName?: string;
+    bio?: string;
+    website?: string;
+  };
+  isVerified?: boolean;
+  eventsHosted?: string[];
 };
 
 // ====== EVENT PARAMS
