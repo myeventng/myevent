@@ -76,7 +76,6 @@ export async function POST(req: Request) {
       accountNumber: '',
       bankName: '',
       socialLinks: [],
-      role: 'user',
       organizerProfile: {
         organizationName: '',
         bio: '',
@@ -90,6 +89,7 @@ export async function POST(req: Request) {
       await clerk.users.updateUserMetadata(id, {
         publicMetadata: {
           userId: newUser._id,
+          role: 'user',
         },
       });
     }

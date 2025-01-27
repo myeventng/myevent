@@ -1,5 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 
+// clerk middleware
 const isPublicRoute = createRouteMatcher([
   '/',
   '/sign-in(.*)',
@@ -22,3 +23,5 @@ export const config = {
     '/(api|trpc)(.*)',
   ],
 };
+
+// role-base middleware

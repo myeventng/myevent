@@ -1,13 +1,15 @@
-import { Schema, model, models, Document } from 'mongoose';
+import { Schema, model, models, Document, STATES } from 'mongoose';
 
 export interface ICity extends Document {
   _id: string;
   name: string;
+  state: string;
   population?: number;
 }
 
 const CitySchema = new Schema({
   name: { type: String, required: true, unique: true },
+  state: { type: String, required: true, unique: true },
   population: { type: Number },
 });
 

@@ -6,6 +6,7 @@ export interface IVenue extends Document {
   address: string;
   city: { _id: string; name: string };
   capacity: number;
+  location: { type: 'Point'; coordinates: [number, number] }; // GeoJSON format
 }
 
 const VenueSchema = new Schema({
@@ -13,8 +14,15 @@ const VenueSchema = new Schema({
   address: { type: String, required: true },
   city: { type: Schema.Types.ObjectId, ref: 'City', required: true },
   capacity: { type: Number, required: true },
+  location: {
+    type: { type: String, enum: ['Point'], required: true },
+    coordinates: { type: [Number], required: true }, // [longitude, latitude]
+  },
 });
 
-const Venue = models.Venue || model('Venue', VenueSchema);
+// Add a geospatial index for efficient querying
+VenueSchema.index({ location: '2dsphere' });
+
+const Venue = models.Venue || model<IVenue>('Venue', VenueSchema);
 
 export default Venue;

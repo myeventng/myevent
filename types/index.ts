@@ -130,6 +130,7 @@ export type Event = {
 
 // ====== CATEGORY PARAMS
 export type CreateCategoryParams = {
+  _id?: string;
   categoryName: string;
 };
 

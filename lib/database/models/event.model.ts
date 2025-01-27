@@ -11,7 +11,6 @@ export interface IEvent extends Document {
   coverImageUrl?: string;
   startDateTime: Date;
   endDateTime: Date;
-  price: string;
   isFree: boolean;
   url?: string;
   category: { _id: string; name: string };
@@ -20,6 +19,7 @@ export interface IEvent extends Document {
   attendeeLimit?: number;
   ratings?: { userId: string; rating: number; comment?: string }[];
   featured?: boolean;
+  ticketTypes?: { name: string; price: number; quantity: number }[];
   embeddedVideoUrl?: string;
   publishedStatus: 'draft' | 'pending review';
 }
@@ -34,7 +34,6 @@ const EventSchema = new Schema({
   coverImageUrl: { type: String },
   startDateTime: { type: Date, default: Date.now },
   endDateTime: { type: Date, default: Date.now },
-  price: { type: String },
   isFree: { type: Boolean, default: false },
   url: { type: String },
   category: { type: Schema.Types.ObjectId, ref: 'Category' },
@@ -51,6 +50,20 @@ const EventSchema = new Schema({
   ],
   featured: { type: Boolean, default: false },
   embeddedVideoUrl: { type: String },
+  ticketTypes: [
+    {
+      name: { type: String, required: true },
+      price: { type: Number, required: true, min: 0 },
+      quantity: { type: Number, required: true, min: 0 },
+      tickets: [
+        {
+          ticketId: { type: String, unique: true },
+          userId: { type: Schema.Types.ObjectId, ref: 'User' },
+          status: { type: String, enum: ['unused', 'used'], default: 'unused' },
+        },
+      ],
+    },
+  ],
   publishedStatus: {
     type: String,
     enum: ['draft', 'pending review'],
