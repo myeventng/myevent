@@ -4,9 +4,11 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { RiMenuUnfoldLine } from 'react-icons/ri';
 import { RiMenuFoldLine } from 'react-icons/ri';
-
-import { Home, List, Users } from 'lucide-react';
+import { Home, Users } from 'lucide-react';
+import { LuPartyPopper } from 'react-icons/lu';
+import { BiCategory } from 'react-icons/bi';
 import Link from 'next/link';
+
 const Sidebar = () => {
   const [isOpen, setIsOpen] = useState(true);
 
@@ -19,7 +21,7 @@ const Sidebar = () => {
     >
       <div className="flex justify-between items-center p-4">
         <span className="font-bold text-xl mr-4">
-          {isOpen ? 'MyEvent' : 'ME'}
+          {isOpen ? 'MyEventNg' : 'ME'}
         </span>
         <button
           onClick={() => setIsOpen(!isOpen)}
@@ -36,10 +38,16 @@ const Sidebar = () => {
           <Home size={24} /> {isOpen && 'Dashboard'}
         </Link>
         <Link
-          href="/admin/list"
+          href="/admin/events"
           className="flex items-center gap-4 p-4 hover:bg-gray-700"
         >
-          <List size={24} /> {isOpen && 'List'}
+          <LuPartyPopper size={24} /> {isOpen && 'Events'}
+        </Link>
+        <Link
+          href="/admin/categories"
+          className="flex items-center gap-4 p-4 hover:bg-gray-700"
+        >
+          <BiCategory size={24} /> {isOpen && 'Categories'}
         </Link>
         <Link
           href="/admin/users"

@@ -1,8 +1,8 @@
 export type CreateUserParams = {
   clerkId: string;
   username: string;
-  firstName: string;
-  lastName: string;
+  firstname: string;
+  lastname: string;
   email: string;
   photo: string;
   bio?: string;
@@ -132,7 +132,21 @@ export type Event = {
 export type CreateCategoryParams = {
   _id?: string;
   categoryName: string;
+  path: string;
 };
+
+export type updateCategoryParams = {
+  categoryId: string;
+  category: string;
+  path: string;
+};
+
+export type DeleteCategoryParams = {
+  categoryId: string;
+  path: string;
+};
+
+export type GetAllCategorysParams = {};
 
 // ====== ORDER PARAMS
 export type CheckoutOrderParams = {

@@ -1,22 +1,9 @@
-import mongoose from 'mongoose';
+import { PrismaClient } from '@prisma/client';
 
-const MONGODB_URI = process.env.MONGODB_URI;
+declare global {
+  var prisma: PrismaClient | undefined;
+}
 
-let cached = (global as any).mongoose || { conn: null, promise: null };
+export const db = globalThis.prisma || new PrismaClient();
 
-export const connectToDatabase = async () => {
-  if (cached.conn) return cached.conn;
-
-  if (!MONGODB_URI) throw new Error('MONGODB_URI is missing');
-
-  cached.promise =
-    cached.promise ||
-    mongoose.connect(MONGODB_URI, {
-      dbName: 'myevent',
-      bufferCommands: false,
-    });
-
-  cached.conn = await cached.promise;
-
-  return cached.conn;
-};
+if (process.env.NODE_ENV !== 'production') globalThis.prisma = db;

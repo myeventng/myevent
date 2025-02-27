@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Nunito } from 'next/font/google';
 import './globals.css';
-import { ClerkProvider } from '@clerk/nextjs';
 import { Toaster } from '@/components/ui/toaster';
 
 const nunito = Nunito({
@@ -27,13 +26,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider afterSignOutUrl="/">
-      <html lang="en">
-        <body className={`${nunito.variable} antialiased font-nunito`}>
-          {children}
-          <Toaster />
-        </body>
-      </html>
-    </ClerkProvider>
+    <html lang="en">
+      <body className={`${nunito.variable} antialiased font-nunito`}>
+        {children}
+        <Toaster />
+      </body>
+    </html>
   );
 }
