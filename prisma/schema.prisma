@@ -8,17 +8,18 @@ datasource db {
 }
 
 model Category {
-  id     String  @id @default(cuid())
-  name   String  @unique
-  events Event[]
+  id    String  @id @default(cuid())
+  name  String  @unique
+  Event Event[]
 }
 
 model City {
-  id     String  @id @default(cuid())
-  name   String  @unique
-  state  String
-  events Event[]
-  venues Venue[]
+  id         String  @id @default(cuid())
+  name       String  @unique
+  population Int?
+  state      String
+  events     Event[]
+  venues     Venue[]
 }
 
 model Event {
@@ -27,7 +28,6 @@ model Event {
   description      String?
   location         String?
   cityId           String?
-  city             City?           @relation(fields: [cityId], references: [id])
   createdAt        DateTime        @default(now())
   imageUrl         String
   coverImageUrl    String?
@@ -37,6 +37,7 @@ model Event {
   url              String?
   categoryId       String?
   category         Category?       @relation(fields: [categoryId], references: [id])
+  city             City?           @relation(fields: [cityId], references: [id])
   organizerId      String?
   organizer        User?           @relation(fields: [organizerId], references: [id])
   venueId          String
@@ -144,6 +145,7 @@ model User {
   ratings               Rating[]
   orders                Order[]
   tickets               Ticket[]
+  venue                 Venue[]
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   isTwoFactorEnabled    Boolean                @default(false)
@@ -151,6 +153,7 @@ model User {
 }
 
 model Account {
+  id                String   @id @default(cuid())
   userId            String
   type              String
   provider          String
@@ -162,13 +165,12 @@ model Account {
   scope             String?
   id_token          String?
   session_state     String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@id([provider, providerAccountId])
+  @@unique([provider, providerAccountId])
 }
 
 model VerificationToken {
@@ -230,14 +232,18 @@ model OrganizerProfile {
 }
 
 model Venue {
-  id       String  @id @default(cuid())
-  name     String
-  address  String
-  cityId   String
-  city     City    @relation(fields: [cityId], references: [id])
-  capacity Int
-  location Json
-  events   Event[]
+  id          String  @id @default(cuid())
+  name        String
+  address     String
+  cityId      String
+  city        City    @relation(fields: [cityId], references: [id])
+  userId      String
+  description String?
+  contactInfo String?
+  user        User    @relation(fields: [userId], references: [id])
+  capacity    Int
+  location    Json
+  events      Event[]
 }
 
 model Tag {

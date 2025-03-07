@@ -1,21 +1,29 @@
-import Sidebar from '@/components/section/Sidebar';
-import Navbar from '@/components/section/Navbar';
+import Navbar from '@/components/section/AdminNavbar';
 import { ReactNode } from 'react';
-
+import { SessionProvider } from 'next-auth/react';
+import { auth } from '@/auth';
+import { AppSidebar, SidebarProvider } from '@/components/shared/AppSidebar';
 export const metadata = {
   title: 'Admin Dashboard',
   description: 'Manage events and users.',
 };
 
-const AdminLayout = ({ children }: { children: ReactNode }) => {
+const AdminLayout = async ({ children }: { children: ReactNode }) => {
+  const session = await auth();
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <div className="flex-1">
-        <Navbar />
-        <main className="p-6 bg-gray-200 h-full">{children}</main>
-      </div>
-    </div>
+    <SessionProvider session={session}>
+      <SidebarProvider>
+        <AppSidebar />
+        <div className="flex-1 bg-gray-200">
+          <div className="h-screen w-full overflow-y-auto overflow-hidden">
+            <div className="sticky top-0">
+              <Navbar />
+            </div>
+            <main className="p-6">{children}</main>
+          </div>
+        </div>
+      </SidebarProvider>
+    </SessionProvider>
   );
 };
 

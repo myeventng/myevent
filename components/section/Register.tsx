@@ -209,7 +209,7 @@ export function Register({ className, ...props }: React.ComponentProps<'div'>) {
                 <div className="text-center text-sm">
                   Already have an account?{' '}
                   <Link
-                    href="/login"
+                    href="/auth/login"
                     className="underline underline-offset-4 ml-2"
                   >
                     Sign In

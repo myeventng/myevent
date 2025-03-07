@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Nunito } from 'next/font/google';
 import './globals.css';
-import { Toaster } from '@/components/ui/toaster';
+import { Toaster } from 'react-hot-toast';
 
 const nunito = Nunito({
   variable: '--font-nunito',
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   // },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -28,8 +28,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${nunito.variable} antialiased font-nunito`}>
+        <Toaster position="top-center" reverseOrder={false} />
         {children}
-        <Toaster />
       </body>
     </html>
   );

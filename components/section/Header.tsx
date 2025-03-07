@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import MobileNav from '../shared/MobileNav';
 import SignInBtn from '../shared/SignInBtn';
 import { Button } from '../ui/button';
+import { LogoutButton } from '../shared/LogoutBtn';
 
 const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -47,9 +48,11 @@ const Header = () => {
         <div className="flex w-44 justify-end gap-3">
           <MobileNav />
           <div>
-            <SignInBtn>
-              <Button>Sign In</Button>
-            </SignInBtn>
+            <LogoutButton>
+              <button>logou out</button>
+            </LogoutButton>
+            <Button>Sign In</Button>
+            <div />
           </div>
         </div>
       </div>

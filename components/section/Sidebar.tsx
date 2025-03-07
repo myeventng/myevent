@@ -35,7 +35,8 @@ const Sidebar = () => {
           href="/admin"
           className="flex items-center gap-4 p-4 hover:bg-gray-700"
         >
-          <Home size={24} /> {isOpen && 'Dashboard'}
+          <Home size={24} className="mr-3" />
+          <span className="flex-1 text-left">Dashboard</span>
         </Link>
         <Link
           href="/admin/events"

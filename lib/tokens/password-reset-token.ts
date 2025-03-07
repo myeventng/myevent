@@ -5,8 +5,9 @@ export const getPasswordResetTokenByToken = async (token: string) => {
     const passwordResetToken = await db.passwordResetToken.findUnique({
       where: { token },
     });
+
     return passwordResetToken;
-  } catch (error) {
+  } catch {
     return null;
   }
 };
@@ -16,8 +17,9 @@ export const getPasswordResetTokenByEmail = async (email: string) => {
     const passwordResetToken = await db.passwordResetToken.findFirst({
       where: { email },
     });
+
     return passwordResetToken;
-  } catch (error) {
+  } catch {
     return null;
   }
 };
