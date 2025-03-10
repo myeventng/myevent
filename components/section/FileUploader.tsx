@@ -1,66 +1,127 @@
 'use client';
 
-import { useCallback, Dispatch, SetStateAction } from 'react';
-import type { FileWithPath } from '@uploadthing/react';
-import { useDropzone } from '@uploadthing/react/hooks';
+import { useState, useCallback } from 'react';
+import { FileWithPath } from 'react-dropzone';
+import { useDropzone } from 'react-dropzone';
 import { generateClientDropzoneAccept } from 'uploadthing/client';
-
+import { UploadButton, UploadDropzone, Uploader } from '@/lib/uploadthings';
+import type { OurFileRouter } from '@/app/api/uploadthing/core'; // Import your router type
+import { Loader2, X, FileImage, Upload } from 'lucide-react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { convertFileToUrl } from '@/lib/utils';
 
-type FileUploaderProps = {
+// Define a type for the endpoint to handle different file categories
+type UploadEndpoint =
+  | 'eventImage'
+  | 'eventCover'
+  | 'profileImage'
+  | 'venueImage';
+
+interface FileUploaderProps {
   onFieldChange: (url: string) => void;
   imageUrl: string;
-  setFiles: Dispatch<SetStateAction<File[]>>;
-};
+  setFiles: React.Dispatch<React.SetStateAction<File[]>>;
+  maxFiles?: number;
+  disabled?: boolean;
+  endpoint: UploadEndpoint;
+}
 
-export function FileUploader({
-  imageUrl,
+export const FileUploader = ({
   onFieldChange,
+  imageUrl,
   setFiles,
-}: FileUploaderProps) {
-  const onDrop = useCallback((acceptedFiles: FileWithPath[]) => {
-    setFiles(acceptedFiles);
-    onFieldChange(convertFileToUrl(acceptedFiles[0]));
-  }, []);
+  maxFiles = 1,
+  disabled = false,
+  endpoint,
+}: FileUploaderProps) => {
+  const [isUploading, setIsUploading] = useState(false);
+  const [isImageLoaded, setIsImageLoaded] = useState(false);
+
+  // Handle file upload completion
+  const onComplete = (res: { url: string }[]) => {
+    const uploadedImageUrl = res[0]?.url;
+    if (uploadedImageUrl) {
+      onFieldChange(uploadedImageUrl);
+      setIsUploading(false);
+    }
+  };
+
+  // Handle upload start
+  const onUploadStart = () => {
+    setIsUploading(true);
+  };
+
+  // Handle file drop with react-dropzone
+  const onDrop = useCallback(
+    (acceptedFiles: FileWithPath[]) => {
+      setFiles(acceptedFiles);
+    },
+    [setFiles]
+  );
 
   const { getRootProps, getInputProps } = useDropzone({
     onDrop,
-    accept: 'image/*' ? generateClientDropzoneAccept(['image/*']) : undefined,
+    accept: generateClientDropzoneAccept(['image/*']),
+    maxFiles,
+    disabled: isUploading || disabled,
   });
 
-  return (
-    <div
-      {...getRootProps()}
-      className="flex-center bg-dark-3 flex h-72 cursor-pointer flex-col overflow-hidden rounded-xl bg-grey-50"
-    >
-      <input {...getInputProps()} className="cursor-pointer" />
+  // Handle remove image
+  const handleRemoveImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onFieldChange('');
+  };
 
-      {imageUrl ? (
-        <div className="flex h-full w-full flex-1 justify-center ">
-          <img
+  return (
+    <div>
+      {imageUrl && isImageLoaded ? (
+        <div className="relative w-full h-64 border border-gray-200 rounded-md overflow-hidden">
+          <Image
             src={imageUrl}
-            alt="image"
-            width={250}
-            height={250}
-            className="w-full object-cover object-center"
+            alt="Uploaded image"
+            fill
+            className="object-cover"
+            onLoad={() => setIsImageLoaded(true)}
           />
+          <div className="absolute top-2 right-2">
+            <Button
+              variant="destructive"
+              size="icon"
+              onClick={handleRemoveImage}
+              disabled={disabled}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       ) : (
-        <div className="flex-center flex-col py-5 text-grey-500">
-          <img
-            src="/assets/icons/upload.svg"
-            width={77}
-            height={77}
-            alt="file upload"
-          />
-          <h3 className="mb-2 mt-2">Drag photo here</h3>
-          <p className="p-medium-12 mb-4">SVG, PNG, JPG</p>
-          <Button type="button" className="rounded-full">
-            Select from computer
-          </Button>
+        <div
+          className={`border-2 border-dashed border-gray-300 rounded-lg p-8 ${
+            disabled ? 'opacity-50' : 'hover:border-primary'
+          } transition-all flex flex-col items-center justify-center min-h-[200px]`}
+        >
+          {isUploading ? (
+            <div className="flex flex-col items-center justify-center">
+              <Loader2 className="h-10 w-10 text-primary animate-spin" />
+              <p className="mt-2 text-sm text-gray-500">Uploading...</p>
+            </div>
+          ) : (
+            <UploadDropzone<OurFileRouter, UploadEndpoint>
+              endpoint={endpoint}
+              onClientUploadComplete={onComplete}
+              onUploadBegin={onUploadStart}
+              className="w-full ut-button:bg-primary ut-button:ut-readying:bg-primary/80 ut-button:ut-uploading:bg-primary/80 ut-label:text-primary"
+              config={{ mode: 'auto' }}
+              content={{
+                label: ({ isDragActive }: { isDragActive: boolean }) =>
+                  isDragActive
+                    ? 'Drop files here'
+                    : `Drag & drop or click to upload (max ${maxFiles} files)`,
+              }}
+            />
+          )}
         </div>
       )}
     </div>
   );
-}
+};

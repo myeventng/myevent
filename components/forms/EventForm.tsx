@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
+import { toast } from 'react-hot-toast';
 import { Loader2, Plus, Trash } from 'lucide-react';
 
 // UI Components
@@ -27,26 +28,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { format } from 'date-fns';
 
 // Custom Components
 import SearchableVenueSelect from '../section/VenueSearch';
 import { TagManager } from '@/components/section/TagManger';
-import { FileUploader } from '@/components/section/FileUploader';
 import { DateTimePicker } from '@/components/shared/DateTimePicker';
+import { FileUploader } from '@/components/section/FileUploader';
 
 // Actions and Schema
 import {
   createEvent,
   updateEvent,
   getEvent,
+  getAllVenuesForDropdown,
 } from '@/lib/actions/event.actions';
 import { getAllCategories } from '@/lib/actions/category.actions';
-import { getAllVenuesForDropdown } from '@/lib/actions/event.actions';
 import { EventSchema } from '@/schemas';
 
 // Types
@@ -60,15 +59,23 @@ interface TicketType {
   quantity: number;
 }
 
-// Props interface
+// Props interface for EventForm
 interface EventFormProps {
-  eventId?: string;
+  initialData?:
+    | (Event & {
+        venue: Venue;
+        category?: Category;
+        tags: { id: string }[];
+        ticketTypes: TicketType[];
+      })
+    | null;
   userId?: string;
 }
 
-const EventForm = ({ eventId, userId }: EventFormProps) => {
+const EventForm = ({ initialData, userId }: EventFormProps) => {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
@@ -76,93 +83,87 @@ const EventForm = ({ eventId, userId }: EventFormProps) => {
   const [ticketTypes, setTicketTypes] = useState<TicketType[]>([
     { name: 'General Admission', price: 0, quantity: 100 },
   ]);
-  const [imageFile, setImageFile] = useState<File[]>([]);
-  const [coverImageFile, setCoverImageFile] = useState<File[]>([]);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [coverImageFiles, setCoverImageFiles] = useState<File[]>([]);
   const [imageUrl, setImageUrl] = useState('');
   const [coverImageUrl, setCoverImageUrl] = useState('');
-  const [isLoading, setIsLoading] = useState(!!eventId);
 
-  // Initialize form
+  // Initialize form with type-safe default values
   const form = useForm<z.infer<typeof EventSchema>>({
     resolver: zodResolver(EventSchema),
     defaultValues: {
-      title: '',
-      description: '',
-      location: '',
-      imageUrl: '',
-      coverImageUrl: '',
-      startDateTime: new Date(),
-      endDateTime: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
-      isFree: true,
-      url: '',
-      categoryId: '',
-      userId: userId,
-      venueId: '',
-      cityId: '',
-      attendeeLimit: 100,
-      featured: false,
-      embeddedVideoUrl: '',
-      isCancelled: false,
-      publishedStatus: PublishedStatus.DRAFT as PublishedStatus,
-      tags: [],
+      title: initialData?.title || '',
+      description: initialData?.description || '',
+      location: initialData?.location || '',
+      imageUrl: initialData?.imageUrl || '',
+      coverImageUrl: initialData?.coverImageUrl || '',
+      startDateTime: initialData?.startDateTime
+        ? new Date(initialData.startDateTime)
+        : new Date(),
+      endDateTime: initialData?.endDateTime
+        ? new Date(initialData.endDateTime)
+        : new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
+      isFree: initialData?.isFree ?? true,
+      url: initialData?.url || '',
+      categoryId: initialData?.categoryId || '',
+      userId: userId || initialData?.userId || '',
+      venueId: initialData?.venueId || '',
+      cityId: initialData?.cityId || '',
+      attendeeLimit: initialData?.attendeeLimit || 100,
+      featured: initialData?.featured || false,
+      embeddedVideoUrl: initialData?.embeddedVideoUrl || '',
+      isCancelled: initialData?.isCancelled || false,
+      publishedStatus: initialData?.publishedStatus || PublishedStatus.DRAFT,
+      tags: initialData?.tags?.map((tag) => tag.id) || [],
     },
   });
 
-  // Load event data if editing
+  // Load dependencies (categories and venues)
   useEffect(() => {
-    const fetchEventData = async () => {
+    const fetchDependencies = async () => {
       try {
-        if (eventId) {
-          const eventData = await getEvent(eventId);
+        const [categoriesData, venuesData] = await Promise.all([
+          getAllCategories(),
+          getAllVenuesForDropdown(),
+        ]);
 
-          if (eventData) {
-            // Set form values
-            form.reset({
-              ...eventData,
-              startDateTime: new Date(eventData.startDateTime),
-              endDateTime: new Date(eventData.endDateTime),
-              tags: eventData.tags.map((tag) => tag.id),
-            });
+        setCategories(categoriesData);
+        setVenues(venuesData);
 
-            // Set state values
-            setImageUrl(eventData.imageUrl);
-            setCoverImageUrl(eventData.coverImageUrl || '');
-            setSelectedTags(eventData.tags.map((tag) => tag.id));
+        // Initialize state from initial data if available
+        if (initialData) {
+          // Set image URLs from initialData
+          setImageUrl(initialData.imageUrl);
+          if (initialData.coverImageUrl) {
+            setCoverImageUrl(initialData.coverImageUrl);
+          }
 
-            // Set ticket types if they exist
-            if (eventData.ticketTypes && eventData.ticketTypes.length > 0) {
-              setTicketTypes(eventData.ticketTypes);
-            }
+          // Set selected venue
+          if (initialData.venue) {
+            setSelectedVenue(initialData.venue);
+          }
 
-            // Set venue info
-            if (eventData.venue) {
-              setSelectedVenue(eventData.venue);
-            }
+          // Set selected tags
+          if (initialData.tags?.length > 0) {
+            setSelectedTags(initialData.tags.map((tag) => tag.id));
+          }
+
+          // Set ticket types
+          if (initialData.ticketTypes?.length > 0) {
+            setTicketTypes(initialData.ticketTypes);
           }
         }
+
         setIsLoading(false);
       } catch (error) {
-        console.error('Error fetching event data:', error);
+        console.error('Error fetching form dependencies:', error);
+        toast.error('Failed to load form data');
         setIsLoading(false);
       }
     };
 
-    // Fetch categories and venues
-    Promise.all([getAllCategories(), getAllVenuesForDropdown()])
-      .then(([categoriesData, venuesData]) => {
-        setCategories(categoriesData);
-        setVenues(venuesData);
-
-        // Only fetch event data if we have the dependencies loaded
-        if (eventId) {
-          fetchEventData();
-        }
-      })
-      .catch((error) => {
-        console.error('Error fetching form dependencies:', error);
-        setIsLoading(false);
-      });
-  }, [eventId, form]);
+    fetchDependencies();
+  }, [initialData]);
 
   // Handle venue selection
   const handleVenueSelect = (venueId: string) => {
@@ -191,7 +192,7 @@ const EventForm = ({ eventId, userId }: EventFormProps) => {
     form.setValue('tags', tagIds);
   };
 
-  // Handle ticket type changes
+  // Ticket type management
   const addTicketType = () => {
     setTicketTypes([...ticketTypes, { name: '', price: 0, quantity: 0 }]);
   };
@@ -213,7 +214,7 @@ const EventForm = ({ eventId, userId }: EventFormProps) => {
     setTicketTypes(ticketTypes.filter((_, i) => i !== index));
   };
 
-  // Handle form submission
+  // Form submission
   const onSubmit = async (values: z.infer<typeof EventSchema>) => {
     try {
       setIsSubmitting(true);
@@ -230,17 +231,19 @@ const EventForm = ({ eventId, userId }: EventFormProps) => {
         })),
       };
 
-      if (eventId) {
-        // Update existing event
-        await updateEvent(eventId, formData);
-        router.push(`/events/${eventId}`);
+      // Update or create
+      if (initialData?.id) {
+        await updateEvent(initialData.id, formData);
+        toast.success('Event updated successfully');
+        router.push(`/events/${initialData.id}`);
       } else {
-        // Create new event
         const newEvent = await createEvent(formData);
+        toast.success('Event created successfully');
         router.push(`/events/${newEvent.id}`);
       }
     } catch (error) {
       console.error('Error submitting event:', error);
+      toast.error('Failed to save event');
     } finally {
       setIsSubmitting(false);
     }
@@ -256,11 +259,11 @@ const EventForm = ({ eventId, userId }: EventFormProps) => {
   }
 
   return (
-    <Form {...form}>
-      <div className="relative">
+    <div className="relative">
+      <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           <div className="grid grid-cols-1 gap-6">
-            <div className="space-y-6 relative">
+            <div className="space-y-6">
               {/* Event Title */}
               <FormField
                 control={form.control}
@@ -444,27 +447,8 @@ const EventForm = ({ eventId, userId }: EventFormProps) => {
                 )}
               />
             </div>
-            <div className="space-y-6 relative">
-              {/* Main Image Upload */}
-              <FormField
-                control={form.control}
-                name="imageUrl"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Event Images</FormLabel>
-                    <FormControl>
-                      <FileUploader
-                        onFieldChange={field.onChange}
-                        imageUrl={imageUrl}
-                        setFiles={setImageFile}
-                        maxFiles={10}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
 
+            <div className="space-y-6">
               {/* Cover Image Upload */}
               <FormField
                 control={form.control}
@@ -476,8 +460,30 @@ const EventForm = ({ eventId, userId }: EventFormProps) => {
                       <FileUploader
                         onFieldChange={field.onChange}
                         imageUrl={coverImageUrl}
-                        setFiles={setCoverImageFile}
+                        setFiles={setCoverImageFiles}
                         maxFiles={1}
+                        endpoint="eventCover"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Main Image Upload */}
+              <FormField
+                control={form.control}
+                name="imageUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Event Images</FormLabel>
+                    <FormControl>
+                      <FileUploader
+                        onFieldChange={field.onChange}
+                        imageUrl={imageUrl}
+                        setFiles={setImageFiles}
+                        maxFiles={10}
+                        endpoint="eventImage"
                       />
                     </FormControl>
                     <FormMessage />
@@ -654,7 +660,7 @@ const EventForm = ({ eventId, userId }: EventFormProps) => {
               </div>
 
               {/* Is Cancelled (for existing events) */}
-              {eventId && (
+              {initialData?.id && (
                 <FormField
                   control={form.control}
                   name="isCancelled"
@@ -691,12 +697,12 @@ const EventForm = ({ eventId, userId }: EventFormProps) => {
               {isSubmitting && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              {eventId ? 'Update Event' : 'Create Event'}
+              {initialData ? 'Update Event' : 'Create Event'}
             </Button>
           </div>
         </form>
-      </div>
-    </Form>
+      </Form>
+    </div>
   );
 };
 
