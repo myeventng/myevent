@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { getVenue } from '@/lib/actions/venue.actions';
-import { VenueView } from '@/components/shared/VenueView'; // Your existing VenueView component
+import { VenueView } from '@/components/shared/VenueView';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';

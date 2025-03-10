@@ -82,6 +82,11 @@ body {
     hue-rotate(32deg) brightness(98%) contrast(92%);
 }
 
+.space-y-2 > :not([hidden]) ~ :not([hidden]),
+.ring-offset-background {
+  color: black;
+}
+
 .swiper-button-next:after,
 .swiper-rtl .swiper-button-prev:after,
 .swiper-button-prev:after,

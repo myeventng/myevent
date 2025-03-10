@@ -7,18 +7,10 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
 import { z } from 'zod';
 import {
-  VenueFormValues,
   createVenue,
   updateVenue,
   getAllCitiesForDropdown,
 } from '@/lib/actions/venue.actions';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   MapContainer,
   TileLayer,
@@ -39,15 +31,13 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import SearchableCitySelect, {
+  FormFieldSearchableSelect,
+} from '@/components/shared/SearchCity';
 
 import 'leaflet/dist/leaflet.css';
 
 // Define proper types
-interface Location {
-  latitude: number;
-  longitude: number;
-}
-
 interface VenueFormProps {
   initialData?: {
     id: string;
@@ -57,7 +47,8 @@ interface VenueFormProps {
     capacity?: number | null;
     description?: string | null;
     contactInfo?: string | null;
-    location?: Location;
+    latitude: string;
+    longitude: string;
   } | null;
 }
 
@@ -78,13 +69,7 @@ const defaultIcon = L.icon({
 L.Marker.prototype.options.icon = defaultIcon;
 
 // Define default map center
-const DEFAULT_CENTER: [number, number] = [51.505, -0.09];
-
-// Location Schema definition
-export const LocationSchema = z.object({
-  latitude: z.number().or(z.string().transform((val) => parseFloat(val))),
-  longitude: z.number().or(z.string().transform((val) => parseFloat(val))),
-});
+const DEFAULT_CENTER: [number, number] = [9.0563, 7.4985];
 
 // Schema for venue validation
 export const VenueSchema = z.object({
@@ -99,23 +84,29 @@ export const VenueSchema = z.object({
     .default(0),
   description: z.string().optional(),
   contactInfo: z.string().optional(),
-  location: LocationSchema.optional(),
+  latitude: z.string().min(1, 'Latitude is required'),
+  longitude: z.string().min(1, 'Longitude is required'),
 });
 
-// Updated LocationPicker component to prevent infinite loops
+// Define type for form values based on the schema
+export type VenueFormValues = z.infer<typeof VenueSchema>;
+
+// Updated LocationPicker component to work with separate latitude/longitude fields
 function LocationPicker({
   onChange,
-  initialLocation,
+  initialLatitude,
+  initialLongitude,
   manualCoordinates,
 }: {
-  onChange: (location: Location) => void;
-  initialLocation?: Location;
+  onChange: (lat: number, lng: number) => void;
+  initialLatitude?: string;
+  initialLongitude?: string;
   manualCoordinates: [number, number];
 }) {
   // Use the initial location or default center as the starting position
   const [position, setPosition] = useState<[number, number]>(
-    initialLocation
-      ? [initialLocation.latitude, initialLocation.longitude]
+    initialLatitude && initialLongitude
+      ? [parseFloat(initialLatitude), parseFloat(initialLongitude)]
       : DEFAULT_CENTER
   );
 
@@ -123,10 +114,7 @@ function LocationPicker({
   const handlePositionChange = useCallback(
     (newPosition: [number, number]) => {
       setPosition(newPosition);
-      onChange({
-        latitude: newPosition[0],
-        longitude: newPosition[1],
-      });
+      onChange(newPosition[0], newPosition[1]);
     },
     [onChange]
   );
@@ -194,12 +182,10 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
   const [isMounted, setIsMounted] = useState(false);
 
   // Initialize coordinates with proper types
-  const initialCoordinates: [number, number] = initialData?.location
-    ? [
-        Number(initialData.location.latitude),
-        Number(initialData.location.longitude),
-      ]
-    : DEFAULT_CENTER;
+  const initialCoordinates: [number, number] =
+    initialData?.latitude && initialData?.longitude
+      ? [parseFloat(initialData.latitude), parseFloat(initialData.longitude)]
+      : DEFAULT_CENTER;
 
   const [manualCoordinates, setManualCoordinates] =
     useState<[number, number]>(initialCoordinates);
@@ -239,15 +225,8 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
       capacity: parseCapacity(initialData?.capacity),
       description: initialData?.description || '',
       contactInfo: initialData?.contactInfo || '',
-      location: initialData?.location
-        ? {
-            latitude: Number(initialData.location.latitude),
-            longitude: Number(initialData.location.longitude),
-          }
-        : {
-            latitude: DEFAULT_CENTER[0],
-            longitude: DEFAULT_CENTER[1],
-          },
+      latitude: initialData?.latitude || DEFAULT_CENTER[0].toString(),
+      longitude: initialData?.longitude || DEFAULT_CENTER[1].toString(),
     },
   });
 
@@ -255,40 +234,30 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
     setLoading(true);
 
     try {
-      console.log('Submitting data:', data); // Log the data before sending
+      console.log('Submitting data:', data);
 
-      const submissionData = {
-        ...data,
-        location: data.location
-          ? {
-              latitude: Number(data.location.latitude),
-              longitude: Number(data.location.longitude),
-            }
-          : undefined,
-      };
-
-      console.log('Formatted submissionData:', submissionData);
-
-      let result;
       if (initialData) {
-        result = await updateVenue(initialData.id, submissionData);
-      } else {
-        result = await createVenue(submissionData);
-      }
+        const result = await updateVenue(initialData.id, data);
 
-      console.log('API Response:', result);
-
-      if (result && 'error' in result) {
-        toast.error(result.error);
-        console.error('API Error:', result.error);
+        if (result && 'error' in result) {
+          toast.error(result.error);
+          console.error('API Error:', result.error);
+        } else {
+          toast.success('Venue updated successfully');
+          router.push('/admin/venues');
+          router.refresh();
+        }
       } else {
-        toast.success(
-          initialData
-            ? 'Venue updated successfully'
-            : 'Venue created successfully'
-        );
-        router.push('/admin/venues');
-        router.refresh();
+        const result = await createVenue(data);
+
+        if (result && 'error' in result) {
+          toast.error(result.error as any);
+          console.error('API Error:', result.error);
+        } else {
+          toast.success('Venue created successfully');
+          router.push('/admin/venues');
+          router.refresh();
+        }
       }
     } catch (error: any) {
       console.error('Error in onSubmit:', error);
@@ -298,64 +267,14 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
     }
   };
 
-  // const onSubmit = async (data: VenueFormValues) => {
-  //   setLoading(true);
-
-  //   try {
-  //     // Ensure location data is properly formatted
-  //     const submissionData = {
-  //       ...data,
-  //       location: data.location
-  //         ? {
-  //             latitude: Number(data.location.latitude),
-  //             longitude: Number(data.location.longitude),
-  //             placeName: data.location.placeName || '',
-  //           }
-  //         : undefined,
-  //     };
-
-  //     if (initialData) {
-  //       // Update existing venue
-  //       const result = await updateVenue(initialData.id, submissionData);
-
-  //       if (result && 'error' in result) {
-  //         toast.error(result.error);
-  //       } else {
-  //         toast.success('Venue updated successfully');
-  //         router.push('/admin/venues');
-  //         router.refresh();
-  //       }
-  //     } else {
-  //       // Create new venue
-  //       const result = await createVenue(submissionData);
-
-  //       if (result && 'error' in result) {
-  //         toast.error(result.error);
-  //       } else {
-  //         toast.success('Venue created successfully');
-  //         router.push('/admin/venues');
-  //         router.refresh();
-  //       }
-  //     }
-  //   } catch (error: any) {
-  //     toast.error(error.message || 'Something went wrong');
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
-
   // Handle location change with proper typing
   const handleLocationChange = useCallback(
-    (location: Location) => {
-      // Use optional chaining to avoid null/undefined errors
-
-      form.setValue('location', {
-        latitude: location.latitude,
-        longitude: location.longitude,
-      });
+    (lat: number, lng: number) => {
+      form.setValue('latitude', lat.toString());
+      form.setValue('longitude', lng.toString());
 
       // Update manual input fields when map is clicked
-      setManualCoordinates([location.latitude, location.longitude]);
+      setManualCoordinates([lat, lng]);
     },
     [form]
   );
@@ -396,7 +315,6 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
             </FormItem>
           )}
         />
-
         <FormField
           control={form.control}
           name="address"
@@ -416,30 +334,19 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
           name="cityId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>City</FormLabel>
-              <Select
-                disabled={loading}
-                onValueChange={field.onChange}
-                defaultValue={field.value}
-              >
-                <FormControl>
-                  <SelectTrigger className="text-black">
-                    <SelectValue placeholder="Select a city" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent className="text-black">
-                  {cities.map((city) => (
-                    <SelectItem key={city.id} value={city.id}>
-                      {city.name}, {city.state}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <FormControl>
+                <SearchableCitySelect
+                  cities={cities}
+                  value={field.value}
+                  onChange={field.onChange}
+                  disabled={loading}
+                  placeholder="Search and select a city"
+                />
+              </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-
         <FormField
           control={form.control}
           name="capacity"
@@ -466,7 +373,6 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
             </FormItem>
           )}
         />
-
         <FormField
           control={form.control}
           name="description"
@@ -485,12 +391,11 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
             </FormItem>
           )}
         />
-
         {/* Manual coordinate input fields */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
-            name="location.latitude"
+            name="latitude"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Latitude (Required)</FormLabel>
@@ -505,7 +410,6 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
                       field.onChange(value);
                       handleManualLatitudeChange(value);
                     }}
-                    value={field.value !== undefined ? field.value : ''}
                   />
                 </FormControl>
                 <FormMessage />
@@ -515,7 +419,7 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
 
           <FormField
             control={form.control}
-            name="location.longitude"
+            name="longitude"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Longitude (Required)</FormLabel>
@@ -530,7 +434,6 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
                       field.onChange(value);
                       handleManualLongitudeChange(value);
                     }}
-                    value={field.value !== undefined ? field.value : ''}
                   />
                 </FormControl>
                 <FormMessage />
@@ -538,7 +441,6 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
             )}
           />
         </div>
-
         <div className="text-sm">
           <a
             href={googleMapsUrl}
@@ -553,7 +455,6 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
             to get coordinates
           </p>
         </div>
-
         {/* Location Picker - only render on client side */}
         {isMounted && (
           <FormItem>
@@ -575,22 +476,20 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
                 />
                 <LocationPicker
                   onChange={handleLocationChange}
-                  initialLocation={initialData?.location}
+                  initialLatitude={initialData?.latitude}
+                  initialLongitude={initialData?.longitude}
                   manualCoordinates={manualCoordinates}
                 />
               </MapContainer>
             </div>
 
-            {form.watch('location') && (
-              <div className="mt-2 text-sm text-gray-600">
-                Selected Location:{' '}
-                {Number(form.watch('location.latitude')).toFixed(6)},
-                {Number(form.watch('location.longitude')).toFixed(6)}
-              </div>
-            )}
+            <div className="mt-2 text-sm text-gray-600">
+              Selected Location:{' '}
+              {parseFloat(form.watch('latitude') || '0').toFixed(6)},{' '}
+              {parseFloat(form.watch('longitude') || '0').toFixed(6)}
+            </div>
           </FormItem>
         )}
-
         <FormField
           control={form.control}
           name="contactInfo"
@@ -607,7 +506,6 @@ export const VenueForm = ({ initialData }: VenueFormProps) => {
             </FormItem>
           )}
         />
-
         <Button type="submit" disabled={loading} className="w-full">
           {loading
             ? 'Processing...'

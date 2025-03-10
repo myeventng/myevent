@@ -11,13 +11,6 @@ export const CitySchema = z.object({
   population: z.optional(z.number()),
 });
 
-export const LocationSchema = z.object({
-  latitude: z.number().or(z.string().transform((val) => parseFloat(val))),
-  longitude: z.number().or(z.string().transform((val) => parseFloat(val))),
-  placeName: z.string().optional(),
-});
-
-// Schema for venue validation
 export const VenueSchema = z.object({
   name: z.string().min(1, 'Venue name is required'),
   address: z.string().min(1, 'Address is required'),
@@ -30,12 +23,42 @@ export const VenueSchema = z.object({
     .default(0),
   description: z.string().optional(),
   contactInfo: z.string().optional(),
-  location: LocationSchema.optional(),
+  latitude: z.string().min(1, 'Latitude is required'),
+  longitude: z.string().min(1, 'Longitude is required'),
 });
 
 // Export types
 export type VenueFormValues = z.infer<typeof VenueSchema>;
-export type LocationFormValues = z.infer<typeof LocationSchema>;
+
+export const EventSchema = z.object({
+  title: z.string().min(6, 'Title must be at least 6 characters'),
+  description: z
+    .string()
+    .min(3, 'Description must be at least 3 characters')
+    .max(400, 'Description must be less than 400 characters')
+    .optional(),
+  location: z
+    .string()
+    .min(3, 'Location must be at least 3 characters')
+    .max(400, 'Location must be less than 400 characters')
+    .optional(),
+  cityId: z.string().optional(),
+  imageUrl: z.string().url('Invalid image URL'),
+  coverImageUrl: z.string().url('Invalid cover image URL').optional(),
+  startDateTime: z.date(),
+  endDateTime: z.date(),
+  isFree: z.boolean(),
+  url: z.string().url('Invalid URL format').optional(),
+  categoryId: z.string().optional(),
+  userId: z.string().optional(),
+  venueId: z.string(),
+  tags: z.array(z.string()).optional(),
+  attendeeLimit: z.number().int().positive().optional(),
+  featured: z.boolean().optional(),
+  embeddedVideoUrl: z.string().url('Invalid video URL').optional(),
+  isCancelled: z.boolean().optional(),
+  publishedStatus: z.enum(['DRAFT', 'PENDING_REVIEW']).optional(),
+});
 
 export const SettingsSchema = z
   .object({

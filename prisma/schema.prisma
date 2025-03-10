@@ -11,6 +11,8 @@ model Category {
   id    String  @id @default(cuid())
   name  String  @unique
   Event Event[]
+
+  @@index([name])
 }
 
 model City {
@@ -20,6 +22,8 @@ model City {
   state      String
   events     Event[]
   venues     Venue[]
+
+  @@index([name])
 }
 
 model Event {
@@ -27,7 +31,6 @@ model Event {
   title            String
   description      String?
   location         String?
-  cityId           String?
   createdAt        DateTime        @default(now())
   imageUrl         String
   coverImageUrl    String?
@@ -37,9 +40,8 @@ model Event {
   url              String?
   categoryId       String?
   category         Category?       @relation(fields: [categoryId], references: [id])
-  city             City?           @relation(fields: [cityId], references: [id])
-  organizerId      String?
-  organizer        User?           @relation(fields: [organizerId], references: [id])
+  userId           String?
+  user             User?           @relation(fields: [userId], references: [id])
   venueId          String
   venue            Venue           @relation(fields: [venueId], references: [id])
   tags             Tag[]
@@ -48,8 +50,14 @@ model Event {
   featured         Boolean         @default(false)
   embeddedVideoUrl String?
   ticketTypes      TicketType[]
+  isCancelled      Boolean?        @default(false)
   publishedStatus  PublishedStatus @default(DRAFT)
   orders           Order[]
+  waitingList      WaitingList[]
+  City             City?           @relation(fields: [cityId], references: [id])
+  cityId           String?
+
+  @@index([title])
 }
 
 model Rating {
@@ -60,6 +68,8 @@ model Rating {
   event   Event   @relation(fields: [eventId], references: [id])
   rating  Decimal
   comment String?
+
+  @@index([eventId])
 }
 
 model TicketType {
@@ -70,21 +80,50 @@ model TicketType {
   eventId  String
   event    Event    @relation(fields: [eventId], references: [id])
   tickets  Ticket[]
+
+  @@index([eventId])
 }
 
 model Ticket {
-  id           String       @id @default(cuid())
-  ticketId     String       @unique
-  userId       String?
-  user         User?        @relation(fields: [userId], references: [id])
-  ticketTypeId String
-  ticketType   TicketType   @relation(fields: [ticketTypeId], references: [id])
-  status       TicketStatus @default(UNUSED)
+  id              String       @id @default(cuid())
+  ticketId        String       @unique
+  userId          String?
+  user            User?        @relation(fields: [userId], references: [id])
+  ticketTypeId    String
+  ticketType      TicketType   @relation(fields: [ticketTypeId], references: [id])
+  status          TicketStatus @default(UNUSED)
+  purchasedAt     DateTime     @default(now())
+  paymentIntentId String?      @unique
+
+  @@index([userId])
+}
+
+model WaitingList {
+  id             String        @id @default(cuid())
+  eventId        String
+  event          Event         @relation(fields: [eventId], references: [id])
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+  status         WaitingStatus @default(WAITING)
+  offerExpiresAt DateTime?
+
+  @@index([eventId, status])
+  @@index([userId, eventId])
+  @@index([userId])
 }
 
 enum TicketStatus {
   UNUSED
   USED
+  REFUNDED
+  CANCELLED
+}
+
+enum WaitingStatus {
+  WAITING
+  OFFERED
+  PURCHASED
+  EXPIRED
 }
 
 enum PublishedStatus {
@@ -105,6 +144,8 @@ model Order {
   buyerId       String
   buyer         User          @relation(fields: [buyerId], references: [id])
   purchaseNotes String?
+
+  @@index([buyerId])
 }
 
 enum PaymentStatus {
@@ -150,6 +191,9 @@ model User {
   updatedAt             DateTime               @updatedAt
   isTwoFactorEnabled    Boolean                @default(false)
   twoFactorConfirmation TwoFactorConfirmation?
+  WaitingList           WaitingList[]
+
+  @@index([email])
 }
 
 model Account {
@@ -242,12 +286,19 @@ model Venue {
   contactInfo String?
   user        User    @relation(fields: [userId], references: [id])
   capacity    Int
-  location    Json
+  latitude    String
+  longitude   String
   events      Event[]
+
+  @@index([cityId])
 }
 
 model Tag {
-  id     String  @id @default(cuid())
-  name   String  @unique
-  events Event[]
+  id      String  @id @default(cuid())
+  name    String  @unique
+  bgColor String
+  slug    String?
+  events  Event[]
+
+  @@index([name])
 }

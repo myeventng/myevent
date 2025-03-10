@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 import 'leaflet/dist/leaflet.css';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -12,7 +10,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 interface Location {
   latitude: number;
   longitude: number;
-  placeName?: string;
 }
 
 interface City {
@@ -31,18 +28,27 @@ interface Venue {
   description?: string | null;
   contactInfo?: string | null;
   location?: Location;
+  latitude?: string | number;
+  longitude?: string | number;
   userId: string;
 }
 
 // Fix the default marker icon issue in Leaflet
-const defaultIcon = L.icon({
+L.Icon.Default.mergeOptions({
   iconUrl: '/red-pointer.svg',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
   shadowSize: [41, 41],
 });
-L.Marker.prototype.options.icon = defaultIcon;
+
+const customIcon = L.icon({
+  iconUrl: '/red-pointer.svg',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
 
 interface VenueViewProps {
   venue: Venue;
@@ -56,25 +62,36 @@ export const VenueView = ({ venue }: VenueViewProps) => {
     setIsMounted(true);
   }, []);
 
-  // Type-safe check for location data
-  const hasValidLocation =
-    venue.location &&
-    typeof venue.location.latitude === 'number' &&
-    typeof venue.location.longitude === 'number';
+  // Enhanced location detection logic
+  const getLocationCoordinates = (): [number, number] => {
+    // Check for direct latitude/longitude properties first
+    if (venue.latitude && venue.longitude) {
+      return [Number(venue.latitude), Number(venue.longitude)];
+    }
 
-  // Default location if none provided (avoids runtime errors)
-  const defaultLocation: Location = {
-    latitude: 51.505,
-    longitude: -0.09,
+    // Fall back to nested location object if present
+    if (
+      venue.location &&
+      typeof venue.location.latitude === 'number' &&
+      typeof venue.location.longitude === 'number'
+    ) {
+      return [venue.location.latitude, venue.location.longitude];
+    }
+
+    // Default location if none of the above are available
+    return [9.0563, 7.4985]; // Default to Nigeria
   };
 
-  const locationData: Location = hasValidLocation
-    ? venue.location!
-    : defaultLocation;
-  const position: [number, number] = [
-    locationData.latitude,
-    locationData.longitude,
-  ];
+  const position = getLocationCoordinates();
+
+  // For displaying the coordinates in the UI
+  const displayCoordinates = {
+    latitude: position[0],
+    longitude: position[1],
+  };
+
+  console.log('Venue data:', venue);
+  console.log('Map coordinates being used:', position);
 
   return (
     <div className="space-y-6">
@@ -139,25 +156,21 @@ export const VenueView = ({ venue }: VenueViewProps) => {
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
-                {hasValidLocation && (
-                  <Marker position={position} icon={defaultIcon}>
-                    <Popup>
-                      <div>
-                        <strong>{venue.name}</strong>
-                        <br />
-                        {venue.address}
-                      </div>
-                    </Popup>
-                  </Marker>
-                )}
+                <Marker position={position} icon={customIcon}>
+                  <Popup>
+                    <div>
+                      <strong>{venue.name}</strong>
+                      <br />
+                      {venue.address}
+                    </div>
+                  </Popup>
+                </Marker>
               </MapContainer>
             </div>
-            {hasValidLocation && (
-              <div className="mt-2 text-sm text-gray-600">
-                Coordinates: {locationData.latitude.toFixed(6)},{' '}
-                {locationData.longitude.toFixed(6)}
-              </div>
-            )}
+            <div className="mt-2 text-sm text-gray-600">
+              Coordinates: {displayCoordinates.latitude.toFixed(6)},{' '}
+              {displayCoordinates.longitude.toFixed(6)}
+            </div>
           </CardContent>
         </Card>
       )}

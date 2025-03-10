@@ -107,7 +107,7 @@ export const AppSidebar = () => {
       icon: LuPartyPopper,
       submenu: [
         { title: 'List', url: '/admin/events' },
-        { title: 'Create', url: '/admin/events/add' },
+        { title: '  Add new', url: '/admin/events/add' },
       ],
     },
     {
@@ -115,7 +115,7 @@ export const AppSidebar = () => {
       icon: BiCategory,
       submenu: [
         { title: 'List', url: '/admin/categories' },
-        { title: 'Create', url: '/admin/categories/add' },
+        { title: 'Add new', url: '/admin/categories/add' },
       ],
     },
     ...(isOrganizer

@@ -8,6 +8,8 @@ module.exports = withUt({
     './components/**/*.{ts,tsx}',
     './app/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
+    './src/**/*.{ts,tsx,mdx}',
+    './app/**/*.{ts,tsx,mdx}',
   ],
   theme: {
     container: {

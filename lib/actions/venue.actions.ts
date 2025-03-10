@@ -24,65 +24,10 @@ const organizerOrAdminOnly = async () => {
   }
 };
 // Create Venue
-// export const createVenue = async (values: VenueFormValues) => {
-//   try {
-//     await organizerOrAdminOnly();
-
-//     const user = await currentUser();
-//     if (!user || !user.id) {
-//       throw new Error('User not found');
-//     }
-
-//     const validatedData = VenueSchema.parse(values);
-
-//     return await db.venue.create({
-//       data: {
-//         ...validatedData,
-//         userId: user.id,
-//       },
-//     });
-//   } catch (error: any) {
-//     // Fix typo in includes method
-//     if (error.message && error.message.includes('Access denied')) {
-//       return { error: error.message } as ErrorResponse;
-//     }
-//     throw new Error(
-//       error.errors ? error.errors[0].message : 'Error creating venue'
-//     );
-//   }
-// };
-
-// export const createVenue = async (values: VenueFormValues) => {
-//   try {
-//     console.log('createVenue called with:', values); // Log input values
-
-//     await organizerOrAdminOnly();
-
-//     const user = await currentUser();
-//     if (!user || !user.id) {
-//       throw new Error('User not found');
-//     }
-
-//     console.log('User found:', user.id);
-
-//     // Your API call logic here
-//     const validatedData = VenueSchema.parse(values);
-
-//     return await db.venue.create({
-//       data: {
-//         ...validatedData,
-//         userId: user.id,
-//       },
-//     });
-//   } catch (error) {
-//     console.error('Error in createVenue:', error);
-//     throw error; // Ensure the error is thrown so it reaches the frontend
-//   }
-// };
 
 export const createVenue = async (values: VenueFormValues) => {
   try {
-    console.log('createVenue called with:', values);
+    //console.log('createVenue called with:', values);
 
     await organizerOrAdminOnly();
 
@@ -91,38 +36,31 @@ export const createVenue = async (values: VenueFormValues) => {
       throw new Error('User not found');
     }
 
-    console.log('User found:', user.id);
+    //console.log('User found:', user.id);
 
-    // Ensure location is a valid object or empty JSON
-    const formattedLocation = values.location
-      ? {
-          latitude: Number(values.location.latitude),
-          longitude: Number(values.location.longitude),
-        }
-      : {}; // Empty JSON
-    console.log('Formatted location:', formattedLocation);
+    const validatedData = VenueSchema.parse(values);
 
     const venue = await db.venue.create({
       data: {
-        name: values.name,
-        address: values.address,
-        cityId: values.cityId,
-        capacity: values.capacity ?? 0,
-        description: values.description || '',
-        contactInfo: values.contactInfo || '',
-        location: formattedLocation,
+        name: validatedData.name,
+        address: validatedData.address,
+        cityId: validatedData.cityId,
+        capacity: validatedData.capacity ?? 0,
+        description: validatedData.description || '',
+        contactInfo: validatedData.contactInfo || '',
+        latitude: validatedData.latitude || '',
+        longitude: validatedData.longitude || '',
         userId: user.id,
       },
     });
 
-    console.log('Venue created successfully:', venue);
+    //console.log('Venue created successfully:', venue);
     return venue;
   } catch (error) {
     console.error('Error in createVenue:', error);
     throw error;
   }
 };
-
 // Update Venue
 export const updateVenue = async (id: string, values: VenueFormValues) => {
   try {
@@ -154,7 +92,16 @@ export const updateVenue = async (id: string, values: VenueFormValues) => {
 
     return await db.venue.update({
       where: { id },
-      data: validatedData,
+      data: {
+        name: validatedData.name,
+        address: validatedData.address,
+        cityId: validatedData.cityId,
+        capacity: validatedData.capacity ?? 0,
+        description: validatedData.description || '',
+        contactInfo: validatedData.contactInfo || '',
+        latitude: validatedData.latitude || '',
+        longitude: validatedData.longitude || '',
+      },
     });
   } catch (error: any) {
     if (error.message.includes('Access denied')) {

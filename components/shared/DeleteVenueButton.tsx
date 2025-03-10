@@ -60,7 +60,7 @@ export default function DeleteVenueButton({ id }: DeleteVenueButtonProps) {
           className="text-red-600 hover:text-red-800 hover:bg-red-100"
           title="Delete Venue"
         >
-          <Trash2 className="w-5 h-5" />
+          <Trash2 className="size-5" />
         </Button>
       </AlertDialogTrigger>
 

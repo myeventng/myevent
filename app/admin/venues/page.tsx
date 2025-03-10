@@ -39,7 +39,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { LocationFormValues } from '@/schemas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCurrentRole } from '@/hooks/use-current-role';
@@ -61,10 +60,8 @@ interface Venue {
     state: string;
   };
   capacity: number | null;
-  location?: {
-    latitude: number;
-    longitude: number;
-  };
+  latitude: string;
+  longitude: string;
 }
 
 export default function VenuesPage() {
@@ -97,10 +94,8 @@ export default function VenuesPage() {
           city: venue.city,
           address: venue.address,
           capacity: venue.capacity ?? 0,
-          location:
-            venue.location && typeof venue.location === 'object'
-              ? (venue.location as LocationFormValues)
-              : undefined, // Ensure proper type assertion
+          latitude: venue.latitude,
+          longitude: venue.longitude,
         }));
 
         setData(formattedData);
@@ -128,7 +123,7 @@ export default function VenuesPage() {
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
           >
             Venue
-            <ArrowUpDown className="ml-2 h-4 w-4" />
+            <ArrowUpDown className="size-5 p-4" />
           </Button>
         );
       },
@@ -141,7 +136,7 @@ export default function VenuesPage() {
             variant="ghost"
             onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
           >
-            State
+            City/State
             <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         );
@@ -159,20 +154,20 @@ export default function VenuesPage() {
       id: 'actions',
       header: 'Actions',
       cell: ({ row }) => (
-        <div className="flex space-x-2">
+        <div className="flex">
           <Link
             href={`/admin/venues/view/${row.original.id}`}
-            className="text-green-600 hover:text-green-800"
+            className="text-green-600 hover:text-green-800  hover:bg-green-100 p-[10px] px-3 rounded-md"
             title="View Venue"
           >
-            <Eye className="w-5 h-5" />
+            <Eye className="size-5" />
           </Link>
           <Link
             href={`/admin/venues/edit/${row.original.id}`}
-            className="text-blue-600 hover:text-blue-800"
+            className="text-blue-600 hover:text-blue-800 hover:bg-blue-100 p-[10px] px-3 rounded-md"
             title="Edit Venue"
           >
-            <Edit className="w-5 h-5" />
+            <Edit className="size-5" />
           </Link>
           <DeleteVenueButton id={row.original.id} />
         </div>
@@ -271,7 +266,6 @@ export default function VenuesPage() {
           </TableBody>
         </Table>
       </div>
-      {/* Pagination Controls */}
       <div className="flex items-center justify-between mt-6">
         <div className="flex items-center space-x-6">
           <div className="flex items-center space-x-2">
