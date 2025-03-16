@@ -43,7 +43,10 @@ export const EventSchema = z.object({
     .max(400, 'Location must be less than 400 characters')
     .optional(),
   cityId: z.string().optional(),
-  imageUrl: z.string().url('Invalid image URL'),
+  imageUrls: z
+    .array(z.string().url('Invalid image URL'))
+    .min(1, 'At least one image is required')
+    .max(10, 'Cannot upload more than 10 images'),
   coverImageUrl: z.string().url('Invalid cover image URL').optional(),
   startDateTime: z.date(),
   endDateTime: z.date(),

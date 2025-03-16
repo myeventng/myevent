@@ -26,18 +26,43 @@ model City {
   @@index([name])
 }
 
+enum AgeRestriction {
+  ALL_AGES
+  AGE_14_PLUS
+  AGE_18_PLUS
+  AGE_21_PLUS
+  AGE_25_PLUS
+  KIDS_ONLY
+  SENIORS_ONLY
+}
+
+enum DressCode {
+  CASUAL
+  BUSINESS_CASUAL
+  FORMAL
+  BLACK_TIE
+  THEMED_COSTUME
+  SMART_CASUAL
+  ALL_WHITE
+  NO_DRESS_CODE
+}
+
 model Event {
   id               String          @id @default(cuid())
   title            String
   description      String?
   location         String?
   createdAt        DateTime        @default(now())
-  imageUrl         String
+  imageUrls        String[]
   coverImageUrl    String?
   startDateTime    DateTime        @default(now())
   endDateTime      DateTime        @default(now())
   isFree           Boolean         @default(false)
   url              String?
+  age              AgeRestriction?
+  dressCode        DressCode?
+  lateEntry        DateTime?
+  idRequired       Boolean?        @default(false)
   categoryId       String?
   category         Category?       @relation(fields: [categoryId], references: [id])
   userId           String?

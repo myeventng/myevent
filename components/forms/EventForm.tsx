@@ -85,7 +85,9 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
   ]);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [coverImageFiles, setCoverImageFiles] = useState<File[]>([]);
-  const [imageUrl, setImageUrl] = useState('');
+  const [imageUrls, setImageUrls] = useState<string[]>(
+    initialData?.imageUrls || []
+  );
   const [coverImageUrl, setCoverImageUrl] = useState('');
 
   // Initialize form with type-safe default values
@@ -95,7 +97,9 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
       title: initialData?.title || '',
       description: initialData?.description || '',
       location: initialData?.location || '',
-      imageUrl: initialData?.imageUrl || '',
+      imageUrls: Array.isArray(initialData?.imageUrls)
+        ? initialData.imageUrls
+        : [],
       coverImageUrl: initialData?.coverImageUrl || '',
       startDateTime: initialData?.startDateTime
         ? new Date(initialData.startDateTime)
@@ -133,7 +137,7 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
         // Initialize state from initial data if available
         if (initialData) {
           // Set image URLs from initialData
-          setImageUrl(initialData.imageUrl);
+          setImageUrls(initialData.imageUrls);
           if (initialData.coverImageUrl) {
             setCoverImageUrl(initialData.coverImageUrl);
           }
@@ -215,9 +219,11 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
   };
 
   // Form submission
+  // In the onSubmit function in EventForm.tsx
   const onSubmit = async (values: z.infer<typeof EventSchema>) => {
     try {
       setIsSubmitting(true);
+      console.log('Form values before submission:', values);
 
       // Process form values
       const formData = {
@@ -231,19 +237,31 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
         })),
       };
 
+      console.log('Processed form data:', formData);
+
       // Update or create
       if (initialData?.id) {
-        await updateEvent(initialData.id, formData);
+        console.log('Updating event with ID:', initialData.id);
+        const result = await updateEvent(initialData.id, formData);
+        console.log('Update result:', result);
         toast.success('Event updated successfully');
         router.push(`/events/${initialData.id}`);
       } else {
+        console.log('Creating new event');
         const newEvent = await createEvent(formData);
+        console.log('Create result:', newEvent);
         toast.success('Event created successfully');
         router.push(`/events/${newEvent.id}`);
       }
     } catch (error) {
       console.error('Error submitting event:', error);
-      toast.error('Failed to save event');
+      // More detailed error logging
+      if (error instanceof Error) {
+        console.error('Error details:', error.message);
+        toast.error(`Failed to save event: ${error.message}`);
+      } else {
+        toast.error('Failed to save event: Unknown error');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -411,24 +429,6 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
                 )}
               />
 
-              {/* External URL */}
-              <FormField
-                control={form.control}
-                name="url"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>External URL (Optional)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="https://..." {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      Link to your event's external page or registration site
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               {/* Embedded Video URL */}
               <FormField
                 control={form.control}
@@ -449,20 +449,40 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
             </div>
 
             <div className="space-y-6">
-              {/* Cover Image Upload */}
+              {/* Cover Image */}
               <FormField
                 control={form.control}
                 name="coverImageUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Cover Image (Optional)</FormLabel>
+                    <FormLabel>
+                      Cover Image{' '}
+                      <small className="text-red-500">
+                        ( for a better representation use a aspect ratio of 16:9
+                        )
+                      </small>
+                    </FormLabel>
                     <FormControl>
                       <FileUploader
-                        onFieldChange={field.onChange}
-                        imageUrl={coverImageUrl}
+                        onFieldChange={(url) => {
+                          console.log(
+                            '[EventForm] Received cover image URL from FileUploader:',
+                            url
+                          );
+                          // Always treat as single URL for cover image
+                          const singleUrl = Array.isArray(url) ? url[0] : url;
+                          field.onChange(singleUrl);
+                          setCoverImageUrl(singleUrl);
+                          console.log(
+                            '[EventForm] Updated form field with URL:',
+                            form.getValues('coverImageUrl')
+                          );
+                        }}
+                        imageUrls={coverImageUrl}
                         setFiles={setCoverImageFiles}
                         maxFiles={1}
                         endpoint="eventCover"
+                        multipleImages={false} // Keep cover image as single image
                       />
                     </FormControl>
                     <FormMessage />
@@ -470,20 +490,40 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
                 )}
               />
 
-              {/* Main Image Upload */}
               <FormField
                 control={form.control}
-                name="imageUrl"
+                name="imageUrls"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Event Images</FormLabel>
                     <FormControl>
                       <FileUploader
-                        onFieldChange={field.onChange}
-                        imageUrl={imageUrl}
+                        onFieldChange={(urls) => {
+                          console.log(
+                            '[EventForm] Received image URLs from FileUploader:',
+                            urls
+                          );
+                          // Handle both string and string[] types
+                          if (Array.isArray(urls)) {
+                            field.onChange(urls); // Store as array in form
+                            setImageUrls(urls); // Store as array in state
+                          } else if (urls) {
+                            field.onChange([urls]); // Single URL as array with one item
+                            setImageUrls([urls]); // Store as array in state with single item
+                          } else {
+                            field.onChange([]); // Empty array for empty value
+                            setImageUrls([]);
+                          }
+                          console.log(
+                            '[EventForm] Updated form field with URLs:',
+                            form.getValues('imageUrls')
+                          );
+                        }}
+                        imageUrls={imageUrls}
                         setFiles={setImageFiles}
                         maxFiles={10}
                         endpoint="eventImage"
+                        multipleImages={true} // Enable multiple image mode
                       />
                     </FormControl>
                     <FormMessage />
@@ -503,7 +543,6 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
                 </div>
                 <FormMessage>{form.formState.errors.tags?.message}</FormMessage>
               </FormItem>
-
               {/* Ticket Types */}
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
@@ -560,7 +599,7 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
                             />
                           </div>
                           <div className="col-span-5 sm:col-span-2">
-                            <FormLabel className="text-xs">Price</FormLabel>
+                            <FormLabel className="text-xs">Price (₦)</FormLabel>
                             <Input
                               type="number"
                               value={ticket.price}
@@ -610,7 +649,6 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
                   ))}
                 </div>
               </div>
-
               {/* Featured and Publishing Status */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField
@@ -658,7 +696,6 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
                   )}
                 />
               </div>
-
               {/* Is Cancelled (for existing events) */}
               {initialData?.id && (
                 <FormField

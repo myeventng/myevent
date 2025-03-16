@@ -114,6 +114,7 @@ export const updateEvent = async (id: string, values: EventFormValues) => {
     });
     return updatedEvent;
   } catch (error: any) {
+    s;
     if (error.message.includes('Access denied')) {
       return { error: error.message };
     }
