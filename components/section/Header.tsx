@@ -29,7 +29,7 @@ const Header = () => {
         isScrolled ? 'bg-black/90' : 'bg-transparent'
       }`}
     >
-      <div className="wrapper flex items-center justify-between">
+      <div className="container flex items-center justify-between">
         <Link href="/" className="w-44">
           <Image
             src="/assets/images/logo.png"
@@ -45,14 +45,29 @@ const Header = () => {
           </nav>
         </SignedIn> */}
 
-        <div className="flex w-44 justify-end gap-3">
+        <div className="flex w-full justify-end gap-3">
           <MobileNav />
-          <div>
-            <LogoutButton>
-              <button>logou out</button>
-            </LogoutButton>
-            <Button>Sign In</Button>
-            <div />
+          <div className="md:block hidden h-full">
+            <div className="flex items-center justify-center gap-8">
+              <Link
+                href="/events"
+                className="text-white h-full flex items-center font-semibold transition-all duration-300 border-b-4 border-transparent hover:border-primary-500"
+              >
+                All Events
+              </Link>
+              <Link
+                href="/sign-in"
+                className="text-white h-full flex items-center font-semibold transition-all duration-300 border-b-4 border-transparent hover:border-primary-500"
+              >
+                Sign In
+              </Link>
+              <Button>
+                <Link href="/how-to-create-event" className="text-white">
+                  Create Event
+                </Link>
+              </Button>
+              <div />
+            </div>
           </div>
         </div>
       </div>

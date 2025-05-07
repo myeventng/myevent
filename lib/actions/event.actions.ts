@@ -35,14 +35,12 @@ export const createEvent = async (values: EventFormValues) => {
       data: {
         title: validatedData.title,
         description: validatedData.description,
-        location: validatedData.location,
         cityId: validatedData.cityId,
-        imageUrl: validatedData.imageUrl,
+        imageUrls: validatedData.imageUrls,
         coverImageUrl: validatedData.coverImageUrl,
         startDateTime: validatedData.startDateTime,
         endDateTime: validatedData.endDateTime,
         isFree: validatedData.isFree,
-        url: validatedData.url,
         categoryId: validatedData.categoryId,
         userId: validatedData.userId || user.id,
         venueId: validatedData.venueId,
@@ -91,14 +89,12 @@ export const updateEvent = async (id: string, values: EventFormValues) => {
       where: { id },
       data: {
         description: validatedData.description,
-        location: validatedData.location,
         cityId: validatedData.cityId,
-        imageUrl: validatedData.imageUrl,
+        imageUrls: validatedData.imageUrls,
         coverImageUrl: validatedData.coverImageUrl,
         startDateTime: validatedData.startDateTime,
         endDateTime: validatedData.endDateTime,
         isFree: validatedData.isFree,
-        url: validatedData.url,
         categoryId: validatedData.categoryId,
         userId: validatedData.userId || user.id,
         venueId: validatedData.venueId,
@@ -114,7 +110,6 @@ export const updateEvent = async (id: string, values: EventFormValues) => {
     });
     return updatedEvent;
   } catch (error: any) {
-    s;
     if (error.message.includes('Access denied')) {
       return { error: error.message };
     }

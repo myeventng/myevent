@@ -37,11 +37,6 @@ export const EventSchema = z.object({
     .min(3, 'Description must be at least 3 characters')
     .max(400, 'Description must be less than 400 characters')
     .optional(),
-  location: z
-    .string()
-    .min(3, 'Location must be at least 3 characters')
-    .max(400, 'Location must be less than 400 characters')
-    .optional(),
   cityId: z.string().optional(),
   imageUrls: z
     .array(z.string().url('Invalid image URL'))
@@ -51,7 +46,6 @@ export const EventSchema = z.object({
   startDateTime: z.date(),
   endDateTime: z.date(),
   isFree: z.boolean(),
-  url: z.string().url('Invalid URL format').optional(),
   categoryId: z.string().optional(),
   userId: z.string().optional(),
   venueId: z.string(),

@@ -2,6 +2,7 @@ import { type ClassValue, clsx } from 'clsx';
 
 import { twMerge } from 'tailwind-merge';
 import qs from 'query-string';
+// lib/utils.ts
 
 import { UrlQueryParams, RemoveUrlQueryParams } from '@/types';
 //uploadthing
@@ -119,3 +120,40 @@ export const handleError = (error: unknown) => {
   }
   throw new Error(typeof error === 'string' ? error : JSON.stringify(error));
 };
+
+export function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount);
+}
+
+/**
+ * Format a date to a readable string
+ */
+export function formatDate(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
+}
+
+/**
+ * Calculate percentage change between two values
+ */
+export function calculatePercentageChange(
+  current: number,
+  previous: number
+): number {
+  if (previous === 0) return 0;
+  return ((current - previous) / previous) * 100;
+}
+
+/**
+ * Truncate a string if it's longer than the specified length
+ */
+export function truncateString(str: string, maxLength: number): string {
+  if (str.length <= maxLength) return str;
+  return `${str.substring(0, maxLength)}...`;
+}

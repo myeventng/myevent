@@ -105,28 +105,28 @@ export type GetRelatedEventsByCategoryParams = {
   page: number | string;
 };
 
-export type Event = {
-  _id: string;
-  title: string;
-  description: string;
-  price: string;
-  isFree: boolean;
-  imageUrl: string;
-  location: string;
-  startDateTime: Date;
-  endDateTime: Date;
-  url: string;
-  venue?: string;
-  organizer: {
-    _id: string;
-    firstName: string;
-    lastName: string;
-  };
-  category: {
-    _id: string;
-    name: string;
-  };
-};
+// export type Event = {
+//   _id: string;
+//   title: string;
+//   description: string;
+//   price: string;
+//   isFree: boolean;
+//   imageUrl: string;
+//   location: string;
+//   startDateTime: Date;
+//   endDateTime: Date;
+//   url: string;
+//   venue?: string;
+//   organizer: {
+//     _id: string;
+//     firstName: string;
+//     lastName: string;
+//   };
+//   category: {
+//     _id: string;
+//     name: string;
+//   };
+// };
 
 // ====== CATEGORY PARAMS
 export type CreateCategoryParams = {
@@ -192,3 +192,133 @@ export type SearchParamProps = {
   params: { id: string };
   searchParams: { [key: string]: string | string[] | undefined };
 };
+
+// my types dashboard
+// types/index.ts
+export enum EventStatus {
+  DRAFT = 'DRAFT',
+  PENDING_REVIEW = 'PENDING_REVIEW',
+  PUBLISHED = 'PUBLISHED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum OrderStatus {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED',
+}
+
+export enum UserRole {
+  ADMIN = 'ADMIN',
+  ORGANIZER = 'ORGANIZER',
+  USER = 'USER',
+}
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  isVerified: boolean;
+  createdAt: Date;
+}
+
+export interface Event {
+  id: string;
+  title: string;
+  description?: string;
+  startDateTime: Date;
+  endDateTime: Date;
+  venueId: string;
+  venueName: string;
+  categoryId?: string;
+  categoryName?: string;
+  isFree: boolean;
+  featured: boolean;
+  publishedStatus: string;
+  attendeeLimit?: number;
+  ticketsSold: number;
+  totalRevenue: number;
+}
+
+export interface Order {
+  id: string;
+  createdAt: Date;
+  totalAmount: number;
+  quantity: number;
+  paymentStatus: OrderStatus;
+  eventId: string;
+  eventTitle: string;
+  buyerId: string;
+  buyerName: string;
+  buyerEmail: string;
+}
+
+export interface DashboardStats {
+  totalRevenue: number;
+  previousMonthRevenue: number;
+  activeEvents: number;
+  previousMonthEvents: number;
+  ticketSales: number;
+  previousMonthTicketSales: number;
+  activeUsers: number;
+  previousMonthActiveUsers: number;
+}
+
+export interface TopEvent {
+  name: string;
+  category: string;
+  ticketsSold: number;
+  ticketsTotal: number;
+  revenue: string;
+  percentageSold: number;
+}
+
+export interface RecentOrder {
+  id: string;
+  event: string;
+  customer: {
+    name: string;
+    email: string;
+    image?: string;
+  };
+  status: string;
+  date: string;
+  amount: string;
+  tickets: number;
+}
+
+export interface CategoryStat {
+  name: string;
+  count: number;
+  percentage: number;
+}
+
+export interface CityStat {
+  name: string;
+  count: number;
+  percentage: number;
+}
+
+export interface UserStat {
+  role: UserRole;
+  count: number;
+  percentage: number;
+}
+
+export interface Revenue {
+  date: string;
+  value: number;
+}
+
+export interface TicketSale {
+  date: string;
+  count: number;
+}
+
+export interface ChartData {
+  name: string;
+  revenue: number;
+  tickets: number;
+}

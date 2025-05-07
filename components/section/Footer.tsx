@@ -21,7 +21,7 @@ const Footer = () => {
   const currentYear = new Date().getFullYear();
   return (
     <footer className=" bg-secondary-500 text-white py-16">
-      <div className="wrapper flex md:flex-row items-center justify-between flex-col gap-4 p-5 text-center sm:flex-row">
+      <div className="container flex md:flex-row items-center justify-between flex-col gap-4  text-center sm:flex-row">
         <div className="flex items-center justify-center gap-4">
           {links.map((link, index) => (
             <Link
@@ -35,7 +35,7 @@ const Footer = () => {
         </div>
         <BtnSlideEffect text="Create Event" path="/events/create" />
       </div>
-      <div className="border-t-2 border-t-pink-500 flex-center wrapper flex-between flex flex-col gap-4  text-center sm:flex-row">
+      <div className="border-t-2 border-t-pink-500/20 flex-center container flex-between flex flex-col gap-4  text-center sm:flex-row">
         <div className="flex gap-2">
           <Link href="/">
             <Image

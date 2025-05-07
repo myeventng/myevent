@@ -96,7 +96,6 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
     defaultValues: {
       title: initialData?.title || '',
       description: initialData?.description || '',
-      location: initialData?.location || '',
       imageUrls: Array.isArray(initialData?.imageUrls)
         ? initialData.imageUrls
         : [],
@@ -108,7 +107,6 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
         ? new Date(initialData.endDateTime)
         : new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours from now
       isFree: initialData?.isFree ?? true,
-      url: initialData?.url || '',
       categoryId: initialData?.categoryId || '',
       userId: userId || initialData?.userId || '',
       venueId: initialData?.venueId || '',
@@ -169,6 +167,20 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
     fetchDependencies();
   }, [initialData]);
 
+  useEffect(() => {
+    // Add this validation check
+    if (imageUrls.length > 0) {
+      form.setValue('imageUrls', imageUrls);
+    }
+  }, [imageUrls]);
+
+  // Also ensure venueId is properly set
+  useEffect(() => {
+    if (selectedVenue?.id) {
+      form.setValue('venueId', selectedVenue.id);
+    }
+  }, [selectedVenue]);
+
   // Handle venue selection
   const handleVenueSelect = (venueId: string) => {
     form.setValue('venueId', venueId);
@@ -181,11 +193,6 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
       // Set the cityId based on venue
       if (venue.cityId) {
         form.setValue('cityId', venue.cityId);
-      }
-
-      // Optionally set the location field as well
-      if (venue.address) {
-        form.setValue('location', venue.address);
       }
     }
   };
@@ -221,8 +228,26 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
   // Form submission
   // In the onSubmit function in EventForm.tsx
   const onSubmit = async (values: z.infer<typeof EventSchema>) => {
+    console.log('Form submission started');
+    // Add this validation check
+    try {
+      // Validate against schema directly
+      EventSchema.parse(values);
+    } catch (error) {
+      console.error('Schema validation failed:', error);
+      toast.error('Please fix form errors before submitting');
+      return;
+    }
+
+    const isValid = await form.trigger();
+    if (!isValid) {
+      console.error('Form validation failed', form.formState.errors);
+      toast.error('Please fix form errors before submitting');
+      return;
+    }
     try {
       setIsSubmitting(true);
+      console.log('isSubmitting set to true');
       console.log('Form values before submission:', values);
 
       // Process form values
@@ -243,6 +268,7 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
       if (initialData?.id) {
         console.log('Updating event with ID:', initialData.id);
         const result = await updateEvent(initialData.id, formData);
+        console.log(form.formState.errors);
         console.log('Update result:', result);
         toast.success('Event updated successfully');
         router.push(`/events/${initialData.id}`);
@@ -279,7 +305,17 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
   return (
     <div className="relative">
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <form
+          onSubmit={(e) => {
+            console.log('Form submit event triggered');
+            const formIsValid = form.formState.isValid;
+            console.log('Form is valid:', formIsValid);
+            console.log('Form errors:', form.formState.errors);
+
+            form.handleSubmit(onSubmit)(e);
+          }}
+          className="space-y-8"
+        >
           <div className="grid grid-cols-1 gap-6">
             <div className="space-y-6">
               {/* Event Title */}
@@ -469,10 +505,9 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
                             '[EventForm] Received cover image URL from FileUploader:',
                             url
                           );
-                          // Always treat as single URL for cover image
-                          const singleUrl = Array.isArray(url) ? url[0] : url;
-                          field.onChange(singleUrl);
-                          setCoverImageUrl(singleUrl);
+
+                          field.onChange(url);
+                          setCoverImageUrl(url);
                           console.log(
                             '[EventForm] Updated form field with URL:',
                             form.getValues('coverImageUrl')
@@ -730,7 +765,11 @@ const EventForm = ({ initialData, userId }: EventFormProps) => {
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              onClick={() => console.log('Button clicked')}
+            >
               {isSubmitting && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
