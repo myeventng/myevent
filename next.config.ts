@@ -1,14 +1,18 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'utfs.io',
-      },
-    ],
+  serverExternalPackages: ['bcryptjs'],
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Replace password hashing libs with empty modules on the client-side
+      config.resolve = config.resolve || {};
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        bcryptjs: false,
+      };
+    }
+
+    return config;
   },
 };
 

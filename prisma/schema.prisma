@@ -1,5 +1,12 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
 generator client {
   provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
@@ -7,25 +14,168 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Category {
-  id    String  @id @default(cuid())
-  name  String  @unique
-  Event Event[]
-
-  @@index([name])
+// user
+enum Gender {
+  MALE
+  FEMALE
 }
 
-model City {
-  id         String  @id @default(cuid())
-  name       String  @unique
-  population Int?
-  state      String
-  events     Event[]
-  venues     Venue[]
-
-  @@index([name])
+enum UserRole {
+  ADMIN
+  USER
 }
 
+enum UserSubRole {
+  ORDINARY
+  ORGANIZER
+  STAFF
+  SUPER_ADMIN
+}
+
+model OrganizerProfile {
+  id               String  @id @default(cuid())
+  organizationName String
+  bio              String?
+  website          String?
+  userId           String  @unique
+  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Verification {
+  id        String    @id @default(cuid())
+  createdAt DateTime?
+  updatedAt DateTime?
+
+  identifier String
+  value      String
+  expiresAt  DateTime
+
+  @@map("verifications")
+}
+
+model Session {
+  id             String   @id @default(cuid())
+  impersonatedBy String?
+  createdAt      DateTime
+  updatedAt      DateTime
+
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Account {
+  id        String   @id @default(cuid())
+  createdAt DateTime
+  updatedAt DateTime
+
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("accounts")
+}
+
+enum WaitingStatus {
+  WAITING
+  OFFERED
+  PURCHASED
+  EXPIRED
+}
+
+model WaitingList {
+  id             String    @id @default(cuid())
+  offerExpiresAt DateTime?
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id])
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+
+  status WaitingStatus @default(WAITING)
+
+  @@index([eventId, status])
+  @@index([userId, eventId])
+  @@index([userId])
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum RefundStatus {
+  INITIATED
+  PROCESSED
+  FAILED
+}
+
+model Order {
+  id            String        @id @default(cuid())
+  createdAt     DateTime      @default(now())
+  paystackId    String        @unique
+  totalAmount   Float
+  quantity      Int
+  paymentStatus PaymentStatus @default(PENDING)
+  refundStatus  RefundStatus?
+  eventId       String
+  event         Event         @relation(fields: [eventId], references: [id])
+  buyerId       String
+  buyer         User          @relation(fields: [buyerId], references: [id])
+  purchaseNotes String?
+
+  @@index([buyerId])
+}
+
+model User {
+  id        String   @id @default(uuid())
+  createdAt DateTime
+  updatedAt DateTime
+
+  name          String
+  email         String      @unique
+  emailVerified Boolean
+  image         String?
+  firstName     String?
+  lastName      String?
+  banned        Boolean?
+  banReason     String?
+  banExpires    DateTime?
+  gender        Gender?
+  role          UserRole    @default(USER)
+  subRole       UserSubRole @default(ORDINARY)
+
+  sessions         Session[]
+  accounts         Account[]
+  waitingList      WaitingList[]
+  orders           Order[]
+  rating           Rating[]
+  tickets          Ticket[]
+  venue            Venue[]
+  eventsHosted     Event[]
+  organizerProfile OrganizerProfile?
+
+  @@map("users")
+}
+
+// events
 enum AgeRestriction {
   ALL_AGES
   AGE_14_PLUS
@@ -47,42 +197,21 @@ enum DressCode {
   NO_DRESS_CODE
 }
 
-model Event {
-  id               String          @id @default(cuid())
-  title            String
-  description      String?
-  location         String?
-  createdAt        DateTime        @default(now())
-  imageUrls        String[]
-  coverImageUrl    String?
-  startDateTime    DateTime        @default(now())
-  endDateTime      DateTime        @default(now())
-  isFree           Boolean         @default(false)
-  url              String?
-  age              AgeRestriction?
-  dressCode        DressCode?
-  lateEntry        DateTime?
-  idRequired       Boolean?        @default(false)
-  categoryId       String?
-  category         Category?       @relation(fields: [categoryId], references: [id])
-  userId           String?
-  user             User?           @relation(fields: [userId], references: [id])
-  venueId          String
-  venue            Venue           @relation(fields: [venueId], references: [id])
-  tags             Tag[]
-  attendeeLimit    Int?
-  ratings          Rating[]
-  featured         Boolean         @default(false)
-  embeddedVideoUrl String?
-  ticketTypes      TicketType[]
-  isCancelled      Boolean?        @default(false)
-  publishedStatus  PublishedStatus @default(DRAFT)
-  orders           Order[]
-  waitingList      WaitingList[]
-  City             City?           @relation(fields: [cityId], references: [id])
-  cityId           String?
+enum PublishedStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  REJECTED
+}
 
-  @@index([title])
+model Tag {
+  id      String  @id @default(cuid())
+  name    String  @unique
+  bgColor String
+  slug    String?
+  events  Event[]
+
+  @@index([name])
 }
 
 model Rating {
@@ -97,16 +226,11 @@ model Rating {
   @@index([eventId])
 }
 
-model TicketType {
-  id       String   @id @default(cuid())
-  name     String
-  price    Float    @default(0.0)
-  quantity Int
-  eventId  String
-  event    Event    @relation(fields: [eventId], references: [id])
-  tickets  Ticket[]
-
-  @@index([eventId])
+enum TicketStatus {
+  UNUSED
+  USED
+  REFUNDED
+  CANCELLED
 }
 
 model Ticket {
@@ -123,181 +247,35 @@ model Ticket {
   @@index([userId])
 }
 
-model WaitingList {
-  id             String        @id @default(cuid())
-  eventId        String
-  event          Event         @relation(fields: [eventId], references: [id])
-  userId         String
-  user           User          @relation(fields: [userId], references: [id])
-  status         WaitingStatus @default(WAITING)
-  offerExpiresAt DateTime?
+model TicketType {
+  id       String   @id @default(cuid())
+  name     String
+  price    Float    @default(0.0)
+  quantity Int
+  eventId  String
+  event    Event    @relation(fields: [eventId], references: [id])
+  tickets  Ticket[]
 
-  @@index([eventId, status])
-  @@index([userId, eventId])
-  @@index([userId])
+  @@index([eventId])
 }
 
-enum TicketStatus {
-  UNUSED
-  USED
-  REFUNDED
-  CANCELLED
+model Category {
+  id    String  @id @default(cuid())
+  name  String  @unique
+  Event Event[]
+
+  @@index([name])
 }
 
-enum WaitingStatus {
-  WAITING
-  OFFERED
-  PURCHASED
-  EXPIRED
-}
+model City {
+  id         String  @id @default(cuid())
+  name       String  @unique
+  population Int?
+  state      String
+  events     Event[]
+  venues     Venue[]
 
-enum PublishedStatus {
-  DRAFT
-  PENDING_REVIEW
-}
-
-model Order {
-  id            String        @id @default(cuid())
-  createdAt     DateTime      @default(now())
-  paystackId    String        @unique
-  totalAmount   Float
-  quantity      Int
-  paymentStatus PaymentStatus @default(PENDING)
-  refundStatus  RefundStatus?
-  eventId       String
-  event         Event         @relation(fields: [eventId], references: [id])
-  buyerId       String
-  buyer         User          @relation(fields: [buyerId], references: [id])
-  purchaseNotes String?
-
-  @@index([buyerId])
-}
-
-enum PaymentStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  REFUNDED
-}
-
-enum RefundStatus {
-  INITIATED
-  PROCESSED
-  FAILED
-}
-
-model User {
-  id                    String                 @id @default(cuid())
-  username              String?
-  name                  String?
-  emailVerified         DateTime?
-  firstName             String?
-  lastName              String?
-  image                 String?
-  password              String?
-  accounts              Account[]
-  email                 String?                @unique
-  bio                   String?
-  phone                 String?
-  address               String?
-  accountNumber         String?
-  bankName              String?
-  socialLinks           SocialLink[]
-  role                  Role                   @default(USER)
-  organizerProfile      OrganizerProfile?
-  isVerified            Boolean                @default(false)
-  gender                String?
-  eventsHosted          Event[]
-  ratings               Rating[]
-  orders                Order[]
-  tickets               Ticket[]
-  venue                 Venue[]
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-  isTwoFactorEnabled    Boolean                @default(false)
-  twoFactorConfirmation TwoFactorConfirmation?
-  WaitingList           WaitingList[]
-
-  @@index([email])
-}
-
-model Account {
-  id                String   @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?
-  access_token      String?
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?
-  session_state     String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, providerAccountId])
-}
-
-model VerificationToken {
-  id      String   @id @default(cuid())
-  email   String
-  token   String   @unique
-  expires DateTime
-
-  @@unique([email, token])
-}
-
-model PasswordResetToken {
-  id      String   @id @default(cuid())
-  email   String
-  token   String   @unique
-  expires DateTime
-
-  @@unique([email, token])
-}
-
-model TwoFactorToken {
-  id      String   @id @default(cuid())
-  email   String
-  token   String   @unique
-  expires DateTime
-
-  @@unique([email, token])
-}
-
-model TwoFactorConfirmation {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId])
-}
-
-enum Role {
-  ADMIN
-  ORGANIZER
-  USER
-}
-
-model SocialLink {
-  id       String @id @default(cuid())
-  platform String
-  url      String
-  userId   String
-  user     User   @relation(fields: [userId], references: [id])
-}
-
-model OrganizerProfile {
-  id               String  @id @default(cuid())
-  organizationName String
-  bio              String?
-  website          String?
-  userId           String  @unique
-  user             User    @relation(fields: [userId], references: [id])
+  @@index([name])
 }
 
 model Venue {
@@ -318,12 +296,43 @@ model Venue {
   @@index([cityId])
 }
 
-model Tag {
-  id      String  @id @default(cuid())
-  name    String  @unique
-  bgColor String
-  slug    String?
-  events  Event[]
+model Event {
+  id               String          @id @default(cuid())
+  title            String
+  description      String?
+  location         String?
+  createdAt        DateTime        @default(now())
+  coverImageUrl    String?
+  startDateTime    DateTime        @default(now())
+  endDateTime      DateTime        @default(now())
+  isFree           Boolean         @default(false)
+  url              String?
+  lateEntry        DateTime?
+  idRequired       Boolean?        @default(false)
+  attendeeLimit    Int?
+  featured         Boolean         @default(false)
+  embeddedVideoUrl String?
+  dressCode        DressCode?
+  age              AgeRestriction?
 
-  @@index([name])
+  imageUrls   String[]
+  tags        Tag[]
+  ratings     Rating[]
+  ticketTypes TicketType[]
+  orders      Order[]
+  waitingList WaitingList[]
+
+  userId     String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+  categoryId String?
+  user       User?     @relation(fields: [userId], references: [id])
+  venueId    String
+  venue      Venue     @relation(fields: [venueId], references: [id])
+  cityId     String?
+  City       City?     @relation(fields: [cityId], references: [id])
+
+  isCancelled     Boolean?        @default(false)
+  publishedStatus PublishedStatus @default(DRAFT)
+
+  @@index([title])
 }
