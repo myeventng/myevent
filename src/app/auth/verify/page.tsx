@@ -1,32 +1,83 @@
-import { ReturnButton } from "@/components/return-button";
-import { SendVerificationEmailForm } from "@/components/send-verification-email-form";
-import { redirect } from "next/navigation";
+import { SendVerificationEmailForm } from '@/components/auth/send-verification-email-form';
+import Link from 'next/link';
+import { ArrowLeftIcon, AlertCircle } from 'lucide-react';
+import { redirect } from 'next/navigation';
+import { getServerSideAuth } from '@/lib/auth-utils';
 
 interface PageProps {
   searchParams: Promise<{ error: string }>;
 }
 
-export default async function Page({ searchParams }: PageProps) {
-  const error = (await searchParams).error;
+export default async function VerifyEmailPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const error = params?.error;
 
-  if (!error) redirect("/profile");
+  if (!error) {
+    try {
+      // If no error, get user session to determine where to redirect
+      const session = await getServerSideAuth();
+      const userRole = session.user.role;
+      const userSubRole = session.user.subRole;
+
+      // Redirect based on user role
+      if (
+        userRole === 'ADMIN' &&
+        (userSubRole === 'STAFF' || userSubRole === 'SUPER_ADMIN')
+      ) {
+        redirect('/admin/dashboard');
+      } else if (
+        userRole === 'USER' &&
+        (userSubRole === 'ORDINARY' || userSubRole === 'ORGANIZER')
+      ) {
+        redirect('/dashboard');
+      } else {
+        // Fallback for any other role combination
+        redirect('/events');
+      }
+    } catch (error) {
+      // If error getting session, default redirect to events
+      redirect('/events');
+    }
+  }
+
+  // Format error message
+  const errorMessage = error.replace(/_/g, ' ').replace(/-/g, ' ');
 
   return (
-    <div className="px-8 py-16 container mx-auto max-w-screen-lg space-y-8">
-      <div className="space-y-4">
-        <ReturnButton href="/auth/login" label="Login" />
-
-        <h1 className="text-3xl font-bold">Verify Email</h1>
+    <div className="space-y-8 w-full">
+      <div className="flex items-center mb-6">
+        <Link
+          href="/auth/login"
+          className="text-gray-400 hover:text-white flex items-center gap-2 text-sm"
+        >
+          <ArrowLeftIcon className="h-4 w-4" />
+          Back to login
+        </Link>
       </div>
 
-      <p className="text-destructive">
-        <span className="capitalize">
-          {error.replace(/_/g, " ").replace(/-/g, " ")}
-        </span>{" "}
-        - Please request a new verification email.
-      </p>
+      <div className="text-center space-y-4">
+        <div className="mx-auto bg-amber-500/20 p-3 rounded-full w-16 h-16 flex items-center justify-center">
+          <AlertCircle className="h-10 w-10 text-amber-500" />
+        </div>
+        <h1 className="text-3xl font-bold">Email Verification</h1>
+        <p className="text-gray-400 max-w-sm mx-auto">
+          Your email needs to be verified to continue
+        </p>
+      </div>
 
-      <SendVerificationEmailForm />
+      <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-200">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
+          <p>
+            <span className="capitalize font-medium">{errorMessage}</span> -
+            Please request a new verification email.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6">
+        <SendVerificationEmailForm />
+      </div>
     </div>
   );
 }

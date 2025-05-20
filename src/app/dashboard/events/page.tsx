@@ -1,4 +1,4 @@
-import { DashboardLayout } from '@/components/dashboard-layout';
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { getServerSideAuth, isOrganizer } from '@/lib/auth-utils';
 import { Button } from '@/components/ui/button';
 import {

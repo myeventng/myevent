@@ -1,27 +1,43 @@
-import { DashboardLayout } from '@/components/dashboard-layout';
-import { getServerSideAuth } from '@/lib/auth-utils';
-import { isOrganizer } from '@/lib/client-auth-utils';
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Badge } from '@/components/ui/badge';
+import { getServerSideAuth } from '@/lib/auth-utils';
+import { getUserVenues } from '@/actions/venue-actions';
+import { getCities } from '@/actions/city-actions';
+import { ClientSideVenuesWrapper } from '@/components/venue/user-client-side-venues-wrapper';
 
-export default async function Venues() {
+export default async function MyVenuesPage() {
+  // Get the authenticated session
   const session = await getServerSideAuth({
-    roles: ['USER'], // Allow only USER role
+    // Allow both regular users and admins with the ORGANIZER subrole
+    roles: ['USER', 'ADMIN'],
+    subRoles: ['ORGANIZER'],
   });
-  const isUserOrganizer = isOrganizer(session.user);
-  const initials = session.user.name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase();
+
+  // Fetch user's venues and cities from database
+  const venuesResponse = await getUserVenues();
+  const citiesResponse = await getCities();
+
+  const venues = venuesResponse.success ? venuesResponse.data : [];
+  const cities = citiesResponse.success ? citiesResponse.data : [];
+
   return (
     <DashboardLayout session={session}>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">My Venues</h1>
-          <Badge>{isUserOrganizer ? 'ORGANIZER' : 'USER'}</Badge>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">My Venues</h1>
+            <p className="text-muted-foreground">
+              Manage venues you've created for your events
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">{session.user.subRole || 'USER'}</Badge>
+          </div>
         </div>
 
-        <div className="text-muted-foreground ">Coming Soon</div>
+        {/* Client side component for tabs and venue management */}
+        <ClientSideVenuesWrapper initialVenues={venues} cities={cities} />
       </div>
     </DashboardLayout>
   );

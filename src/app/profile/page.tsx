@@ -1,12 +1,12 @@
-import { ChangePasswordForm } from "@/components/change-password-form";
-import { ReturnButton } from "@/components/return-button";
-import { SignOutButton } from "@/components/sign-out-button";
-import { Button } from "@/components/ui/button";
-import { UpdateUserForm } from "@/components/update-user-form";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
-import Link from "next/link";
-import { redirect } from "next/navigation";
+import { ChangePasswordForm } from '@/components/change-password-form';
+import { ReturnButton } from '@/components/return-button';
+import { SignOutButton } from '@/components/auth/sign-out-button';
+import { Button } from '@/components/ui/button';
+import { UpdateUserForm } from '@/components/update-user-form';
+import { auth } from '@/lib/auth';
+import { headers } from 'next/headers';
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 export default async function Page() {
   const headersList = await headers();
@@ -15,13 +15,13 @@ export default async function Page() {
     headers: headersList,
   });
 
-  if (!session) redirect("/auth/login");
+  if (!session) redirect('/auth/login');
 
   const FULL_POST_ACCESS = await auth.api.userHasPermission({
     body: {
       userId: session.user.id,
       permissions: {
-        posts: ["update", "delete"],
+        posts: ['update', 'delete'],
       },
     },
   });
@@ -34,7 +34,7 @@ export default async function Page() {
         <h1 className="text-3xl font-bold">Profile</h1>
 
         <div className="flex items-center gap-2">
-          {session.user.role === "ADMIN" && (
+          {session.user.role === 'ADMIN' && (
             <Button size="sm" asChild>
               <Link href="/admin/dashboard">Admin Dashboard</Link>
             </Button>
@@ -77,7 +77,7 @@ export default async function Page() {
 
         <UpdateUserForm
           name={session.user.name}
-          image={session.user.image ?? ""}
+          image={session.user.image ?? ''}
         />
       </div>
 

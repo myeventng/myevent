@@ -1,5 +1,5 @@
 // app/admin/dashboard/users/page.tsx - Admin User Management
-import { DashboardLayout } from '@/components/dashboard-layout';
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { isSuperAdmin } from '@/lib/client-auth-utils';
 import { getServerSideAuth } from '@/lib/auth-utils';
 import { Button } from '@/components/ui/button';

@@ -16,7 +16,9 @@ import {
   Ticket,
   UserCog,
   Users,
+  Building2,
   Menu,
+  Blocks,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -72,9 +74,19 @@ export function Sidebar({
       icon: <Calendar className="w-5 h-5" />,
     },
     {
+      title: 'Categories',
+      href: '/admin/dashboard/categories',
+      icon: <Blocks className="w-5 h-5" />,
+    },
+    {
       title: 'Venues',
       href: '/admin/dashboard/venues',
       icon: <MapPin className="w-5 h-5" />,
+    },
+    {
+      title: 'Cities',
+      href: '/admin/dashboard/cities',
+      icon: <Building2 className="w-5 h-5" />,
     },
     {
       title: 'Reports',

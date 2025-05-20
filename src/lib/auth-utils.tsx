@@ -35,30 +35,38 @@ export async function getServerSideAuth(requiredRoles?: {
   subRoles?: SubRoleType[];
 }): Promise<AuthSession> {
   const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
+  try {
+    const session = await auth.api.getSession({
+      headers: headersList,
+    });
 
-  if (!session) {
+    // console.log('Session result:', session ? 'Session exists' : 'No session');
+    // console.log(session?.user);
+
+    if (!session) {
+      console.log('No session found, redirecting to login');
+      redirect('/auth/login');
+    }
+
+    // Check role restrictions if provided
+    if (requiredRoles) {
+      const hasRequiredRole = requiredRoles.roles
+        ? requiredRoles.roles.includes(session.user.role as RoleType)
+        : true;
+
+      const hasRequiredSubRole = requiredRoles.subRoles
+        ? requiredRoles.subRoles.includes(session.user.subRole as SubRoleType)
+        : true;
+
+      if (!hasRequiredRole || !hasRequiredSubRole) {
+        redirect('/unauthorized');
+      }
+    }
+    return session as AuthSession;
+  } catch (error) {
+    console.error('Error getting session:', error);
     redirect('/auth/login');
   }
-
-  // Check role restrictions if provided
-  if (requiredRoles) {
-    const hasRequiredRole = requiredRoles.roles
-      ? requiredRoles.roles.includes(session.user.role as RoleType)
-      : true;
-
-    const hasRequiredSubRole = requiredRoles.subRoles
-      ? requiredRoles.subRoles.includes(session.user.subRole as SubRoleType)
-      : true;
-
-    if (!hasRequiredRole || !hasRequiredSubRole) {
-      redirect('/unauthorized');
-    }
-  }
-
-  return session as AuthSession;
 }
 
 /**

@@ -2,6 +2,15 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ['bcryptjs'],
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'utfs.io',
+        pathname: '/**',
+      },
+    ],
+  },
   webpack: (config, { isServer }) => {
     if (!isServer) {
       // Replace password hashing libs with empty modules on the client-side

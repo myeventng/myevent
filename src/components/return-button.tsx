@@ -1,6 +1,6 @@
-import { Button } from "@/components/ui/button";
-import { ArrowLeftIcon } from "lucide-react";
-import Link from "next/link";
+// components/auth/return-button.tsx
+import { ArrowLeftIcon } from 'lucide-react';
+import Link from 'next/link';
 
 interface ReturnButtonProps {
   href: string;
@@ -9,10 +9,12 @@ interface ReturnButtonProps {
 
 export const ReturnButton = ({ href, label }: ReturnButtonProps) => {
   return (
-    <Button size="sm" asChild>
-      <Link href={href}>
-        <ArrowLeftIcon /> <span>{label}</span>
-      </Link>
-    </Button>
+    <Link
+      href={href}
+      className="text-gray-400 hover:text-white flex items-center gap-2 text-sm"
+    >
+      <ArrowLeftIcon className="h-4 w-4" />
+      <span>{label}</span>
+    </Link>
   );
 };

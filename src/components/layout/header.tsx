@@ -1,5 +1,5 @@
 import { AuthUser } from '@/lib/auth-utils';
-import { SignOutButton } from '@/components/sign-out-button';
+import { SignOutButton } from '@/components/auth/sign-out-button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {

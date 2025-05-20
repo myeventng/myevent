@@ -1,19 +1,39 @@
-import { ForgotPasswordForm } from "@/components/forgot-password-form";
-import { ReturnButton } from "@/components/return-button";
+import { ForgotPasswordForm } from '@/components/auth/forgot-password-form';
+import Link from 'next/link';
+import { ArrowLeftIcon } from 'lucide-react';
 
-export default function Page() {
+export default function ForgotPasswordPage() {
   return (
-    <div className="px-8 py-16 container mx-auto max-w-screen-lg space-y-8">
-      <div className="space-y-4">
-        <ReturnButton href="/auth/login" label="Login" />
+    <div className="space-y-8 w-full">
+      <div className="flex items-center mb-6">
+        <Link
+          href="/auth/login"
+          className="text-gray-400 hover:text-white flex items-center gap-2 text-sm"
+        >
+          <ArrowLeftIcon className="h-4 w-4" />
+          Back to login
+        </Link>
+      </div>
 
+      <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold">Forgot Password</h1>
-
-        <p className="text-muted-foreground">
-          Please enter your email address to receive a password reset link.
+        <p className="text-gray-400">
+          No worries, we'll send you reset instructions
         </p>
+      </div>
 
-        <ForgotPasswordForm />
+      <ForgotPasswordForm />
+
+      <div className="text-center space-y-4">
+        <p className="text-gray-400 text-sm">
+          Remember your password?{' '}
+          <Link
+            href="/auth/login"
+            className="text-purple-400 hover:text-purple-300"
+          >
+            Back to login
+          </Link>
+        </p>
       </div>
     </div>
   );

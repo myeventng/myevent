@@ -260,9 +260,9 @@ model TicketType {
 }
 
 model Category {
-  id    String  @id @default(cuid())
-  name  String  @unique
-  Event Event[]
+  id     String  @id @default(cuid())
+  name   String  @unique
+  events Event[]
 
   @@index([name])
 }
@@ -279,19 +279,20 @@ model City {
 }
 
 model Venue {
-  id          String  @id @default(cuid())
-  name        String
-  address     String
-  cityId      String
-  city        City    @relation(fields: [cityId], references: [id])
-  userId      String
-  description String?
-  contactInfo String?
-  user        User    @relation(fields: [userId], references: [id])
-  capacity    Int
-  latitude    String
-  longitude   String
-  events      Event[]
+  id            String  @id @default(cuid())
+  name          String
+  address       String
+  cityId        String
+  city          City    @relation(fields: [cityId], references: [id])
+  userId        String
+  description   String?
+  contactInfo   String?
+  user          User    @relation(fields: [userId], references: [id])
+  capacity      Int?
+  venueImageUrl String?
+  latitude      String?
+  longitude     String?
+  events        Event[]
 
   @@index([cityId])
 }

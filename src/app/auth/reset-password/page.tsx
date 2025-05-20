@@ -1,29 +1,40 @@
-import { ResetPasswordForm } from "@/components/reset-password-form";
-import { ReturnButton } from "@/components/return-button";
-import { redirect } from "next/navigation";
+// app/auth/reset-password/page.tsx
+import { ResetPasswordForm } from '@/components/auth/reset-password-form';
+import { ArrowLeftIcon } from 'lucide-react';
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 interface PageProps {
   searchParams: Promise<{ token: string }>;
 }
 
-export default async function Page({ searchParams }: PageProps) {
+export default async function ResetPasswordPage({ searchParams }: PageProps) {
   const token = (await searchParams).token;
 
-  if (!token) redirect("/auth/login");
+  if (!token) {
+    redirect('/auth/login');
+  }
 
   return (
-    <div className="px-8 py-16 container mx-auto max-w-screen-lg space-y-8">
-      <div className="space-y-4">
-        <ReturnButton href="/auth/login" label="Login" />
-
-        <h1 className="text-3xl font-bold">Reset Password</h1>
-
-        <p className="text-muted-foreground">
-          Please enter your new password. Make sure it is at least 6 characters.
-        </p>
-
-        <ResetPasswordForm token={token} />
+    <div className="space-y-8 w-full">
+      <div className="flex items-center mb-6">
+        <Link
+          href="/auth/login"
+          className="text-gray-400 hover:text-white flex items-center gap-2 text-sm"
+        >
+          <ArrowLeftIcon className="h-4 w-4" />
+          Back to login
+        </Link>
       </div>
+
+      <div className="text-center space-y-2">
+        <h1 className="text-3xl font-bold">Reset Password</h1>
+        <p className="text-gray-400">
+          Create a new secure password for your account
+        </p>
+      </div>
+
+      <ResetPasswordForm token={token} />
     </div>
   );
 }
