@@ -149,18 +149,21 @@ model User {
   createdAt DateTime
   updatedAt DateTime
 
-  name          String
-  email         String      @unique
-  emailVerified Boolean
-  image         String?
-  firstName     String?
-  lastName      String?
-  banned        Boolean?
-  banReason     String?
-  banExpires    DateTime?
-  gender        Gender?
-  role          UserRole    @default(USER)
-  subRole       UserSubRole @default(ORDINARY)
+  name             String
+  email            String      @unique
+  emailVerified    Boolean
+  image            String?
+  firstName        String?
+  lastName         String?
+  banned           Boolean?
+  banReason        String?
+  banExpires       DateTime?
+  gender           Gender?
+  role             UserRole    @default(USER)
+  subRole          UserSubRole @default(ORDINARY)
+  twoFactorEnabled Boolean?
+  secret           String?
+  backupCodes      String?
 
   sessions         Session[]
   accounts         Account[]

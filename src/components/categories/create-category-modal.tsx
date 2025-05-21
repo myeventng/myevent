@@ -27,16 +27,9 @@ import { createCategory } from '@/actions/category-actions';
 import { Category } from '@/generated/prisma';
 import { toast } from 'sonner';
 
-// Form validation schema
+// Form validation schema - corrected to match the Category model
 const formSchema = z.object({
   name: z.string().min(2, 'Category name must be at least 2 characters'),
-  state: z.string().min(2, 'State name must be at least 2 characters'),
-  population: z.coerce
-    .number()
-    .optional()
-    .refine((val) => val === undefined || !isNaN(val), {
-      message: 'Invalid population value',
-    }),
 });
 
 type FormValues = z.infer<typeof formSchema>;

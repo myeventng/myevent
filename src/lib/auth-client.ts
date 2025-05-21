@@ -3,10 +3,11 @@ import {
   adminClient,
   customSessionClient,
   magicLinkClient,
-} from "better-auth/client/plugins";
-import { createAuthClient } from "better-auth/react";
-import type { auth } from "@/lib/auth";
-import { ac, roles } from "@/lib/permissions";
+  twoFactorClient,
+} from 'better-auth/client/plugins';
+import { createAuthClient } from 'better-auth/react';
+import type { auth } from '@/lib/auth';
+import { ac, roles } from '@/lib/permissions';
 
 const authClient = createAuthClient({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
@@ -15,6 +16,7 @@ const authClient = createAuthClient({
     adminClient({ ac, roles }),
     customSessionClient<typeof auth>(),
     magicLinkClient(),
+    twoFactorClient(),
   ],
 });
 
@@ -28,4 +30,5 @@ export const {
   forgetPassword,
   resetPassword,
   updateUser,
+  twoFactor,
 } = authClient;

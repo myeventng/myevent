@@ -71,7 +71,7 @@ export const CategoriesTable = ({
     {
       id: 'actions',
       cell: ({ row }) => {
-        const catgoryCategory = row.original;
+        const category = row.original;
 
         return (
           <div className="flex items-center gap-2">
@@ -79,7 +79,7 @@ export const CategoriesTable = ({
               variant="ghost"
               size="icon"
               onClick={() => {
-                setSelectedCategory(catgoryCategory);
+                setSelectedCategory(category);
                 setUpdateModalOpen(true);
               }}
             >
@@ -89,7 +89,7 @@ export const CategoriesTable = ({
               variant="ghost"
               size="icon"
               onClick={() => {
-                setSelectedCategory(catgoryCategory);
+                setSelectedCategory(category);
                 setDeleteDialogOpen(true);
               }}
             >

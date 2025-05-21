@@ -1,4 +1,4 @@
-import { ChangePasswordForm } from '@/components/change-password-form';
+import { ChangePasswordForm } from '@/components/auth/change-password-form';
 import { ReturnButton } from '@/components/return-button';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { Button } from '@/components/ui/button';

@@ -11,12 +11,14 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { UpdateUserForm } from '@/components/update-user-form';
-import { ChangePasswordForm } from '@/components/change-password-form';
+import { UpdateUserForm } from '@/components/auth/update-user-form';
+import { ChangePasswordForm } from '@/components/auth/change-password-form';
+import { TwoFactorAuthForm } from '@/components/auth/two-factor-auth-form';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Shield } from 'lucide-react';
+import { get2FAStatusAction } from '@/actions/two-factor-auth-actions';
 
 export default async function AdminProfilePage() {
   const session = await getServerSideAuth({
@@ -30,6 +32,14 @@ export default async function AdminProfilePage() {
     .map((n) => n[0])
     .join('')
     .toUpperCase();
+
+  // Fetch the 2FA status from the server
+  const has2FAStatusResponse = await get2FAStatusAction();
+  const has2FAEnabled = has2FAStatusResponse.success
+    ? has2FAStatusResponse.data.isEnabled
+    : false;
+
+  // For admin accounts, 2FA should be required, so we'll show a warning if not enabled
 
   return (
     <DashboardLayout session={session}>
@@ -178,26 +188,18 @@ export default async function AdminProfilePage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
+                <TwoFactorAuthForm
+                  isEnabled={has2FAEnabled}
+                  user={{
+                    id: session.user.id,
+                    email: session.user.email,
+                  }}
+                />
+                <p className="text-sm text-muted-foreground mt-4">
                   Two-factor authentication is <strong>required</strong> for
                   admin accounts to protect sensitive platform operations.
                 </p>
-                <div className="p-3 rounded-md bg-green-50 border border-green-200 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-5 w-5 text-green-600" />
-                    <p className="font-medium text-green-800">2FA is Active</p>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="text-green-800 border-green-800"
-                  >
-                    Enabled
-                  </Badge>
-                </div>
               </CardContent>
-              <CardFooter>
-                <Button variant="outline">Manage 2FA</Button>
-              </CardFooter>
             </Card>
 
             <Card>

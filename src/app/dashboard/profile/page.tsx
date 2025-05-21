@@ -11,12 +11,17 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { UpdateUserForm } from '@/components/update-user-form';
-import { ChangePasswordForm } from '@/components/change-password-form';
+import { UpdateUserForm } from '@/components/auth/update-user-form';
+import { ChangePasswordForm } from '@/components/auth/change-password-form';
+import { OrganizerProfileForm } from '@/components/auth/organizer-profile-form';
+import { TwoFactorAuthForm } from '@/components/auth/two-factor-auth-form';
+import { ApplyOrganizerForm } from '@/components/auth/apply-organizer-form';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Shield, User } from 'lucide-react';
+import { prisma } from '@/lib/prisma';
+import { get2FAStatusAction } from '@/actions/two-factor-auth-actions';
 
 export default async function UserProfilePage() {
   const session = await getServerSideAuth({
@@ -29,6 +34,20 @@ export default async function UserProfilePage() {
     .map((n) => n[0])
     .join('')
     .toUpperCase();
+
+  // Fetch organizer profile if user is an organizer
+  let organizerProfile = null;
+  if (isUserOrganizer) {
+    organizerProfile = await prisma.organizerProfile.findUnique({
+      where: { userId: session.user.id },
+    });
+  }
+
+  // Fetch the 2FA status (you could implement this in getServerSideProps)
+  const has2FAStatusResponse = await get2FAStatusAction();
+  const has2FAEnabled = has2FAStatusResponse.success
+    ? has2FAStatusResponse.data.isEnabled
+    : false;
 
   return (
     <DashboardLayout session={session}>
@@ -107,7 +126,7 @@ export default async function UserProfilePage() {
                   </p>
                 </CardContent>
                 <CardFooter>
-                  <Button>Apply to be an Organizer</Button>
+                  <ApplyOrganizerForm />
                 </CardFooter>
               </Card>
             )}
@@ -134,14 +153,52 @@ export default async function UserProfilePage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Two-factor authentication adds an additional layer of security
-                  to your account by requiring more than just a password to sign
-                  in.
-                </p>
+                <TwoFactorAuthForm
+                  isEnabled={has2FAEnabled}
+                  user={{
+                    id: session.user.id,
+                    email: session.user.email,
+                  }}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Login History</CardTitle>
+                <CardDescription>
+                  Recent login activity for your account
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="p-3 rounded-md bg-gray-50 border border-gray-200">
+                    <div className="flex justify-between">
+                      <div>
+                        <p className="font-medium">Today, 09:32 AM</p>
+                        <p className="text-sm text-muted-foreground">
+                          Chrome on Windows
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-green-800">
+                        Current
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-md bg-gray-50 border border-gray-200">
+                    <div className="flex justify-between">
+                      <div>
+                        <p className="font-medium">Yesterday, 18:45 PM</p>
+                        <p className="text-sm text-muted-foreground">
+                          Safari on iPhone
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
               <CardFooter>
-                <Button variant="outline">Enable 2FA</Button>
+                <Button variant="outline">View Full History</Button>
               </CardFooter>
             </Card>
           </TabsContent>
@@ -156,91 +213,8 @@ export default async function UserProfilePage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                          Organization Name
-                        </label>
-                        <input
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                          placeholder="Your organization name"
-                          defaultValue="EventMaster Productions"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                          Website
-                        </label>
-                        <input
-                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                          placeholder="https://example.com"
-                          defaultValue="https://eventmaster.com"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                        Bio
-                      </label>
-                      <textarea
-                        className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        placeholder="Tell attendees about your organization"
-                        defaultValue="EventMaster Productions specializes in tech conferences and networking events for industry professionals. Our events feature top speakers and cutting-edge topics."
-                      />
-                    </div>
-                  </div>
+                  <OrganizerProfileForm profile={organizerProfile} />
                 </CardContent>
-                <CardFooter>
-                  <Button>Save Changes</Button>
-                </CardFooter>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Event Branding</CardTitle>
-                  <CardDescription>
-                    Customize how your events appear to attendees
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium leading-none">
-                        Logo
-                      </label>
-                      <div className="flex items-center gap-4">
-                        <div className="h-20 w-20 rounded-md border border-dashed border-gray-300 flex items-center justify-center">
-                          <User className="h-8 w-8 text-gray-400" />
-                        </div>
-                        <Button variant="outline" size="sm">
-                          Upload Logo
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium leading-none">
-                        Brand Colors
-                      </label>
-                      <div className="flex items-center gap-4">
-                        <input
-                          type="color"
-                          className="h-10 w-10 rounded cursor-pointer"
-                          defaultValue="#3b82f6"
-                        />
-                        <span className="text-sm text-muted-foreground">
-                          Primary Color
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <Button>Save Branding</Button>
-                </CardFooter>
               </Card>
             </TabsContent>
           )}
