@@ -1,4 +1,5 @@
 'use client';
+
 import { AuthUser } from '@/lib/auth-utils';
 import { isAdmin, isOrganizer } from '@/lib/client-auth-utils';
 import { cn } from '@/lib/utils';
@@ -8,6 +9,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Home,
   LayoutDashboard,
   MapPin,
@@ -19,10 +22,15 @@ import {
   Building2,
   Menu,
   Blocks,
+  Eye,
+  Edit,
+  List,
+  Tags,
+  Star,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 interface SidebarProps {
   user: AuthUser;
@@ -32,6 +40,13 @@ interface SidebarProps {
   onMobileClose?: () => void;
 }
 
+interface NavItem {
+  title: string;
+  href?: string;
+  icon: React.ReactNode;
+  children?: NavItem[];
+}
+
 export function Sidebar({
   user,
   isOpen = false,
@@ -39,9 +54,11 @@ export function Sidebar({
   onCollapseToggle,
   onMobileClose,
 }: SidebarProps) {
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const [expandedSections, setExpandedSections] = useState<string[]>([]);
+  const pathname = usePathname();
+  const isAdminDashboard = pathname.startsWith('/admin');
 
-  // Add this to close sidebar on outside click or ESC (optional)
+  // Close sidebar on ESC key
   useEffect(() => {
     function handleEsc(e: KeyboardEvent) {
       if (e.key === 'Escape') onMobileClose?.();
@@ -50,14 +67,42 @@ export function Sidebar({
     return () => document.removeEventListener('keydown', handleEsc);
   }, [onMobileClose]);
 
+  // Auto-expand sections based on current path
+  useEffect(() => {
+    const pathSegments = pathname.split('/');
+    const newExpanded: string[] = [];
+
+    if (isAdminDashboard) {
+      if (pathname.includes('/events')) newExpanded.push('admin-events');
+      if (pathname.includes('/venues')) newExpanded.push('admin-venues');
+      if (pathname.includes('/tickets')) newExpanded.push('admin-tickets');
+      if (pathname.includes('/users')) newExpanded.push('admin-users');
+    } else {
+      if (pathname.includes('/events') || pathname.includes('/create-event')) {
+        newExpanded.push('organizer-events');
+      }
+      if (pathname.includes('/venues') || pathname.includes('/my-venues')) {
+        newExpanded.push('organizer-venues');
+      }
+      if (pathname.includes('/tickets')) newExpanded.push('user-tickets');
+    }
+
+    setExpandedSections(newExpanded);
+  }, [pathname, isAdminDashboard]);
+
   const sidebarWidth = collapsed ? 'w-20' : 'w-64';
 
-  const pathname = usePathname();
+  const toggleSection = (sectionId: string) => {
+    if (collapsed) return; // Don't allow toggle when collapsed
 
-  const isAdminDashboard = pathname.startsWith('/admin');
-  const baseUrl = isAdminDashboard ? '/admin/dashboard' : '/dashboard';
+    setExpandedSections((prev) =>
+      prev.includes(sectionId)
+        ? prev.filter((id) => id !== sectionId)
+        : [...prev, sectionId]
+    );
+  };
 
-  const adminNavItems = [
+  const adminNavItems: NavItem[] = [
     {
       title: 'Dashboard',
       href: '/admin/dashboard',
@@ -65,28 +110,82 @@ export function Sidebar({
     },
     {
       title: 'Users',
-      href: '/admin/dashboard/users',
       icon: <Users className="w-5 h-5" />,
+      children: [
+        {
+          title: 'All Users',
+          href: '/admin/dashboard/users',
+          icon: <List className="w-4 h-4" />,
+        },
+        {
+          title: 'Organizers',
+          href: '/admin/dashboard/users/organizers',
+          icon: <UserCog className="w-4 h-4" />,
+        },
+      ],
     },
     {
       title: 'Events',
-      href: '/admin/dashboard/events',
       icon: <Calendar className="w-5 h-5" />,
-    },
-    {
-      title: 'Categories',
-      href: '/admin/dashboard/categories',
-      icon: <Blocks className="w-5 h-5" />,
+      children: [
+        {
+          title: 'All Events',
+          href: '/admin/dashboard/events',
+          icon: <List className="w-4 h-4" />,
+        },
+        {
+          title: 'Pending Review',
+          href: '/admin/dashboard/events/pending',
+          icon: <Eye className="w-4 h-4" />,
+        },
+        {
+          title: 'Featured Events',
+          href: '/admin/dashboard/events/featured',
+          icon: <Star className="w-4 h-4" />,
+        },
+        {
+          title: 'Categories',
+          href: '/admin/dashboard/categories',
+          icon: <Blocks className="w-4 h-4" />,
+        },
+        {
+          title: 'Tags',
+          href: '/admin/dashboard/tags',
+          icon: <Tags className="w-4 h-4" />,
+        },
+      ],
     },
     {
       title: 'Venues',
-      href: '/admin/dashboard/venues',
       icon: <MapPin className="w-5 h-5" />,
+      children: [
+        {
+          title: 'All Venues',
+          href: '/admin/dashboard/venues',
+          icon: <List className="w-4 h-4" />,
+        },
+        {
+          title: 'Cities',
+          href: '/admin/dashboard/cities',
+          icon: <Building2 className="w-4 h-4" />,
+        },
+      ],
     },
     {
-      title: 'Cities',
-      href: '/admin/dashboard/cities',
-      icon: <Building2 className="w-5 h-5" />,
+      title: 'Tickets',
+      icon: <Ticket className="w-5 h-5" />,
+      children: [
+        {
+          title: 'All Tickets',
+          href: '/admin/dashboard/tickets',
+          icon: <List className="w-4 h-4" />,
+        },
+        {
+          title: 'Refunds',
+          href: '/admin/dashboard/tickets/refunds',
+          icon: <Edit className="w-4 h-4" />,
+        },
+      ],
     },
     {
       title: 'Reports',
@@ -100,7 +199,7 @@ export function Sidebar({
     },
   ];
 
-  const userNavItems = [
+  const userNavItems: NavItem[] = [
     {
       title: 'Dashboard',
       href: '/dashboard',
@@ -108,8 +207,24 @@ export function Sidebar({
     },
     {
       title: 'My Tickets',
-      href: '/dashboard/tickets',
       icon: <Ticket className="w-5 h-5" />,
+      children: [
+        {
+          title: 'All Tickets',
+          href: '/dashboard/tickets',
+          icon: <List className="w-4 h-4" />,
+        },
+        {
+          title: 'Upcoming',
+          href: '/dashboard/tickets/upcoming',
+          icon: <Calendar className="w-4 h-4" />,
+        },
+        {
+          title: 'Past Events',
+          href: '/dashboard/tickets/past',
+          icon: <Eye className="w-4 h-4" />,
+        },
+      ],
     },
     {
       title: 'Profile',
@@ -118,21 +233,43 @@ export function Sidebar({
     },
   ];
 
-  const organizerNavItems = [
+  const organizerNavItems: NavItem[] = [
     {
-      title: 'My Events',
-      href: '/dashboard/events',
+      title: 'Events',
       icon: <Calendar className="w-5 h-5" />,
+      children: [
+        {
+          title: 'My Events',
+          href: '/dashboard/events',
+          icon: <List className="w-4 h-4" />,
+        },
+        {
+          title: 'Create Event',
+          href: '/dashboard/create-event',
+          icon: <Plus className="w-4 h-4" />,
+        },
+        {
+          title: 'Drafts',
+          href: '/dashboard/events/drafts',
+          icon: <Edit className="w-4 h-4" />,
+        },
+      ],
     },
     {
-      title: 'My Venues',
-      href: '/dashboard/my-venues',
+      title: 'Venues',
       icon: <MapPin className="w-5 h-5" />,
-    },
-    {
-      title: 'Create Event',
-      href: '/dashboard/create-event',
-      icon: <Plus className="w-5 h-5" />,
+      children: [
+        {
+          title: 'My Venues',
+          href: '/dashboard/my-venues',
+          icon: <List className="w-4 h-4" />,
+        },
+        {
+          title: 'Create Venue',
+          href: '/dashboard/venues/create',
+          icon: <Plus className="w-4 h-4" />,
+        },
+      ],
     },
     {
       title: 'Analytics',
@@ -142,10 +279,95 @@ export function Sidebar({
   ];
 
   const userIsOrganizer = isOrganizer(user);
-  const userIsAdmin = isAdmin(user);
   const navItems = isAdminDashboard
     ? adminNavItems
     : [...userNavItems, ...(userIsOrganizer ? organizerNavItems : [])];
+
+  const getSectionId = (item: NavItem) => {
+    if (isAdminDashboard) {
+      if (item.title === 'Events') return 'admin-events';
+      if (item.title === 'Venues') return 'admin-venues';
+      if (item.title === 'Tickets') return 'admin-tickets';
+      if (item.title === 'Users') return 'admin-users';
+    } else {
+      if (item.title === 'Events') return 'organizer-events';
+      if (item.title === 'Venues') return 'organizer-venues';
+      if (item.title === 'My Tickets') return 'user-tickets';
+    }
+    return item.title.toLowerCase().replace(/\s+/g, '-');
+  };
+
+  const isPathActive = (href: string) => {
+    return pathname === href || pathname.startsWith(href + '/');
+  };
+
+  const renderNavItem = (item: NavItem, depth = 0) => {
+    const hasChildren = item.children && item.children.length > 0;
+    const sectionId = getSectionId(item);
+    const isExpanded = expandedSections.includes(sectionId);
+    const isActive = item.href ? isPathActive(item.href) : false;
+    const hasActiveChild =
+      hasChildren &&
+      item.children!.some((child) =>
+        child.href ? isPathActive(child.href) : false
+      );
+
+    if (hasChildren) {
+      return (
+        <div key={item.title} className="space-y-1">
+          <button
+            onClick={() => toggleSection(sectionId)}
+            className={cn(
+              'w-full flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200',
+              hasActiveChild || isActive
+                ? 'bg-primary text-white'
+                : 'text-gray-700 hover:bg-gray-100',
+              collapsed ? 'justify-center px-2' : 'justify-between'
+            )}
+          >
+            <div className="flex items-center gap-3">
+              {item.icon}
+              {!collapsed && <span>{item.title}</span>}
+            </div>
+            {!collapsed && (
+              <div className="ml-auto">
+                {isExpanded ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </div>
+            )}
+          </button>
+
+          {!collapsed && isExpanded && (
+            <div className="ml-6 space-y-1">
+              {item.children!.map((child) => renderNavItem(child, depth + 1))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Regular nav item (leaf node)
+    return (
+      <Link
+        key={item.href}
+        href={item.href!}
+        className={cn(
+          'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200',
+          isActive
+            ? 'bg-primary text-white'
+            : 'text-gray-700 hover:bg-gray-100',
+          collapsed ? 'justify-center px-2' : '',
+          depth > 0 ? 'text-xs' : ''
+        )}
+      >
+        {item.icon}
+        {!collapsed && <span>{item.title}</span>}
+      </Link>
+    );
+  };
 
   return (
     <>
@@ -189,26 +411,27 @@ export function Sidebar({
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200',
-                  isActive
-                    ? 'bg-primary text-white'
-                    : 'text-gray-700 hover:bg-gray-100',
-                  collapsed ? 'justify-center px-2' : ''
-                )}
-              >
-                {item.icon}
-                {!collapsed && <span>{item.title}</span>}
-              </Link>
-            );
-          })}
+          {navItems.map((item) => renderNavItem(item))}
         </nav>
+
+        {/* User info at bottom */}
+        {!collapsed && (
+          <div className="border-t border-gray-200 p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                <span className="text-white text-sm font-medium">
+                  {user.name?.charAt(0).toUpperCase() || 'U'}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {user.name}
+                </p>
+                <p className="text-xs text-gray-500 truncate">{user.email}</p>
+              </div>
+            </div>
+          </div>
+        )}
       </aside>
     </>
   );

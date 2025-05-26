@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { banUserAction } from '@/actions/ban-user-action';
+import { banUserAction } from '@/actions/ban-user-actions';
 import { toast } from 'sonner';
 
 interface UnbanUserDialogProps {

@@ -1,24 +1,36 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { isSuperAdmin } from '@/lib/client-auth-utils';
+import { AdminEventsTable } from '@/components/admin/admin-events-table';
+import { getEvents } from '@/actions/event.actions';
 import { getServerSideAuth } from '@/lib/auth-utils';
-import { Badge } from '@/components/ui/badge';
 
-export default async function Events() {
+export default async function AdminEvents() {
   const session = await getServerSideAuth({
-    roles: ['ADMIN'], // Allow only ADMIN role
+    roles: ['ADMIN'], // Only allow admins
     subRoles: ['STAFF', 'SUPER_ADMIN'], // Allow only STAFF and SUPER_ADMIN subroles
   });
-  const isUserSuperAdmin = isSuperAdmin(session.user);
+
+  // Fetch all events (published and unpublished for admin view)
+  const response = await getEvents(false); // false to get all events
+  const events = response.success ? response.data : [];
+
   return (
     <DashboardLayout session={session}>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Events</h1>
-          <Badge variant={isUserSuperAdmin ? 'destructive' : 'secondary'}>
-            {session.user.subRole}
-          </Badge>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Events Management</h1>
+            <p className="text-muted-foreground">
+              Manage all events in the system. You can publish, feature, and
+              moderate events.
+            </p>
+          </div>
         </div>
-        <div className="text-muted-foreground ">Coming Soon</div>
+
+        <AdminEventsTable
+          initialData={events ?? []}
+          userRole={session.user.role}
+          userSubRole={session.user.subRole}
+        />
       </div>
     </DashboardLayout>
   );

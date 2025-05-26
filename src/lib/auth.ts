@@ -170,8 +170,17 @@ const options = {
       },
     }),
     twoFactor({
-      // Set to true to enforce 2FA for all admin accounts
-      requireForRoles: ['ADMIN'],
+      issuer: 'MyEventComNg',
+      otpOptions: {
+        period: 30,
+        digits: 6,
+        algorithm: 'SHA1',
+      },
+      backupCodes: {
+        enabled: true,
+        amount: 10,
+        length: 8,
+      },
     }),
   ],
 } satisfies BetterAuthOptions;

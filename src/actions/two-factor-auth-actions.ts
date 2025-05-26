@@ -17,7 +17,8 @@ export async function generate2FASecretAction() {
       success: true,
       data: {
         secret: response.secret,
-        qrCodeUrl: response.qrCodeUrl,
+        qrCode: response.qrCode, // Better Auth returns qrCode, not qrCodeUrl
+        backupCodes: response.backupCodes,
       },
       error: null,
     };
@@ -38,7 +39,7 @@ export async function verify2FACodeAction(code: string) {
   try {
     const headersList = await headers();
 
-    await auth.api.twoFactor.verify({
+    const response = await auth.api.twoFactor.verify({
       headers: headersList,
       body: {
         code: code,
@@ -50,6 +51,7 @@ export async function verify2FACodeAction(code: string) {
 
     return {
       success: true,
+      data: response,
       error: null,
     };
   } catch (err) {
@@ -58,6 +60,34 @@ export async function verify2FACodeAction(code: string) {
       return { success: false, error: err.message };
     }
     return { success: false, error: 'Failed to verify 2FA code' };
+  }
+}
+
+export async function enable2FAAction(code: string) {
+  try {
+    const headersList = await headers();
+
+    const response = await auth.api.twoFactor.enable({
+      headers: headersList,
+      body: {
+        code: code,
+      },
+    });
+
+    revalidatePath('/dashboard/profile');
+    revalidatePath('/admin/dashboard/profile');
+
+    return {
+      success: true,
+      data: response,
+      error: null,
+    };
+  } catch (err) {
+    console.error('Error enabling 2FA:', err);
+    if (err instanceof APIError) {
+      return { success: false, error: err.message };
+    }
+    return { success: false, error: 'Failed to enable 2FA' };
   }
 }
 
@@ -89,14 +119,16 @@ export async function get2FAStatusAction() {
   try {
     const headersList = await headers();
 
-    const response = await auth.api.twoFactor.getStatus({
+    // Use the correct method name
+    const response = await auth.api.twoFactor.getTwoFactorStatus({
       headers: headersList,
     });
 
     return {
       success: true,
       data: {
-        isEnabled: response.isEnabled,
+        isEnabled: response.enabled, // Better Auth returns 'enabled', not 'isEnabled'
+        backupCodesCount: response.backupCodesCount || 0,
       },
       error: null,
     };
@@ -110,5 +142,33 @@ export async function get2FAStatusAction() {
       error: 'Failed to fetch 2FA status',
       data: { isEnabled: false },
     };
+  }
+}
+
+export async function verifyBackupCodeAction(code: string) {
+  try {
+    const headersList = await headers();
+
+    const response = await auth.api.twoFactor.verifyBackupCode({
+      headers: headersList,
+      body: {
+        code: code,
+      },
+    });
+
+    revalidatePath('/dashboard/profile');
+    revalidatePath('/admin/dashboard/profile');
+
+    return {
+      success: true,
+      data: response,
+      error: null,
+    };
+  } catch (err) {
+    console.error('Error verifying backup code:', err);
+    if (err instanceof APIError) {
+      return { success: false, error: err.message };
+    }
+    return { success: false, error: 'Failed to verify backup code' };
   }
 }

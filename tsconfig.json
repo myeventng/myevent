@@ -27,7 +27,8 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "src/components/venue/user-client-side-venues-wrappertsx"
+    "src/components/venue/user-client-side-venues-wrappertsx",
+    "src/hook/useb"
   ],
   "exclude": ["node_modules"]
 }

@@ -55,7 +55,7 @@ export async function getServerSideAuth(requiredRoles?: {
         : true;
 
       const hasRequiredSubRole = requiredRoles.subRoles
-        ? requiredRoles.subRoles.includes(session.user.subRole as SubRoleType)
+        ? requiredRoles.subRoles.includes(session.user.subRole as SubRoleType  || se)
         : true;
 
       if (!hasRequiredRole || !hasRequiredSubRole) {

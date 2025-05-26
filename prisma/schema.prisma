@@ -91,6 +91,21 @@ model Account {
   @@map("accounts")
 }
 
+model TwoFactor {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  secret      String
+  backupCodes String?
+  verified    Boolean @default(false)
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("twoFactor")
+}
+
 enum WaitingStatus {
   WAITING
   OFFERED
@@ -149,21 +164,18 @@ model User {
   createdAt DateTime
   updatedAt DateTime
 
-  name             String
-  email            String      @unique
-  emailVerified    Boolean
-  image            String?
-  firstName        String?
-  lastName         String?
-  banned           Boolean?
-  banReason        String?
-  banExpires       DateTime?
-  gender           Gender?
-  role             UserRole    @default(USER)
-  subRole          UserSubRole @default(ORDINARY)
-  twoFactorEnabled Boolean?
-  secret           String?
-  backupCodes      String?
+  name          String
+  email         String      @unique
+  emailVerified Boolean
+  image         String?
+  firstName     String?
+  lastName      String?
+  banned        Boolean?
+  banReason     String?
+  banExpires    DateTime?
+  gender        Gender?
+  role          UserRole    @default(USER)
+  subRole       UserSubRole @default(ORDINARY)
 
   sessions         Session[]
   accounts         Account[]
@@ -174,6 +186,7 @@ model User {
   venue            Venue[]
   eventsHosted     Event[]
   organizerProfile OrganizerProfile?
+  twoFactor        TwoFactor?
 
   @@map("users")
 }
@@ -302,6 +315,7 @@ model Venue {
 
 model Event {
   id               String          @id @default(cuid())
+  slug             String?
   title            String
   description      String?
   location         String?

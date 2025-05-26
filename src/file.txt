@@ -1,0 +1,19 @@
+/app/admin/events/[id]/edit/page.tsx          # Admin edit page
+/app/dashboard/events/[id]/edit/page.tsx      # Organizer edit page  
+/app/events/[slug]/page.tsx                   # Public event view
+
+/components/admin/edit-event-form.tsx         # Admin version of edit form
+/components/organizer/edit-event-form.tsx    # Organizer version of edit form
+/components/events/
+  ├── event-gallery.tsx                      # Image gallery component
+  ├── share-event-button.tsx                 # Social sharing
+  ├── event-reviews.tsx                      # Reviews system
+  ├── event-ticket-booking.tsx               # Ticket booking
+  └── event-media-upload.tsx                 # Media upload step
+
+/components/form-steps/                       # Your existing step components
+  ├── event-basic-info.tsx
+  ├── event-location-details.tsx
+  ├── event-schedule.tsx
+  ├── event-tickets.tsx
+  └── event-preview.tsx

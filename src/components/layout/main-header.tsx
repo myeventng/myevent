@@ -34,6 +34,17 @@ const MainHeader: React.FC = () => {
 
   const userRole = session?.user?.role || '';
   const userSubRole = session?.user?.subRole || '';
+  const isAdmin = userRole === 'ADMIN';
+
+  // Helper function to get dashboard URL based on user role
+  const getDashboardUrl = () => {
+    return isAdmin ? '/admin/dashboard' : '/dashboard';
+  };
+
+  // Helper function to get profile URL based on user role
+  const getProfileUrl = () => {
+    return isAdmin ? '/admin/dashboard/profile' : '/dashboard/profile';
+  };
 
   // Handle scroll event to change header appearance
   useEffect(() => {
@@ -65,15 +76,23 @@ const MainHeader: React.FC = () => {
         onError: (ctx) => {
           toast.error(ctx.error.message);
         },
+
         onSuccess: () => {
-          toast.success('You’ve logged out. See you soon!');
+          toast.success("You've logged out. See you soon!");
           router.push('/auth/login');
         },
       },
     });
   };
 
-  const filteredNav = navigation.filter((item) => {
+  const updatedNavigation = navigation.map((item) => {
+    if (item.name === 'Dashboard' && item.href === '/dashboard') {
+      return { ...item, href: getDashboardUrl() };
+    }
+    return item;
+  });
+
+  const filteredNav = updatedNavigation.filter((item) => {
     if (!item.requiresAuth) return true;
     if (!session) return false;
     if (!item.roles) return true;
@@ -158,25 +177,17 @@ const MainHeader: React.FC = () => {
                   </p>
                 </div>
                 <Link
-                  href="/dashboard/profile"
+                  href={getProfileUrl()}
                   className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                 >
                   Profile
                 </Link>
                 <Link
-                  href="/dashboard"
+                  href={getDashboardUrl()}
                   className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                 >
                   Dashboard
                 </Link>
-                {(userSubRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && (
-                  <Link
-                    href="/admin"
-                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    Admin Panel
-                  </Link>
-                )}
                 <button
                   onClick={handleLogout}
                   className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -248,22 +259,14 @@ const MainHeader: React.FC = () => {
                   {session ? (
                     <>
                       <Link
-                        href={
-                          session.user?.subRole
-                            ? '/dashboard/profile'
-                            : 'admin/dashboard'
-                        }
+                        href={getProfileUrl()}
                         className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10"
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         Profile
                       </Link>
                       <Link
-                        href={
-                          session.user?.subRole
-                            ? '/dashboard/profile'
-                            : '/dashboard'
-                        }
+                        href={getDashboardUrl()}
                         className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10"
                         onClick={() => setMobileMenuOpen(false)}
                       >

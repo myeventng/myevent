@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Input } from '@/components/ui/input';
-import { banUserAction } from '@/actions/ban-user-action';
+import { banUserAction } from '@/actions/ban-user-actions';
 import { toast } from 'sonner';
 import { DatePicker } from '@/components/layout/date-picker';
 
