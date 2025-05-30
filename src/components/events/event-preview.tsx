@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import { MapPin, Calendar, Clock, Tag, Info, Ticket, User } from 'lucide-react';
@@ -24,8 +24,11 @@ interface EventPreviewProps {
   formData: any;
   ticketTypes: any[];
   onPrevious: () => void;
-  onSubmit: (publishStatus: 'DRAFT' | 'PENDING_REVIEW') => void;
+  onSubmit: (publishStatus: 'DRAFT' | 'PENDING_REVIEW' | 'PUBLISHED') => void;
   isSubmitting: boolean;
+  isEditing?: boolean;
+  userRole?: string;
+  userSubRole?: string;
 }
 
 export function EventPreview({
@@ -34,6 +37,9 @@ export function EventPreview({
   onPrevious,
   onSubmit,
   isSubmitting,
+  isEditing = false,
+  userRole = 'USER',
+  userSubRole = 'ORDINARY',
 }: EventPreviewProps) {
   const [activeTab, setActiveTab] = useState('overview');
   const [category, setCategory] = useState<any>(null);
@@ -42,7 +48,8 @@ export function EventPreview({
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch associated data for preview
-  useState(() => {
+
+  useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
@@ -107,12 +114,18 @@ export function EventPreview({
     0
   );
 
+  // Check if user can publish directly
+  const canPublishDirectly =
+    userRole === 'ADMIN' && ['STAFF', 'SUPER_ADMIN'].includes(userSubRole);
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold">Event Preview</h2>
         <p className="text-muted-foreground">
-          Review your event details before submitting.
+          {isEditing
+            ? 'Review your updated event details before saving.'
+            : 'Review your event details before submitting.'}
         </p>
       </div>
 
@@ -195,8 +208,9 @@ export function EventPreview({
                   </p>
                   <p className="text-muted-foreground">
                     {ticketTypes.length} ticket{' '}
-                    {ticketTypes.length === 1 ? 'type' : 'types'},{totalTickets}{' '}
-                    {totalTickets === 1 ? 'ticket' : 'tickets'} available
+                    {ticketTypes.length === 1 ? 'type' : 'types'},{' '}
+                    {totalTickets} {totalTickets === 1 ? 'ticket' : 'tickets'}{' '}
+                    available
                   </p>
                 </div>
               </div>
@@ -258,7 +272,7 @@ export function EventPreview({
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="tickets">Tickets</TabsTrigger>
-              {formData.imageUrls.length > 0 && (
+              {formData.imageUrls && formData.imageUrls.length > 0 && (
                 <TabsTrigger value="gallery">Gallery</TabsTrigger>
               )}
             </TabsList>
@@ -307,7 +321,7 @@ export function EventPreview({
               </div>
             </TabsContent>
 
-            {formData.imageUrls.length > 0 && (
+            {formData.imageUrls && formData.imageUrls.length > 0 && (
               <TabsContent value="gallery" className="mt-4">
                 <h3 className="text-xl font-medium mb-4">Event Gallery</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -341,14 +355,28 @@ export function EventPreview({
             onClick={() => onSubmit('DRAFT')}
             disabled={isSubmitting}
           >
-            Save as Draft
+            {isEditing ? 'Save as Draft' : 'Save as Draft'}
           </Button>
-          <Button
-            onClick={() => onSubmit('PENDING_REVIEW')}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? 'Submitting...' : 'Submit for Review'}
-          </Button>
+
+          {canPublishDirectly ? (
+            <Button
+              onClick={() => onSubmit('PUBLISHED')}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Publishing...' : 'Publish Event'}
+            </Button>
+          ) : (
+            <Button
+              onClick={() => onSubmit('PENDING_REVIEW')}
+              disabled={isSubmitting}
+            >
+              {isSubmitting
+                ? 'Submitting...'
+                : isEditing
+                ? 'Submit Changes for Review'
+                : 'Submit for Review'}
+            </Button>
+          )}
         </div>
       </div>
     </div>

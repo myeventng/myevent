@@ -36,7 +36,7 @@ interface FormValues {
   title: string;
   description: string;
   categoryId?: string;
-  tagIds: string[];
+  tagIds: string[]; // not optional, always an array
   age?: AgeRestriction;
   dressCode?: DressCode;
   isFree: boolean;
@@ -85,13 +85,13 @@ export function EventBasicInfo({
     defaultValues: {
       title: formData.title || '',
       description: formData.description || '',
-      categoryId: formData.categoryId,
+      categoryId: formData.categoryId || '',
       tagIds: formData.tagIds || [],
-      age: formData.age,
-      dressCode: formData.dressCode,
+      age: formData.age || undefined,
+      dressCode: formData.dressCode || undefined,
       isFree: formData.isFree || false,
       idRequired: formData.idRequired || false,
-      attendeeLimit: formData.attendeeLimit,
+      attendeeLimit: formData.attendeeLimit || undefined,
       url: formData.url || '',
     },
   });
@@ -126,7 +126,16 @@ export function EventBasicInfo({
 
   // Handle form submission
   const onSubmit = (values: FormValues) => {
-    updateFormData(values);
+    // Clean up the values to ensure no undefined strings
+    const cleanedValues = {
+      ...values,
+      categoryId: values.categoryId === '' ? undefined : values.categoryId,
+      url: values.url === '' ? undefined : values.url,
+      attendeeLimit:
+        values.attendeeLimit === 0 ? undefined : values.attendeeLimit,
+    };
+
+    updateFormData(cleanedValues);
     onNext();
   };
 
@@ -241,7 +250,7 @@ export function EventBasicInfo({
                   <FormLabel>Category</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value || ''}
                     disabled={isLoading}
                   >
                     <FormControl>
@@ -273,7 +282,7 @@ export function EventBasicInfo({
                   <FormLabel>Age Restriction</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value || ''}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -304,7 +313,7 @@ export function EventBasicInfo({
                   <FormLabel>Dress Code</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value || ''}
                   >
                     <FormControl>
                       <SelectTrigger>

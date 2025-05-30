@@ -34,6 +34,7 @@ import { CreateVenueModal } from './create-venue-modal';
 const formSchema = z.object({
   venueId: z.string().min(1, 'Venue is required'),
   location: z.string().optional(),
+  cityId: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -92,12 +93,12 @@ export function EventLocationDetails({
           const venueMap = new Map();
 
           // Add user's venues first (they'll appear at the top)
-          userVenues.forEach((venue) => {
+          (userVenues ?? []).forEach((venue) => {
             venueMap.set(venue.id, { ...venue, isOwned: true });
           });
 
           // Add other venues
-          allVenues.forEach((venue) => {
+          (allVenues ?? []).forEach((venue) => {
             if (!venueMap.has(venue.id)) {
               venueMap.set(venue.id, { ...venue, isOwned: false });
             }

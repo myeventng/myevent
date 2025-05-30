@@ -10,7 +10,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Bell, Menu, Settings, User } from 'lucide-react';
+import { Menu, Settings, User } from 'lucide-react';
+import { NotificationBell } from '@/components/notification/notification-bell';
 import Link from 'next/link';
 
 interface HeaderProps {
@@ -34,9 +35,8 @@ export function Header({ user, onMobileToggle }: HeaderProps) {
       </button>
 
       <div className="flex items-center ml-auto space-x-4">
-        <Button variant="ghost" size="icon" className="hidden md:flex">
-          <Bell className="w-5 h-5" />
-        </Button>
+        {/* Notification Bell */}
+        <NotificationBell className="hidden md:flex" />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -60,6 +60,15 @@ export function Header({ user, onMobileToggle }: HeaderProps) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+
+            {/* Mobile Notifications */}
+            <DropdownMenuItem asChild className="md:hidden">
+              <Link href="/dashboard/notifications" className="cursor-pointer">
+                <NotificationBell className="mr-2 h-4 w-4" />
+                <span>Notifications</span>
+              </Link>
+            </DropdownMenuItem>
+
             <DropdownMenuItem asChild>
               <Link href={profilePath} className="cursor-pointer">
                 <User className="mr-2 h-4 w-4" />

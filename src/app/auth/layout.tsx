@@ -27,7 +27,9 @@ export default function AuthLayout({
         />
         <div className="relative z-10 p-12 text-white flex flex-col h-full justify-between">
           <div>
-            <h1 className="text-4xl lg:text-5xl font-bold mb-2">MyEventNg</h1>
+            <h1 className="text-4xl lg:text-5xl font-bold mb-2">
+              MyEvent.com.ng
+            </h1>
             <p className="text-xl lg:text-2xl opacity-90">
               Experience the extraordinary
             </p>
@@ -60,7 +62,7 @@ export default function AuthLayout({
         <div className="flex flex-col min-h-screen">
           {/* Mobile Header - Visible only on mobile */}
           <div className="md:hidden p-6 bg-gradient-to-r from-indigo-600 to-purple-600">
-            <h1 className="text-3xl font-bold">MyEventNg</h1>
+            <h1 className="text-3xl font-bold">MyEvent.com.ng</h1>
             <p className="text-sm opacity-80">Experience the extraordinary</p>
           </div>
 
@@ -76,7 +78,8 @@ export default function AuthLayout({
           {/* Footer */}
           <div className="p-4 text-center text-gray-400 text-sm">
             <p>
-              &copy; {new Date().getFullYear()} MyEventNg. All rights reserved.
+              &copy; {new Date().getFullYear()} MyEvent.com.ng. All rights
+              reserved.
             </p>
           </div>
         </div>

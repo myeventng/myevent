@@ -1,11 +1,11 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { CreateEventForm } from '@/components/events/create-event-form';
-import { OrganizerProfileRequired } from '@/components/organizer/organizer-profile-required';
 import { getServerSideAuth } from '@/lib/auth-utils';
 
-export default async function CreateEvent() {
+export default async function AdminCreateEvent() {
   const session = await getServerSideAuth({
-    roles: ['USER', 'ADMIN'], // Allow users and admins
+    roles: ['ADMIN'],
+    subRoles: ['STAFF', 'SUPER_ADMIN'],
   });
 
   return (
@@ -18,9 +18,10 @@ export default async function CreateEvent() {
           </p>
         </div>
 
-        <OrganizerProfileRequired redirectUrl="/dashboard/events">
-          <CreateEventForm />
-        </OrganizerProfileRequired>
+        <CreateEventForm
+          userRole={session.user.role}
+          userSubRole={session.user.subRole}
+        />
       </div>
     </DashboardLayout>
   );

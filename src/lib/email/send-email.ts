@@ -45,11 +45,11 @@ export async function sendVerificationEmail(data: EmailTemplateData) {
 
     // Send the email
     const info = await transporter.sendMail({
-      from: `"MyEventNg" <${process.env.EMAIL_FROM}>`,
+      from: `"MyEvent.com.ng" <${process.env.EMAIL_FROM}>`,
       to: data.userEmail,
-      subject: 'Verify Your Email Address - MyEventNg',
+      subject: 'Verify Your Email Address - MyEvent.com.ng',
       html,
-      text: `Hi ${data.userName},\n\nPlease verify your email address by clicking on the following link: ${data.verificationLink}\n\nThis link will expire in 24 hours.\n\nIf you didn't sign up for MyEventNg, you can safely ignore this email.\n\nRegards,\nThe MyEventNg Team`,
+      text: `Hi ${data.userName},\n\nPlease verify your email address by clicking on the following link: ${data.verificationLink}\n\nThis link will expire in 24 hours.\n\nIf you didn't sign up for MyEvent.com.ng, you can safely ignore this email.\n\nRegards,\nThe MyEvent.com.ng Team`,
     });
 
     return { success: true, messageId: info.messageId };
@@ -91,8 +91,8 @@ export async function sendVerificationEmail(data: EmailTemplateData) {
 //     const msg = {
 //       to: data.userEmail,
 //       from: process.env.EMAIL_FROM,
-//       subject: 'Verify Your Email Address - MyEventNg',
-//       text: `Hi ${data.userName},\n\nPlease verify your email address by clicking on the following link: ${data.verificationLink}\n\nThis link will expire in 24 hours.\n\nIf you didn't sign up for MyEventNg, you can safely ignore this email.\n\nRegards,\nThe MyEventNg Team`,
+//       subject: 'Verify Your Email Address - MyEvent.com.ng',
+//       text: `Hi ${data.userName},\n\nPlease verify your email address by clicking on the following link: ${data.verificationLink}\n\nThis link will expire in 24 hours.\n\nIf you didn't sign up for MyEvent.com.ng, you can safely ignore this email.\n\nRegards,\nThe MyEvent.com.ng Team`,
 //       html,
 //     };
 

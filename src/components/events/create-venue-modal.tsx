@@ -136,7 +136,11 @@ export const CreateVenueModal = ({
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
     try {
-      const response = await createVenue(values);
+      const response = await createVenue({
+        ...values,
+        latitude: values.latitude ?? '',
+        longitude: values.longitude ?? '',
+      });
 
       if (response.success && response.data) {
         toast.success('Venue created successfully');

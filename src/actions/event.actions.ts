@@ -39,25 +39,50 @@ interface ActionResponse<T> {
   data?: T;
 }
 
+// Fixed permission validation return type
+interface PermissionValidationResult {
+  success: boolean;
+  message?: string;
+  userData?: {
+    userId: string;
+    isAdmin: boolean;
+  };
+}
+
 // Generate a unique slug from title
 const generateSlug = async (
   title: string,
   eventId?: string
 ): Promise<string> => {
+  // Create base slug from title
   const baseSlug = title
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '') // Remove special characters except spaces and hyphens
+    .replace(/\s+/g, '-') // Replace spaces with hyphens
+    .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+    .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+
+  // Ensure we have a valid slug
+  if (!baseSlug) {
+    return `event-${Date.now()}`;
+  }
 
   let slug = baseSlug;
   let counter = 0;
 
   while (true) {
-    const existingEvent = await prisma.event.findUnique({
-      where: { slug },
+    // Check if slug exists, excluding current event if updating
+    const whereCondition: any = { slug };
+    if (eventId) {
+      whereCondition.NOT = { id: eventId };
+    }
+
+    const existingEvent = await prisma.event.findFirst({
+      where: whereCondition,
     });
 
-    if (!existingEvent || (eventId && existingEvent.id === eventId)) {
+    if (!existingEvent) {
       break;
     }
 
@@ -68,62 +93,218 @@ const generateSlug = async (
   return slug;
 };
 
-// Validate if user has permission to create/modify events
-const validateUserPermission = async () => {
+// Fixed: Updated return type to match usage
+const validateUserPermission =
+  async (): Promise<PermissionValidationResult> => {
+    const headersList = await headers();
+    const session = await auth.api.getSession({
+      headers: headersList,
+    });
+
+    if (!session) {
+      return {
+        success: false,
+        message: 'Not authenticated',
+      };
+    }
+
+    const { role, subRole } = session.user;
+
+    // Admin with STAFF or SUPER_ADMIN subRole can always manage events
+    if (role === 'ADMIN' && ['STAFF', 'SUPER_ADMIN'].includes(subRole)) {
+      return {
+        success: true,
+        userData: {
+          userId: session.user.id,
+          isAdmin: true,
+        },
+      };
+    }
+
+    // Check if user is an organizer
+    if (subRole === 'ORGANIZER') {
+      // Check if organizer profile exists
+      const organizerProfile = await prisma.organizerProfile.findUnique({
+        where: { userId: session.user.id },
+      });
+
+      if (!organizerProfile) {
+        return {
+          success: false,
+          message:
+            'You must complete your organizer profile before creating events',
+        };
+      }
+
+      return {
+        success: true,
+        userData: {
+          userId: session.user.id,
+          isAdmin: false,
+        },
+      };
+    }
+
+    return {
+      success: false,
+      message: 'You do not have permission to perform this action',
+    };
+  };
+
+export async function getFeaturedEvents(): Promise<ActionResponse<any[]>> {
+  try {
+    const events = await prisma.event.findMany({
+      where: {
+        featured: true,
+        publishedStatus: 'PUBLISHED',
+        isCancelled: false,
+        endDateTime: {
+          gte: new Date(),
+        },
+      },
+      include: {
+        tags: true,
+        category: true,
+        venue: {
+          include: {
+            city: true,
+          },
+        },
+        ticketTypes: {
+          where: {
+            quantity: {
+              gt: 0,
+            },
+          },
+        },
+      },
+      orderBy: { startDateTime: 'asc' },
+      take: 6,
+    });
+
+    return {
+      success: true,
+      data: events,
+    };
+  } catch (error) {
+    console.error('Error fetching featured events:', error);
+    return {
+      success: false,
+      message: 'Failed to fetch featured events',
+    };
+  }
+}
+
+// Utility function to fix events with null slugs
+export async function fixEventsWithNullSlugs(): Promise<
+  ActionResponse<number>
+> {
+  try {
+    // Find events with null or empty slugs
+    const eventsWithoutSlugs = await prisma.event.findMany({
+      where: {
+        OR: [{ slug: null }, { slug: '' }],
+      },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+      },
+    });
+
+    let fixedCount = 0;
+
+    // Fix each event
+    for (const event of eventsWithoutSlugs) {
+      try {
+        const newSlug = await generateSlug(event.title, event.id);
+
+        await prisma.event.update({
+          where: { id: event.id },
+          data: { slug: newSlug },
+        });
+
+        fixedCount++;
+        console.log(
+          `Fixed slug for event ${event.id}: "${event.title}" -> "${newSlug}"`
+        );
+      } catch (error) {
+        console.error(`Failed to fix slug for event ${event.id}:`, error);
+      }
+    }
+
+    // Revalidate paths
+    revalidatePath('/admin/events');
+    revalidatePath('/dashboard/events');
+    revalidatePath('/events');
+
+    return {
+      success: true,
+      message: `Fixed ${fixedCount} events with missing slugs`,
+      data: fixedCount,
+    };
+  } catch (error) {
+    console.error('Error fixing events with null slugs:', error);
+    return {
+      success: false,
+      message: 'Failed to fix events with null slugs',
+    };
+  }
+}
+
+export async function toggleEventFeatured(
+  id: string
+): Promise<ActionResponse<any>> {
+  // Only admins can feature events
   const headersList = await headers();
   const session = await auth.api.getSession({
     headers: headersList,
   });
 
-  if (!session) {
+  if (!session || session.user.role !== 'ADMIN') {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: 'Only administrators can feature events',
     };
   }
 
-  const { role, subRole } = session.user;
-
-  // Admin with STAFF or SUPER_ADMIN subRole can always manage events
-  if (role === 'ADMIN' && ['STAFF', 'SUPER_ADMIN'].includes(subRole)) {
-    return {
-      success: true,
-      data: {
-        userId: session.user.id,
-        isAdmin: true,
-      },
-    };
-  }
-
-  // Check if user is an organizer
-  if (subRole === 'ORGANIZER') {
-    // Check if organizer profile exists
-    const organizerProfile = await prisma.organizerProfile.findUnique({
-      where: { userId: session.user.id },
+  try {
+    const event = await prisma.event.findUnique({
+      where: { id },
     });
 
-    if (!organizerProfile) {
+    if (!event) {
       return {
         success: false,
-        message:
-          'You must complete your organizer profile before creating events',
+        message: 'Event not found',
       };
     }
 
+    const updatedEvent = await prisma.event.update({
+      where: { id },
+      data: {
+        featured: !event.featured,
+      },
+    });
+
+    revalidatePath('/admin/events');
+    revalidatePath('/events');
+
     return {
       success: true,
-      data: {
-        userId: session.user.id,
-        isAdmin: false,
-      },
+      message: updatedEvent.featured
+        ? 'Event featured successfully'
+        : 'Event unfeatured successfully',
+      data: updatedEvent,
+    };
+  } catch (error) {
+    console.error('Error toggling event featured status:', error);
+    return {
+      success: false,
+      message: 'Failed to update event featured status',
     };
   }
-
-  return {
-    success: false,
-    message: 'You do not have permission to perform this action',
-  };
-};
+}
 
 export async function getEvents(
   published: boolean = true
@@ -665,11 +846,12 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
   }
 }
 
+// Fixed: Updated to use findFirst instead of findUnique for slug queries
 export async function getEventBySlug(
   slug: string
 ): Promise<ActionResponse<any>> {
   try {
-    const event = await prisma.event.findUnique({
+    const event = await prisma.event.findFirst({
       where: { slug },
       include: {
         tags: true,
@@ -735,10 +917,13 @@ export async function createEvent(
   // Validate user permission
   const permissionCheck = await validateUserPermission();
   if (!permissionCheck.success) {
-    return permissionCheck;
+    return {
+      success: false,
+      message: permissionCheck.message,
+    };
   }
 
-  const userId = permissionCheck.data!.userId;
+  const userId = permissionCheck.userData!.userId;
 
   try {
     // Validate venue exists
@@ -785,8 +970,16 @@ export async function createEvent(
       }
     }
 
-    // Generate unique slug
+    // Generate unique slug - always generate for new events
     const slug = await generateSlug(data.title);
+
+    // Validate that slug was generated successfully
+    if (!slug) {
+      return {
+        success: false,
+        message: 'Failed to generate unique slug for event',
+      };
+    }
 
     // Create new event
     const newEvent = await prisma.event.create({
@@ -853,11 +1046,14 @@ export async function updateEvent(
   // Validate user permission
   const permissionCheck = await validateUserPermission();
   if (!permissionCheck.success) {
-    return permissionCheck;
+    return {
+      success: false,
+      message: permissionCheck.message,
+    };
   }
 
-  const userId = permissionCheck.data!.userId;
-  const isAdmin = permissionCheck.data!.isAdmin;
+  const userId = permissionCheck.userData!.userId;
+  const isAdmin = permissionCheck.userData!.isAdmin;
 
   try {
     // Check if event exists
@@ -927,10 +1123,19 @@ export async function updateEvent(
       }
     }
 
-    // Generate new slug if title changed
+    // Generate new slug if title changed or if slug is missing
     let slug = existingEvent.slug;
-    if (data.title !== existingEvent.title) {
+    if (data.title !== existingEvent.title || !existingEvent.slug) {
       slug = await generateSlug(data.title, data.id);
+      console.log(`Generated new slug for event ${data.id}: "${slug}"`);
+    }
+
+    // Validate that slug exists
+    if (!slug) {
+      return {
+        success: false,
+        message: 'Failed to generate or maintain event slug',
+      };
     }
 
     // Get the existing tag IDs
@@ -1012,11 +1217,14 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
   // Validate user permission
   const permissionCheck = await validateUserPermission();
   if (!permissionCheck.success) {
-    return permissionCheck;
+    return {
+      success: false,
+      message: permissionCheck.message,
+    };
   }
 
-  const userId = permissionCheck.data!.userId;
-  const isAdmin = permissionCheck.data!.isAdmin;
+  const userId = permissionCheck.userData!.userId;
+  const isAdmin = permissionCheck.userData!.isAdmin;
 
   try {
     // Check if event exists
@@ -1100,11 +1308,14 @@ export async function publishEvent(id: string): Promise<ActionResponse<any>> {
   // Validate user permission
   const permissionCheck = await validateUserPermission();
   if (!permissionCheck.success) {
-    return permissionCheck;
+    return {
+      success: false,
+      message: permissionCheck.message,
+    };
   }
 
-  const userId = permissionCheck.data!.userId;
-  const isAdmin = permissionCheck.data!.isAdmin;
+  const userId = permissionCheck.userData!.userId;
+  const isAdmin = permissionCheck.userData!.isAdmin;
 
   try {
     // Check if event exists
@@ -1175,104 +1386,6 @@ export async function publishEvent(id: string): Promise<ActionResponse<any>> {
     return {
       success: false,
       message: 'Failed to publish event',
-    };
-  }
-}
-
-export async function getFeaturedEvents(): Promise<ActionResponse<any[]>> {
-  try {
-    const events = await prisma.event.findMany({
-      where: {
-        featured: true,
-        publishedStatus: 'PUBLISHED',
-        isCancelled: false,
-        endDateTime: {
-          gte: new Date(),
-        },
-      },
-      include: {
-        tags: true,
-        category: true,
-        venue: {
-          include: {
-            city: true,
-          },
-        },
-        ticketTypes: {
-          where: {
-            quantity: {
-              gt: 0,
-            },
-          },
-        },
-      },
-      orderBy: { startDateTime: 'asc' },
-      take: 6,
-    });
-
-    return {
-      success: true,
-      data: events,
-    };
-  } catch (error) {
-    console.error('Error fetching featured events:', error);
-    return {
-      success: false,
-      message: 'Failed to fetch featured events',
-    };
-  }
-}
-
-export async function toggleEventFeatured(
-  id: string
-): Promise<ActionResponse<any>> {
-  // Only admins can feature events
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
-
-  if (!session || session.user.role !== 'ADMIN') {
-    return {
-      success: false,
-      message: 'Only administrators can feature events',
-    };
-  }
-
-  try {
-    const event = await prisma.event.findUnique({
-      where: { id },
-    });
-
-    if (!event) {
-      return {
-        success: false,
-        message: 'Event not found',
-      };
-    }
-
-    const updatedEvent = await prisma.event.update({
-      where: { id },
-      data: {
-        featured: !event.featured,
-      },
-    });
-
-    revalidatePath('/admin/events');
-    revalidatePath('/events');
-
-    return {
-      success: true,
-      message: updatedEvent.featured
-        ? 'Event featured successfully'
-        : 'Event unfeatured successfully',
-      data: updatedEvent,
-    };
-  } catch (error) {
-    console.error('Error toggling event featured status:', error);
-    return {
-      success: false,
-      message: 'Failed to update event featured status',
     };
   }
 }

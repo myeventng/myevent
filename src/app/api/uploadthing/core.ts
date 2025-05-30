@@ -71,6 +71,19 @@ export const ourFileRouter = {
     .onUploadComplete(async ({ metadata, file }) => {
       return { uploadedBy: metadata.userId, url: file.url };
     }),
+  blogImage: f({ image: { maxFileSize: '2MB', maxFileCount: 1 } })
+    .middleware(async () => {
+      const headersList = await headers();
+      const session = await auth.api.getSession({
+        headers: headersList,
+      });
+      const user = session?.user;
+      if (!user) throw new Error('Unauthorized');
+      return { userId: user.id };
+    })
+    .onUploadComplete(async ({ metadata, file }) => {
+      return { uploadedBy: metadata.userId, url: file.url };
+    }),
 } satisfies FileRouter;
 
 export type OurFileRouter = typeof ourFileRouter;

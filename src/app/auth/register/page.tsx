@@ -7,7 +7,7 @@ export default function RegisterPage() {
     <div className="space-y-8 w-full">
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold">Create Account</h1>
-        <p className="text-gray-400">Join the MyEventNg community today</p>
+        <p className="text-gray-400">Join the MyEvent.com.ng community today</p>
       </div>
 
       <div className="space-y-6">

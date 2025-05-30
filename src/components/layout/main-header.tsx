@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { useSession, signOut } from '@/lib/auth-client';
 import { Menu, X, ChevronDown, User } from 'lucide-react';
+import Image from 'next/image';
 
 interface NavLink {
   name: string;
@@ -16,6 +17,7 @@ interface NavLink {
 const navigation: NavLink[] = [
   { name: 'Home', href: '/' },
   { name: 'Events', href: '/events' },
+  { name: 'Blog', href: '/blog' },
   {
     name: 'Create Event',
     href: '/events/create',
@@ -102,7 +104,7 @@ const MainHeader: React.FC = () => {
   return (
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled ? 'bg-black/70 backdrop-blur-md shadow-lg' : 'bg-transparent'
+        scrolled ? 'bg-black/50 backdrop-blur-lg shadow-lg' : 'bg-transparent'
       }`}
     >
       <nav
@@ -111,13 +113,12 @@ const MainHeader: React.FC = () => {
       >
         <div className="flex lg:flex-1">
           <Link href="/" className="-m-1.5 p-1.5">
-            <span
-              className={`text-xl font-bold ${
-                scrolled ? 'text-white' : 'text-indigo-600'
-              }`}
-            >
-              EventHub
-            </span>
+            <Image
+              src="/assets/icons/logo-myevent.png"
+              alt="myevent.com.ng Logo"
+              width={200}
+              height={80}
+            />
           </Link>
         </div>
 
@@ -139,10 +140,10 @@ const MainHeader: React.FC = () => {
             <Link
               key={item.name}
               href={item.href}
-              className={`text-sm font-semibold leading-6 ${
+              className={`text-xl font-semibold leading-6 ${
                 scrolled
                   ? 'text-white hover:text-indigo-300'
-                  : 'text-gray-900 hover:text-indigo-600'
+                  : 'text-white hover:text-indigo-600'
               }`}
             >
               {item.name}
@@ -153,11 +154,7 @@ const MainHeader: React.FC = () => {
         <div className="hidden lg:flex lg:flex-1 lg:justify-end lg:gap-x-4">
           {session ? (
             <div className="relative group">
-              <button
-                className={`flex items-center text-sm font-semibold leading-6 group ${
-                  scrolled ? 'text-white' : 'text-gray-900'
-                }`}
-              >
+              <button className="flex items-center text-sm font-semibold leading-6 group text-white">
                 <User className="h-5 w-5 mr-1" />
                 {session.user?.name || 'User'}
                 <ChevronDown className="h-4 w-4 ml-1" />

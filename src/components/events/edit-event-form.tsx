@@ -3,25 +3,18 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { createEvent, updateEvent, deleteEvent } from '@/actions/event.actions';
+import { updateEvent } from '@/actions/event.actions';
+import {
+  getTicketTypesByEvent,
+  createTicketType,
+  updateTicketType,
+  deleteTicketType,
+} from '@/actions/ticket.actions';
 import { AgeRestriction, DressCode } from '@/generated/prisma';
 import { toast } from 'sonner';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import { Trash2, ArrowLeft } from 'lucide-react';
 
-// Step components (reuse the existing ones)
+// Step components
 import { EventBasicInfo } from './event-basic-info';
 import { EventLocationDetails } from './event-location-details';
 import { EventSchedule } from './event-schedule';
@@ -35,7 +28,7 @@ const eventSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
   categoryId: z.string().optional(),
-  tagIds: z.array(z.string()).min(1, 'Select at least one tag'),
+  tagIds: z.array(z.string()).default([]),
   age: z.nativeEnum(AgeRestriction).optional(),
   dressCode: z.nativeEnum(DressCode).optional(),
   isFree: z.boolean().default(false),
@@ -72,15 +65,15 @@ const steps = [
 ];
 
 interface EditEventFormProps {
-  initialData?: any; // Existing event data for editing
-  isEditing?: boolean;
+  initialData: any;
+  isEditing: boolean;
   userRole: string;
   userSubRole: string;
 }
 
 export function EditEventForm({
   initialData,
-  isEditing = false,
+  isEditing,
   userRole,
   userSubRole,
 }: EditEventFormProps) {
@@ -89,15 +82,19 @@ export function EditEventForm({
   const [formData, setFormData] = useState<Partial<EventFormValues>>({});
   const [ticketTypes, setTicketTypes] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const isAdmin =
-    userRole === 'ADMIN' && ['STAFF', 'SUPER_ADMIN'].includes(userSubRole);
-
-  // Initialize form data from existing event
+  // Initialize form data from initialData
   useEffect(() => {
-    if (isEditing && initialData) {
-      setFormData({
+    if (initialData) {
+      // Convert dates from strings to Date objects
+      const startDateTime = new Date(initialData.startDateTime);
+      const endDateTime = new Date(initialData.endDateTime);
+      const lateEntry = initialData.lateEntry
+        ? new Date(initialData.lateEntry)
+        : undefined;
+
+      const initialFormData: Partial<EventFormValues> = {
         title: initialData.title || '',
         description: initialData.description || '',
         categoryId: initialData.categoryId || undefined,
@@ -111,45 +108,59 @@ export function EditEventForm({
         venueId: initialData.venueId || '',
         cityId: initialData.cityId || undefined,
         location: initialData.location || '',
-        startDateTime: initialData.startDateTime
-          ? new Date(initialData.startDateTime)
-          : undefined,
-        endDateTime: initialData.endDateTime
-          ? new Date(initialData.endDateTime)
-          : undefined,
-        lateEntry: initialData.lateEntry
-          ? new Date(initialData.lateEntry)
-          : undefined,
+        startDateTime,
+        endDateTime,
+        lateEntry,
         coverImageUrl: initialData.coverImageUrl || '',
         imageUrls: initialData.imageUrls || [],
         embeddedVideoUrl: initialData.embeddedVideoUrl || '',
-      });
+      };
 
-      // Set ticket types if they exist
-      if (initialData.ticketTypes && initialData.ticketTypes.length > 0) {
-        setTicketTypes(
-          initialData.ticketTypes.map((ticket: any) => ({
-            id: ticket.id,
-            name: ticket.name,
-            price: ticket.price,
-            quantity: ticket.quantity,
-          }))
-        );
-      }
-    } else {
-      // Initialize with default values for creating new event
-      setFormData({
-        tagIds: [],
-        imageUrls: [],
-        isFree: false,
-        idRequired: false,
-      });
+      setFormData(initialFormData);
     }
-  }, [isEditing, initialData]);
+  }, [initialData]);
 
-  // Helper to update form data
+  // Fetch existing ticket types
+  useEffect(() => {
+    const fetchTicketTypes = async () => {
+      if (initialData?.id) {
+        try {
+          setIsLoading(true);
+          const response = await getTicketTypesByEvent(initialData.id);
+          if (response.success && response.data) {
+            setTicketTypes(response.data);
+          }
+        } catch (error) {
+          console.error('Error fetching ticket types:', error);
+          toast.error('Failed to load ticket types');
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchTicketTypes();
+  }, [initialData?.id]);
+
+  // Helper to update form data - ensure no undefined values
   const updateFormData = (data: Partial<EventFormValues>) => {
-    setFormData((prev) => ({ ...prev, ...data }));
+    setFormData((prev) => {
+      const updated = { ...prev, ...data };
+
+      // Ensure arrays are never undefined
+      if (!updated.tagIds) updated.tagIds = [];
+      if (!updated.imageUrls) updated.imageUrls = [];
+
+      // Ensure strings are never undefined
+      if (updated.title === undefined) updated.title = '';
+      if (updated.description === undefined) updated.description = '';
+      if (updated.location === undefined) updated.location = '';
+      if (updated.coverImageUrl === undefined) updated.coverImageUrl = '';
+      if (updated.url === undefined) updated.url = '';
+      if (updated.embeddedVideoUrl === undefined) updated.embeddedVideoUrl = '';
+
+      return updated;
+    });
   };
 
   // Helper to handle next/previous step
@@ -161,17 +172,9 @@ export function EditEventForm({
     setCurrentStep(Math.max(currentStep - 1, 0));
   };
 
-  // Handle going back to events list
-  const handleGoBack = () => {
-    const redirectPath = isAdmin
-      ? '/admin/dashboard/events'
-      : '/dashboard/events';
-    router.push(redirectPath);
-  };
-
-  // Submit the event (create or update)
+  // Submit the event
   const handleSubmit = async (
-    publishStatus: 'DRAFT' | 'PENDING_REVIEW' = 'DRAFT'
+    publishStatus: 'DRAFT' | 'PENDING_REVIEW' | 'PUBLISHED' = 'DRAFT'
   ) => {
     try {
       setIsSubmitting(true);
@@ -179,40 +182,64 @@ export function EditEventForm({
       // Validate the form data
       const validatedData = eventSchema.parse(formData);
 
-      let result;
-      if (isEditing && initialData?.id) {
-        // Update existing event
-        result = await updateEvent({
-          id: initialData.id,
-          ...validatedData,
-          publishedStatus: publishStatus,
-        });
-      } else {
-        // Create new event
-        result = await createEvent({
-          ...validatedData,
-          publishedStatus: publishStatus,
-        });
-      }
+      // Update the event
+      const result = await updateEvent({
+        id: initialData.id,
+        ...validatedData,
+        publishedStatus: publishStatus,
+      });
 
       if (result.success && result.data) {
-        toast.success(
-          result.message ||
-            `Event ${isEditing ? 'updated' : 'created'} successfully`
+        // Handle ticket types - compare with existing ones
+        const existingTicketIds = ticketTypes
+          .filter((t) => !t.id?.startsWith('temp-'))
+          .map((t) => t.id);
+
+        const newTicketTypes = ticketTypes.filter((t) =>
+          t.id?.startsWith('temp-')
+        );
+        const updatedTicketTypes = ticketTypes.filter(
+          (t) => !t.id?.startsWith('temp-') && existingTicketIds.includes(t.id)
         );
 
-        // If we have ticket types and this is a new event, redirect to ticket creation
-        if (!isEditing && ticketTypes.length > 0 && result.data.id) {
-          router.push(`/dashboard/events/${result.data.id}/tickets`);
-        } else {
-          // Redirect to the event details or events list
-          const redirectPath = isAdmin ? '/admin/events' : '/dashboard/events';
-          router.push(redirectPath);
+        // Create new ticket types
+        if (newTicketTypes.length > 0) {
+          const createPromises = newTicketTypes.map(async (ticketType) => {
+            return createTicketType({
+              name: ticketType.name,
+              price: ticketType.price,
+              quantity: ticketType.quantity,
+              eventId: initialData.id,
+            });
+          });
+
+          await Promise.all(createPromises);
         }
+
+        // Update existing ticket types
+        if (updatedTicketTypes.length > 0) {
+          const updatePromises = updatedTicketTypes.map(async (ticketType) => {
+            return updateTicketType({
+              id: ticketType.id,
+              name: ticketType.name,
+              price: ticketType.price,
+              quantity: ticketType.quantity,
+              eventId: initialData.id,
+            });
+          });
+
+          await Promise.all(updatePromises);
+        }
+
+        toast.success(result.message || 'Event updated successfully');
+        const redirectPath =
+          userRole === 'ADMIN' && ['STAFF', 'SUPER_ADMIN'].includes(userSubRole)
+            ? '/admin/dashboard/events'
+            : '/dashboard/events';
+
+        router.push(redirectPath);
       } else {
-        toast.error(
-          result.message || `Failed to ${isEditing ? 'update' : 'create'} event`
-        );
+        toast.error(result.message || 'Failed to update event');
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -221,10 +248,7 @@ export function EditEventForm({
           toast.error(`${err.path.join('.')}: ${err.message}`);
         });
       } else {
-        console.error(
-          `Error ${isEditing ? 'updating' : 'creating'} event:`,
-          error
-        );
+        console.error('Error updating event:', error);
         toast.error('An unexpected error occurred');
       }
     } finally {
@@ -232,28 +256,19 @@ export function EditEventForm({
     }
   };
 
-  // Handle event deletion
-  const handleDeleteEvent = async () => {
-    if (!isEditing || !initialData?.id) return;
-
-    try {
-      const result = await deleteEvent(initialData.id);
-      if (result.success) {
-        toast.success(result.message || 'Event deleted successfully');
-        const redirectPath = isAdmin ? '/admin/events' : '/dashboard/events';
-        router.push(redirectPath);
-      } else {
-        toast.error(result.message || 'Failed to delete event');
-      }
-    } catch (error) {
-      console.error('Error deleting event:', error);
-      toast.error('Failed to delete event');
-    }
-    setShowDeleteDialog(false);
-  };
-
   // Render the current step
   const renderStep = () => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center py-8">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-muted-foreground">Loading event data...</p>
+          </div>
+        </div>
+      );
+    }
+
     switch (currentStep) {
       case 0:
         return (
@@ -308,6 +323,9 @@ export function EditEventForm({
             onPrevious={handlePrevious}
             onSubmit={handleSubmit}
             isSubmitting={isSubmitting}
+            isEditing={isEditing}
+            userRole={userRole}
+            userSubRole={userSubRole}
           />
         );
       default:
@@ -317,66 +335,11 @@ export function EditEventForm({
 
   return (
     <div className="space-y-6">
-      {/* Header with navigation and actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={handleGoBack}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Events
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">
-              {isEditing ? 'Edit Event' : 'Create Event'}
-            </h1>
-            {isEditing && initialData?.title && (
-              <p className="text-muted-foreground">{initialData.title}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Delete button for editing */}
-        {isEditing && (
-          <AlertDialog
-            open={showDeleteDialog}
-            onOpenChange={setShowDeleteDialog}
-          >
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm">
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete Event
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete Event</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Are you sure you want to delete this event? This action cannot
-                  be undone.
-                  {initialData?.orders?.length > 0 ||
-                  initialData?.ticketTypes?.some(
-                    (t: any) => t.tickets?.length > 0
-                  )
-                    ? ' The event will be cancelled instead of deleted because it has associated orders or tickets.'
-                    : ' This will permanently delete the event and all associated data.'}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleDeleteEvent}
-                  className="bg-destructive hover:bg-destructive/90"
-                >
-                  {initialData?.orders?.length > 0 ||
-                  initialData?.ticketTypes?.some(
-                    (t: any) => t.tickets?.length > 0
-                  )
-                    ? 'Cancel Event'
-                    : 'Delete Event'}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
+      <div>
+        <h1 className="text-2xl font-bold">Edit Event</h1>
+        <p className="text-muted-foreground">
+          Update your event details using our step-by-step process.
+        </p>
       </div>
 
       {/* Steps indicator */}
@@ -413,37 +376,6 @@ export function EditEventForm({
       <Card>
         <CardContent className="p-6">{renderStep()}</CardContent>
       </Card>
-
-      {/* Event status information for editing */}
-      {isEditing && initialData && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex justify-between items-center text-sm">
-              <div className="flex items-center gap-4">
-                <span>
-                  Status:{' '}
-                  <strong>
-                    {initialData.publishedStatus?.replace('_', ' ')}
-                  </strong>
-                </span>
-                {initialData.isCancelled && (
-                  <span className="text-destructive font-medium">
-                    Event Cancelled
-                  </span>
-                )}
-                {initialData.featured && (
-                  <span className="text-primary font-medium">
-                    Featured Event
-                  </span>
-                )}
-              </div>
-              <div className="text-muted-foreground">
-                Created: {new Date(initialData.createdAt).toLocaleDateString()}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

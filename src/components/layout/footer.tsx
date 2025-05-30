@@ -54,29 +54,29 @@ const Footer: React.FC = () => {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="relative overflow-hidden pt-12">
+    <footer className="relative">
       {/* Gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-r from-purple-600 via-indigo-500 to-blue-600" />
-
+      {/* <div className="absolute inset-0 bg-gradient-to-r from-purple-600 via-indigo-500 to-blue-600" /> */}
+      <div className="absolute inset-0 bg-purple-900" />
       {/* Decorative swoosh */}
-      <div
+      {/* <div
         className="absolute top-0 left-0 right-0 h-8 bg-white"
         style={{
           clipPath: 'ellipse(50% 60% at 50% 0%)',
         }}
-      />
+      /> */}
 
       {/* Bubble decorations */}
-      <div className="absolute top-1/4 left-10 w-16 h-16 rounded-full bg-white/10 opacity-20" />
+      <div className="absolute animate top-1/4 left-10 w-16 h-16 rounded-full bg-white/30 opacity-20" />
       <div className="absolute bottom-1/3 right-10 w-24 h-24 rounded-full bg-white/10 opacity-20" />
       <div className="absolute top-1/2 left-1/4 w-32 h-32 rounded-full bg-white/10 opacity-20" />
       <div className="absolute bottom-1/4 right-1/4 w-20 h-20 rounded-full bg-white/10 opacity-10" />
 
       {/* Content */}
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 text-white z-10">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 text-white z-10 mt-7">
         <div className="md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-8">
           {/* Column 1: About */}
-          <MobileAccordion title="EventHub" initialExpanded={true}>
+          <MobileAccordion title="Myevent.com.ng" initialExpanded={true}>
             <div className="pb-4 md:pb-0">
               <p className="mb-4 text-white/80">
                 Your one-stop platform for discovering, creating, and managing
@@ -206,24 +206,11 @@ const Footer: React.FC = () => {
                 </li>
                 <li className="flex items-center">
                   <Mail size={20} className="mr-2 flex-shrink-0" />
-                  <span>info@eventhub.com</span>
+                  <Link href="mailto:info@myevent.com.ng">
+                    info@myevent.com.ng
+                  </Link>
                 </li>
               </ul>
-
-              {/* Newsletter signup */}
-              <div className="mt-6">
-                <h4 className="text-sm font-semibold mb-2">Stay Updated</h4>
-                <div className="flex">
-                  <input
-                    type="email"
-                    placeholder="Your email"
-                    className="px-3 py-2 rounded-l-md w-full focus:outline-none text-gray-900 text-sm"
-                  />
-                  <button className="bg-purple-700 hover:bg-purple-800 px-4 py-2 rounded-r-md text-white text-sm transition">
-                    Subscribe
-                  </button>
-                </div>
-              </div>
             </div>
           </MobileAccordion>
         </div>
@@ -233,7 +220,7 @@ const Footer: React.FC = () => {
 
         {/* Copyright and bottom links */}
         <div className="flex flex-col md:flex-row justify-between items-center text-sm text-white/70">
-          <p>© {currentYear} EventHub. All rights reserved.</p>
+          <p>© {currentYear} Myevent.com.ng. All rights reserved.</p>
 
           <div className="flex space-x-4 mt-4 md:mt-0">
             <Link href="/sitemap" className="hover:text-white transition">
@@ -250,7 +237,7 @@ const Footer: React.FC = () => {
       </div>
 
       {/* Wave pattern at bottom */}
-      <div
+      {/* <div
         className="relative h-12 bg-gradient-to-r from-purple-600 via-indigo-500 to-blue-600"
         style={{
           maskImage:
@@ -258,7 +245,7 @@ const Footer: React.FC = () => {
           maskSize: 'cover',
           maskRepeat: 'no-repeat',
         }}
-      />
+      /> */}
     </footer>
   );
 };

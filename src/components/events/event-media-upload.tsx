@@ -21,7 +21,7 @@ import { VideoIcon } from 'lucide-react';
 // Form schema for this step
 const formSchema = z.object({
   coverImageUrl: z.string().min(1, 'Cover image is required'),
-  imageUrls: z.array(z.string()).default([]),
+  imageUrls: z.array(z.string()),
   embeddedVideoUrl: z.string().url().optional().or(z.literal('')),
 });
 
@@ -47,7 +47,7 @@ export function EventMediaUpload({
     resolver: zodResolver(formSchema),
     defaultValues: {
       coverImageUrl: formData.coverImageUrl || '',
-      imageUrls: formData.imageUrls || [],
+      imageUrls: Array.isArray(formData.imageUrls) ? formData.imageUrls : [],
       embeddedVideoUrl: formData.embeddedVideoUrl || '',
     },
   });
@@ -169,7 +169,7 @@ export function EventMediaUpload({
               <h3 className="font-medium mb-2">Video Preview:</h3>
               <div className="aspect-video">
                 <iframe
-                  src={convertYouTubeUrl(form.watch('embeddedVideoUrl'))}
+                  src={convertYouTubeUrl(form.watch('embeddedVideoUrl') || '')}
                   className="w-full h-full"
                   allowFullScreen
                 ></iframe>

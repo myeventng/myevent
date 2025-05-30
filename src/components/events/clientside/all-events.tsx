@@ -67,7 +67,11 @@ export default function SimpleAllEventsPage() {
 
   // UI state
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [filterOptions, setFilterOptions] = useState({
+  const [filterOptions, setFilterOptions] = useState<{
+    categories: any[];
+    cities: any[];
+    tags: any[];
+  }>({
     categories: [],
     cities: [],
     tags: [],

@@ -15,6 +15,7 @@ type UploadEndpoint =
   | 'eventImage'
   | 'eventCover'
   | 'profileImage'
+  | 'blogImage'
   | 'venueImage';
 
 interface FileUploaderProps {

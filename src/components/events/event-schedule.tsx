@@ -92,33 +92,92 @@ export function EventSchedule({
     onNext();
   };
 
-  // Form field render helpers
-  const renderTimeInput = (
-    name: 'startTime' | 'endTime' | 'lateEntryTime',
-    label: string,
-    dateValue: Date | undefined,
-    onTimeChange: (date: Date | undefined) => void
-  ) => {
-    const timeString = dateValue ? format(dateValue, 'HH:mm') : '';
+  // Handle date and time changes
+  const handleStartDateChange = (date: Date | undefined) => {
+    if (date) {
+      const currentStart = form.getValues('startDateTime');
+      const newStart = new Date(date);
+      // Preserve the time from current start
+      newStart.setHours(currentStart.getHours(), currentStart.getMinutes());
+      form.setValue('startDateTime', newStart, { shouldValidate: true });
 
-    return (
-      <div>
-        <FormLabel htmlFor={name}>{label}</FormLabel>
-        <Input
-          id={name}
-          type="time"
-          value={timeString}
-          onChange={(e) => {
-            if (!dateValue || !e.target.value) return;
+      // If end date is before the new start date, update it
+      const endDate = form.getValues('endDateTime');
+      if (endDate < newStart) {
+        const newEnd = addHours(newStart, 3);
+        form.setValue('endDateTime', newEnd, { shouldValidate: true });
+      }
+    }
+  };
 
-            const [hours, minutes] = e.target.value.split(':').map(Number);
-            const newDate = new Date(dateValue);
-            newDate.setHours(hours, minutes);
-            onTimeChange(newDate);
-          }}
-        />
-      </div>
-    );
+  const handleEndDateChange = (date: Date | undefined) => {
+    if (date) {
+      const currentEnd = form.getValues('endDateTime');
+      const newEnd = new Date(date);
+      // Preserve the time from current end
+      newEnd.setHours(currentEnd.getHours(), currentEnd.getMinutes());
+      form.setValue('endDateTime', newEnd, { shouldValidate: true });
+    }
+  };
+
+  const handleLateEntryDateChange = (date: Date | undefined) => {
+    if (date) {
+      const currentLateEntry = form.getValues('lateEntry');
+      const newLateEntry = new Date(date);
+      if (currentLateEntry) {
+        // Preserve the time from current late entry
+        newLateEntry.setHours(
+          currentLateEntry.getHours(),
+          currentLateEntry.getMinutes()
+        );
+      } else {
+        // Use start time as default
+        const startTime = form.getValues('startDateTime');
+        newLateEntry.setHours(startTime.getHours(), startTime.getMinutes());
+      }
+      form.setValue('lateEntry', newLateEntry, { shouldValidate: true });
+    } else {
+      form.setValue('lateEntry', undefined, { shouldValidate: true });
+    }
+  };
+
+  const handleStartTimeChange = (time: string) => {
+    if (time) {
+      const [hours, minutes] = time.split(':').map(Number);
+      const currentStart = form.getValues('startDateTime');
+      const newStart = new Date(currentStart);
+      newStart.setHours(hours, minutes);
+      form.setValue('startDateTime', newStart, { shouldValidate: true });
+
+      // If end date is before the new start date, update it
+      const endDate = form.getValues('endDateTime');
+      if (endDate < newStart) {
+        const newEnd = addHours(newStart, 3);
+        form.setValue('endDateTime', newEnd, { shouldValidate: true });
+      }
+    }
+  };
+
+  const handleEndTimeChange = (time: string) => {
+    if (time) {
+      const [hours, minutes] = time.split(':').map(Number);
+      const currentEnd = form.getValues('endDateTime');
+      const newEnd = new Date(currentEnd);
+      newEnd.setHours(hours, minutes);
+      form.setValue('endDateTime', newEnd, { shouldValidate: true });
+    }
+  };
+
+  const handleLateEntryTimeChange = (time: string) => {
+    if (time) {
+      const [hours, minutes] = time.split(':').map(Number);
+      const currentLateEntry = form.getValues('lateEntry');
+      if (currentLateEntry) {
+        const newLateEntry = new Date(currentLateEntry);
+        newLateEntry.setHours(hours, minutes);
+        form.setValue('lateEntry', newLateEntry, { shouldValidate: true });
+      }
+    }
   };
 
   return (
@@ -133,6 +192,7 @@ export function EventSchedule({
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Start Date and Time */}
             <div className="space-y-4">
               <FormField
                 control={form.control}
@@ -142,23 +202,7 @@ export function EventSchedule({
                     <FormLabel>Start Date</FormLabel>
                     <DatePicker
                       date={field.value}
-                      onSelect={(date) => {
-                        if (date) {
-                          // Keep the same time but change the date
-                          const newDate = new Date(date);
-                          newDate.setHours(
-                            field.value.getHours(),
-                            field.value.getMinutes()
-                          );
-                          field.onChange(newDate);
-
-                          // If end date is before the new start date, update it
-                          const endDate = form.getValues('endDateTime');
-                          if (endDate < newDate) {
-                            form.setValue('endDateTime', addHours(newDate, 3));
-                          }
-                        }
-                      }}
+                      onSelect={handleStartDateChange}
                     />
                     <FormDescription>
                       The date when your event starts.
@@ -168,26 +212,21 @@ export function EventSchedule({
                 )}
               />
 
-              {renderTimeInput(
-                'startTime',
-                'Start Time',
-                form.getValues('startDateTime'),
-                (date) => {
-                  if (date) {
-                    form.setValue('startDateTime', date, {
-                      shouldValidate: true,
-                    });
-
-                    // If end date is before the new start date, update it
-                    const endDate = form.getValues('endDateTime');
-                    if (endDate < date) {
-                      form.setValue('endDateTime', addHours(date, 3));
-                    }
-                  }
-                }
-              )}
+              <div>
+                <FormLabel htmlFor="startTime">Start Time</FormLabel>
+                <Input
+                  id="startTime"
+                  type="time"
+                  value={format(form.getValues('startDateTime'), 'HH:mm')}
+                  onChange={(e) => handleStartTimeChange(e.target.value)}
+                />
+                <FormDescription>
+                  The time when your event starts.
+                </FormDescription>
+              </div>
             </div>
 
+            {/* End Date and Time */}
             <div className="space-y-4">
               <FormField
                 control={form.control}
@@ -197,17 +236,7 @@ export function EventSchedule({
                     <FormLabel>End Date</FormLabel>
                     <DatePicker
                       date={field.value}
-                      onSelect={(date) => {
-                        if (date) {
-                          // Keep the same time but change the date
-                          const newDate = new Date(date);
-                          newDate.setHours(
-                            field.value.getHours(),
-                            field.value.getMinutes()
-                          );
-                          field.onChange(newDate);
-                        }
-                      }}
+                      onSelect={handleEndDateChange}
                     />
                     <FormDescription>
                       The date when your event ends.
@@ -217,35 +246,36 @@ export function EventSchedule({
                 )}
               />
 
-              {renderTimeInput(
-                'endTime',
-                'End Time',
-                form.getValues('endDateTime'),
-                (date) => {
-                  if (date) {
-                    form.setValue('endDateTime', date, {
-                      shouldValidate: true,
-                    });
-                  }
-                }
-              )}
+              <div>
+                <FormLabel htmlFor="endTime">End Time</FormLabel>
+                <Input
+                  id="endTime"
+                  type="time"
+                  value={format(form.getValues('endDateTime'), 'HH:mm')}
+                  onChange={(e) => handleEndTimeChange(e.target.value)}
+                />
+                <FormDescription>
+                  The time when your event ends.
+                </FormDescription>
+              </div>
             </div>
           </div>
 
+          {/* Late Entry (Optional) */}
           <div className="space-y-4">
             <FormField
               control={form.control}
               name="lateEntry"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Late Entry Time (Optional)</FormLabel>
+                  <FormLabel>Late Entry Date (Optional)</FormLabel>
                   <DatePicker
                     date={field.value}
-                    onSelect={(date) => field.onChange(date)}
-                    placeholder="Select latest entry time"
+                    onSelect={handleLateEntryDateChange}
+                    placeholder="Select latest entry date"
                   />
                   <FormDescription>
-                    The latest time attendees can enter the event. Leave empty
+                    The latest date attendees can enter the event. Leave empty
                     if there's no late entry restriction.
                   </FormDescription>
                   <FormMessage />
@@ -253,17 +283,54 @@ export function EventSchedule({
               )}
             />
 
-            {form.getValues('lateEntry') &&
-              renderTimeInput(
-                'lateEntryTime',
-                'Late Entry Time',
-                form.getValues('lateEntry'),
-                (date) => {
-                  if (date) {
-                    form.setValue('lateEntry', date, { shouldValidate: true });
+            {form.getValues('lateEntry') && (
+              <div>
+                <FormLabel htmlFor="lateEntryTime">Late Entry Time</FormLabel>
+                <Input
+                  id="lateEntryTime"
+                  type="time"
+                  value={
+                    form.getValues('lateEntry')
+                      ? format(form.getValues('lateEntry')!, 'HH:mm')
+                      : ''
                   }
-                }
+                  onChange={(e) => handleLateEntryTimeChange(e.target.value)}
+                />
+                <FormDescription>
+                  The latest time attendees can enter the event.
+                </FormDescription>
+              </div>
+            )}
+          </div>
+
+          {/* Event Duration Display */}
+          <div className="p-4 bg-muted/50 rounded-lg">
+            <h3 className="font-medium mb-2">Event Summary</h3>
+            <div className="space-y-1 text-sm">
+              <p>
+                <strong>Start:</strong>{' '}
+                {format(form.getValues('startDateTime'), 'PPP p')}
+              </p>
+              <p>
+                <strong>End:</strong>{' '}
+                {format(form.getValues('endDateTime'), 'PPP p')}
+              </p>
+              {form.getValues('lateEntry') && (
+                <p>
+                  <strong>Late Entry Until:</strong>{' '}
+                  {format(form.getValues('lateEntry')!, 'PPP p')}
+                </p>
               )}
+              <p>
+                <strong>Duration:</strong>{' '}
+                {Math.round(
+                  (form.getValues('endDateTime').getTime() -
+                    form.getValues('startDateTime').getTime()) /
+                    (1000 * 60 * 60 * 100)
+                ) / 100}{' '}
+                hours
+              </p>
+            </div>
           </div>
 
           <div className="flex justify-between">

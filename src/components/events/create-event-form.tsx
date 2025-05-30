@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { createEvent } from '@/actions/event.actions';
+import { createTicketType } from '@/actions/ticket.actions';
 import { AgeRestriction, DressCode } from '@/generated/prisma';
 import { toast } from 'sonner';
 
@@ -23,7 +24,7 @@ const eventSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
   categoryId: z.string().optional(),
-  tagIds: z.array(z.string()).min(1, 'Select at least one tag'),
+  tagIds: z.array(z.string()).default([]),
   age: z.nativeEnum(AgeRestriction).optional(),
   dressCode: z.nativeEnum(DressCode).optional(),
   isFree: z.boolean().default(false),
@@ -59,7 +60,15 @@ const steps = [
   { id: 'preview', title: 'Preview' },
 ];
 
-export function CreateEventForm() {
+interface CreateEventFormProps {
+  userRole?: string;
+  userSubRole?: string;
+}
+
+export function CreateEventForm({
+  userRole = 'USER',
+  userSubRole = 'ORDINARY',
+}: CreateEventFormProps = {}) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<Partial<EventFormValues>>({
@@ -67,13 +76,36 @@ export function CreateEventForm() {
     imageUrls: [],
     isFree: false,
     idRequired: false,
+    // Initialize all string fields to prevent undefined values
+    title: '',
+    description: '',
+    location: '',
+    coverImageUrl: '',
+    url: '',
+    embeddedVideoUrl: '',
   });
   const [ticketTypes, setTicketTypes] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Helper to update form data
+  // Helper to update form data - ensure no undefined values
   const updateFormData = (data: Partial<EventFormValues>) => {
-    setFormData((prev) => ({ ...prev, ...data }));
+    setFormData((prev) => {
+      const updated = { ...prev, ...data };
+
+      // Ensure arrays are never undefined
+      if (!updated.tagIds) updated.tagIds = [];
+      if (!updated.imageUrls) updated.imageUrls = [];
+
+      // Ensure strings are never undefined
+      if (updated.title === undefined) updated.title = '';
+      if (updated.description === undefined) updated.description = '';
+      if (updated.location === undefined) updated.location = '';
+      if (updated.coverImageUrl === undefined) updated.coverImageUrl = '';
+      if (updated.url === undefined) updated.url = '';
+      if (updated.embeddedVideoUrl === undefined) updated.embeddedVideoUrl = '';
+
+      return updated;
+    });
   };
 
   // Helper to handle next/previous step
@@ -87,7 +119,7 @@ export function CreateEventForm() {
 
   // Submit the event
   const handleSubmit = async (
-    publishStatus: 'DRAFT' | 'PENDING_REVIEW' = 'DRAFT'
+    publishStatus: 'DRAFT' | 'PENDING_REVIEW' | 'PUBLISHED'
   ) => {
     try {
       setIsSubmitting(true);
@@ -102,16 +134,38 @@ export function CreateEventForm() {
       });
 
       if (result.success && result.data) {
-        toast.success(result.message || 'Event created successfully');
+        const eventId = result.data.id;
 
-        // If we have ticket types, create them
-        if (ticketTypes.length > 0 && result.data.id) {
-          // Redirect to the ticket creation page with the event ID
-          router.push(`/dashboard/events/${result.data.id}/tickets`);
-        } else {
-          // Redirect to the event details page
-          router.push(`/dashboard/events`);
+        // Create ticket types if we have any
+        if (ticketTypes.length > 0) {
+          const ticketPromises = ticketTypes.map(async (ticketType) => {
+            return createTicketType({
+              name: ticketType.name,
+              price: ticketType.price,
+              quantity: ticketType.quantity,
+              eventId: eventId,
+            });
+          });
+
+          const ticketResults = await Promise.all(ticketPromises);
+
+          // Check if all ticket types were created successfully
+          const failedTickets = ticketResults.filter((r) => !r.success);
+          if (failedTickets.length > 0) {
+            toast.error(
+              `Event created but ${failedTickets.length} ticket type(s) failed to create`
+            );
+          }
         }
+
+        toast.success(result.message || 'Event created successfully');
+        const redirectPath =
+          userRole === 'ADMIN' && ['STAFF', 'SUPER_ADMIN'].includes(userSubRole)
+            ? '/admin/dashboard/events'
+            : '/dashboard/events';
+
+        router.push(redirectPath);
+        router.push('/dashboard/events');
       } else {
         toast.error(result.message || 'Failed to create event');
       }

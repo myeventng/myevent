@@ -14,6 +14,65 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+//notifications
+enum NotificationType {
+  EVENT_SUBMITTED
+  EVENT_APPROVED
+  EVENT_REJECTED
+  BLOG_SUBMITTED
+  BLOG_APPROVED
+  BLOG_REJECTED
+  TICKET_PURCHASED
+  EVENT_CANCELLED
+  REFUND_PROCESSED
+  VENUE_SUBMITTED
+  VENUE_APPROVED
+  VENUE_REJECTED
+  SYSTEM_UPDATE
+  PAYMENT_RECEIVED
+  USER_REGISTERED
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  type      NotificationType
+  status    NotificationStatus @default(UNREAD)
+  title     String
+  message   String
+  actionUrl String?
+  metadata  Json?
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  isAdminNotification Boolean @default(false)
+
+  eventId String?
+  event   Event?  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  blogId String?
+
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  venueId String?
+  venue   Venue?  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([isAdminNotification, status])
+  @@index([type, status])
+  @@index([createdAt])
+}
+
 // user
 enum Gender {
   MALE
@@ -150,11 +209,13 @@ model Order {
   quantity      Int
   paymentStatus PaymentStatus @default(PENDING)
   refundStatus  RefundStatus?
+
   eventId       String
-  event         Event         @relation(fields: [eventId], references: [id])
+  event         Event          @relation(fields: [eventId], references: [id])
   buyerId       String
-  buyer         User          @relation(fields: [buyerId], references: [id])
+  buyer         User           @relation(fields: [buyerId], references: [id])
   purchaseNotes String?
+  Notification  Notification[]
 
   @@index([buyerId])
 }
@@ -180,6 +241,7 @@ model User {
   sessions         Session[]
   accounts         Account[]
   waitingList      WaitingList[]
+  blogs            Blog[]
   orders           Order[]
   rating           Rating[]
   tickets          Ticket[]
@@ -187,6 +249,7 @@ model User {
   eventsHosted     Event[]
   organizerProfile OrganizerProfile?
   twoFactor        TwoFactor?
+  Notification     Notification[]
 
   @@map("users")
 }
@@ -231,15 +294,19 @@ model Tag {
 }
 
 model Rating {
-  id      String  @id @default(cuid())
-  userId  String
-  user    User    @relation(fields: [userId], references: [id])
-  eventId String
-  event   Event   @relation(fields: [eventId], references: [id])
-  rating  Decimal
-  comment String?
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id])
+  rating    Decimal
+  comment   String?
 
+  @@unique([userId, eventId]) // Ensure one review per user per event
   @@index([eventId])
+  @@index([userId])
 }
 
 enum TicketStatus {
@@ -295,20 +362,21 @@ model City {
 }
 
 model Venue {
-  id            String  @id @default(cuid())
+  id            String         @id @default(cuid())
   name          String
   address       String
   cityId        String
-  city          City    @relation(fields: [cityId], references: [id])
+  city          City           @relation(fields: [cityId], references: [id])
   userId        String
   description   String?
   contactInfo   String?
-  user          User    @relation(fields: [userId], references: [id])
+  user          User           @relation(fields: [userId], references: [id])
   capacity      Int?
   venueImageUrl String?
   latitude      String?
   longitude     String?
   events        Event[]
+  Notification  Notification[]
 
   @@index([cityId])
 }
@@ -351,6 +419,60 @@ model Event {
 
   isCancelled     Boolean?        @default(false)
   publishedStatus PublishedStatus @default(DRAFT)
+  Notification    Notification[]
 
   @@index([title])
+}
+
+enum BlogStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  REJECTED
+}
+
+model BlogCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  color       String   @default("#3B82F6") // Default blue color
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  blogs       Blog[]
+
+  @@index([name])
+  @@index([slug])
+  @@map("blog_categories") // Different table name from event categories
+}
+
+model Blog {
+  id              String     @id @default(cuid())
+  title           String
+  slug            String     @unique
+  excerpt         String?
+  content         String     @db.Text
+  featuredImage   String?
+  metaTitle       String?
+  metaDescription String?
+  tags            String[]
+  readingTime     Int? // in minutes
+  views           Int        @default(0)
+  featured        Boolean    @default(false)
+  status          BlogStatus @default(DRAFT)
+  publishedAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  // Relations
+  authorId   String
+  author     User         @relation(fields: [authorId], references: [id])
+  categoryId String
+  category   BlogCategory @relation(fields: [categoryId], references: [id])
+
+  @@index([status, publishedAt(sort: Desc)])
+  @@index([authorId])
+  @@index([categoryId])
+  @@index([slug])
+  @@index([featured])
 }

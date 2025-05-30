@@ -27,6 +27,7 @@ import {
   List,
   Tags,
   Star,
+  Bell, // Added Bell icon
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -77,6 +78,8 @@ export function Sidebar({
       if (pathname.includes('/venues')) newExpanded.push('admin-venues');
       if (pathname.includes('/tickets')) newExpanded.push('admin-tickets');
       if (pathname.includes('/users')) newExpanded.push('admin-users');
+      if (pathname.includes('/notifications'))
+        newExpanded.push('admin-notifications');
     } else {
       if (pathname.includes('/events') || pathname.includes('/create-event')) {
         newExpanded.push('organizer-events');
@@ -85,6 +88,8 @@ export function Sidebar({
         newExpanded.push('organizer-venues');
       }
       if (pathname.includes('/tickets')) newExpanded.push('user-tickets');
+      if (pathname.includes('/notifications'))
+        newExpanded.push('user-notifications');
     }
 
     setExpandedSections(newExpanded);
@@ -107,6 +112,11 @@ export function Sidebar({
       title: 'Dashboard',
       href: '/admin/dashboard',
       icon: <LayoutDashboard className="w-5 h-5" />,
+    },
+    {
+      title: 'Notifications',
+      href: '/admin/dashboard/notifications',
+      icon: <Bell className="w-5 h-5" />,
     },
     {
       title: 'Users',
@@ -188,6 +198,32 @@ export function Sidebar({
       ],
     },
     {
+      title: 'Blog',
+      icon: <Edit className="w-5 h-5" />,
+      children: [
+        {
+          title: 'All Posts',
+          href: '/admin/dashboard/blogs',
+          icon: <List className="w-4 h-4" />,
+        },
+        {
+          title: 'Create Post',
+          href: '/admin/dashboard/blogs/create',
+          icon: <Plus className="w-4 h-4" />,
+        },
+        {
+          title: 'Categories',
+          href: '/admin/dashboard/blog-categories',
+          icon: <Blocks className="w-4 h-4" />,
+        },
+        // {
+        //   title: 'Pending Review',
+        //   href: '/admin/dashboard/blogs/pending',
+        //   icon: <Eye className="w-4 h-4" />,
+        // },
+      ],
+    },
+    {
       title: 'Reports',
       href: '/admin/dashboard/reports',
       icon: <BarChart3 className="w-5 h-5" />,
@@ -204,6 +240,11 @@ export function Sidebar({
       title: 'Dashboard',
       href: '/dashboard',
       icon: <Home className="w-5 h-5" />,
+    },
+    {
+      title: 'Notifications',
+      href: '/dashboard/notifications',
+      icon: <Bell className="w-5 h-5" />,
     },
     {
       title: 'My Tickets',
@@ -289,16 +330,19 @@ export function Sidebar({
       if (item.title === 'Venues') return 'admin-venues';
       if (item.title === 'Tickets') return 'admin-tickets';
       if (item.title === 'Users') return 'admin-users';
+      if (item.title === 'Notifications') return 'admin-notifications';
     } else {
       if (item.title === 'Events') return 'organizer-events';
       if (item.title === 'Venues') return 'organizer-venues';
       if (item.title === 'My Tickets') return 'user-tickets';
+      if (item.title === 'Notifications') return 'user-notifications';
     }
     return item.title.toLowerCase().replace(/\s+/g, '-');
   };
 
+  // Updated function to only highlight exact matches
   const isPathActive = (href: string) => {
-    return pathname === href || pathname.startsWith(href + '/');
+    return pathname === href;
   };
 
   const renderNavItem = (item: NavItem, depth = 0) => {
@@ -392,7 +436,7 @@ export function Sidebar({
       >
         <div className="flex items-center justify-between px-4 py-4">
           <Link href="/" className="text-xl font-bold text-primary">
-            {collapsed ? 'E' : 'EventHub'}
+            {collapsed ? 'ME' : 'MyEvent.com.ng'}
           </Link>
 
           {/* Mobile Close */}

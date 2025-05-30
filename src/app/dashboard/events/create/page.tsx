@@ -19,7 +19,10 @@ export default async function CreateEvent() {
         </div>
 
         <OrganizerProfileRequired redirectUrl="/dashboard/events">
-          <CreateEventForm />
+          <CreateEventForm
+            userRole={session.user.role}
+            userSubRole={session.user.subRole}
+          />
         </OrganizerProfileRequired>
       </div>
     </DashboardLayout>
