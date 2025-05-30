@@ -758,7 +758,7 @@ export async function getLatestBlogPosts(
   limit = 6
 ): Promise<ActionResponse<BlogPost[]>> {
   try {
-    const blogPosts = await prisma.blog.findMany({
+    const blogPostsRaw = await prisma.blog.findMany({
       where: {
         status: BlogStatus.PUBLISHED,
         publishedAt: { lte: new Date() },
@@ -774,6 +774,26 @@ export async function getLatestBlogPosts(
         },
       },
     });
+
+    // Map to ensure excerpt and featuredImage are always string
+    const blogPosts: BlogPost[] = blogPostsRaw.map((post) => ({
+      id: post.id,
+      title: post.title,
+      excerpt: post.excerpt ?? '',
+      featuredImage: post.featuredImage ?? '',
+      publishedAt: post.publishedAt?.toISOString?.() ?? '',
+      author: {
+        name: post.author.name,
+      },
+      category: {
+        name: post.category.name,
+        color: post.category.color,
+        slug: post.category.slug,
+      },
+      slug: post.slug,
+      readingTime: post.readingTime ?? undefined,
+      views: post.views,
+    }));
 
     return {
       success: true,
