@@ -19,11 +19,12 @@ export default function CookiePolicyPage() {
 
         <div className="prose prose-gray max-w-none dark:prose-invert">
           <p className="lead">
-            This Cookie Policy explains how myevents.com.ng ("we", "us", or
-            "our") uses cookies and similar technologies when you visit our
-            website and related online services (collectively, the "Services").
-            It explains what these technologies are and why we use them, as well
-            as your rights to control our use of them.
+            This Cookie Policy explains how myevents.com.ng (&quot;we&quot;,
+            &quot;us&quot;, or &quot;our&quot;) uses cookies and similar
+            technologies when you visit our website and related online services
+            (collectively, the &quot;Services&quot;). It explains what these
+            technologies are and why we use them, as well as your rights to
+            control our use of them.
           </p>
 
           <h2 className="text-2xl font-bold mt-12 mb-4">What Are Cookies?</h2>
@@ -34,8 +35,8 @@ export default function CookiePolicyPage() {
             websites work more efficiently, as well as to provide information to
             the owners of the site. Cookies allow websites to remember your
             actions and preferences (such as login, language, font size, and
-            other display preferences) over a period of time, so you don't have
-            to keep re-entering them whenever you come back to the site or
+            other display preferences) over a period of time, so you don&apos;t
+            have to keep re-entering them whenever you come back to the site or
             browse from one page to another.
           </p>
 
@@ -52,9 +53,9 @@ export default function CookiePolicyPage() {
             These cookies are essential for the operation of our website and
             enable you to use its features. Without these cookies, services you
             have asked for such as secure login, shopping carts, and electronic
-            billing cannot be provided. These cookies don't collect information
-            about you that could be used for marketing or remembering where
-            you've been on the internet.
+            billing cannot be provided. These cookies don&apos;t collect
+            information about you that could be used for marketing or
+            remembering where you&apos;ve been on the internet.
           </p>
 
           <h3 className="text-xl font-semibold mt-6 mb-3">
@@ -63,10 +64,10 @@ export default function CookiePolicyPage() {
           <p className="mb-4">
             These cookies collect information about how visitors use our
             website, for instance which pages visitors go to most often and if
-            they get error messages from web pages. These cookies don't collect
-            information that identifies a visitor. All information these cookies
-            collect is aggregated and therefore anonymous. It is only used to
-            improve how our website works.
+            they get error messages from web pages. These cookies don&apos;t
+            collect information that identifies a visitor. All information these
+            cookies collect is aggregated and therefore anonymous. It is only
+            used to improve how our website works.
           </p>
 
           <h3 className="text-xl font-semibold mt-6 mb-3">
@@ -131,14 +132,13 @@ export default function CookiePolicyPage() {
             >
               www.aboutcookies.org
             </a>{' '}
-            or
+            or{' '}
             <a
               href="https://www.allaboutcookies.org"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              {' '}
               www.allaboutcookies.org
             </a>
             .
@@ -153,7 +153,7 @@ export default function CookiePolicyPage() {
             Most browsers allow you to manage your cookie preferences. You can
             set your browser to refuse cookies or delete certain cookies.
             Generally, you may also be able to manage similar technologies in
-            the same way that you manage cookies – using your browser's
+            the same way that you manage cookies – using your browser&apos;s
             preferences. The following links show how to adjust the browser
             settings of commonly used browsers:
           </p>
@@ -213,7 +213,7 @@ export default function CookiePolicyPage() {
 
           <p className="mb-8">
             Please note that if you choose to reject cookies, doing so may
-            impair some of our website's functionality.
+            impair some of our website&apos;s functionality.
           </p>
 
           <h3 className="text-xl font-semibold mt-6 mb-3">
@@ -221,17 +221,16 @@ export default function CookiePolicyPage() {
           </h3>
           <p className="mb-8">
             You may opt out of third-party networks, such as Google Analytics,
-            by visiting the Digital Advertising Alliance's opt-out page at
+            by visiting the Digital Advertising Alliance&apos;s opt-out page at{' '}
             <a
               href="http://optout.aboutads.info/"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              {' '}
               http://optout.aboutads.info/
             </a>{' '}
-            or the Network Advertising Initiative's opt-out page at{' '}
+            or the Network Advertising Initiative&apos;s opt-out page at{' '}
             <a
               href="http://optout.networkadvertising.org/"
               target="_blank"
@@ -242,38 +241,6 @@ export default function CookiePolicyPage() {
             </a>
             .
           </p>
-
-          <h3 className="text-xl font-semibold mt-6 mb-3">
-            Our Cookie Preference Tool
-          </h3>
-          <p className="mb-8">
-            We provide a cookie preference tool on our website that allows you
-            to accept or decline non-essential cookies.
-          </p>
-
-          <h2 className="text-2xl font-bold mt-12 mb-4">
-            Cookie Policy Updates
-          </h2>
-
-          <p className="mb-8">
-            We may update this Cookie Policy from time to time to reflect
-            changes to the cookies we use or for other operational, legal, or
-            regulatory reasons. Please revisit this Cookie Policy regularly to
-            stay informed about our use of cookies and related technologies.
-          </p>
-
-          <h2 className="text-2xl font-bold mt-12 mb-4">Contact Us</h2>
-
-          <p className="mb-4">
-            If you have any questions about our use of cookies or this Cookie
-            Policy, please contact us at:
-          </p>
-
-          <ul className="list-none pl-0">
-            <li>Email: privacy@myevents.com.ng</li>
-            <li>Phone: +234 800 123 4567</li>
-            <li>Address: 123 Victoria Island, Lagos, Nigeria</li>
-          </ul>
         </div>
       </div>
     </div>

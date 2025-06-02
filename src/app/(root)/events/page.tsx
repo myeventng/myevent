@@ -306,7 +306,8 @@ export default function EnhancedAllEventsPage() {
                 <SheetHeader>
                   <SheetTitle>Filter Events</SheetTitle>
                   <SheetDescription>
-                    Narrow down events to find exactly what you're looking for
+                    Narrow down events to find exactly what you&apos;re looking
+                    for
                   </SheetDescription>
                 </SheetHeader>
 
@@ -497,7 +498,7 @@ export default function EnhancedAllEventsPage() {
             {/* End of Results */}
             {!hasMore && events.length > 0 && (
               <div className="text-center py-8 text-muted-foreground">
-                <p>You've reached the end of the events list.</p>
+                <p>You&apos;ve reached the end of the events list.</p>
                 <p className="text-sm mt-1">
                   Showing all {events.length} events
                 </p>

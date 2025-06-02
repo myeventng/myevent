@@ -6,8 +6,6 @@ import {
   Award,
   Calendar,
   ChartBarIcon,
-  Landmark,
-  LucideCheckCircle,
   MapPin,
   Megaphone,
   Ticket,

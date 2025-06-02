@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import {
   Search,
-  Filter,
+  // Filter,
   MoreHorizontal,
   Trash2,
   Flag,
@@ -242,12 +242,12 @@ export function AdminReviewsDashboard() {
     }
   };
 
-  const getRatingColor = (rating: number) => {
-    if (rating >= 4) return 'text-green-600';
-    if (rating >= 3) return 'text-yellow-600';
-    if (rating >= 2) return 'text-orange-600';
-    return 'text-red-600';
-  };
+  // const getRatingColor = (rating: number) => {
+  //   if (rating >= 4) return 'text-green-600';
+  //   if (rating >= 3) return 'text-yellow-600';
+  //   if (rating >= 2) return 'text-orange-600';
+  //   return 'text-red-600';
+  // };
 
   const getStatIcon = (type: string) => {
     switch (type) {

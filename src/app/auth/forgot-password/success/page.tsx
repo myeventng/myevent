@@ -21,15 +21,15 @@ export default function ForgotPasswordSuccessPage() {
         </div>
         <h1 className="text-3xl font-bold">Check Your Email</h1>
         <p className="text-gray-400 max-w-sm mx-auto">
-          We've sent a password reset link to your email address. The link will
-          expire in 30 minutes.
+          We&apos;ve sent a password reset link to your email address. The link
+          will expire in 30 minutes.
         </p>
       </div>
 
       <div className="space-y-6">
         <div className="p-4 rounded-lg bg-gray-800/50 border border-gray-700 text-sm">
           <p className="text-gray-300 mb-2">
-            <strong>Didn't receive the email?</strong>
+            <strong>Didn&apos;t receive the email?</strong>
           </p>
           <ul className="text-gray-400 list-disc pl-5 space-y-1">
             <li>Check your spam or junk folder</li>

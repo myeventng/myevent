@@ -13,8 +13,8 @@ export default function UnauthorizedPage() {
         <h1 className="text-3xl font-bold text-white">Access Denied</h1>
 
         <p className="text-gray-400">
-          You don't have permission to access this page. This area is restricted
-          to users with the required role.
+          You don&apos;t have permission to access this page. This area is
+          restricted to users with the required role.
         </p>
 
         <div className="space-y-4 pt-6">

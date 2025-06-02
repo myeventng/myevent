@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import {
   Search,
-  Filter,
+  // Filter,
   MoreHorizontal,
   Trash2,
   Flag,

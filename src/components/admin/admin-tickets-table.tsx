@@ -50,9 +50,9 @@ interface AdminTicketsTableProps {
 
 export function AdminTicketsTable({
   initialData,
-  userRole,
-  userSubRole,
-}: AdminTicketsTableProps) {
+}: // userRole,
+// userSubRole,
+AdminTicketsTableProps) {
   const [data, setData] = useState<any[]>(initialData);
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'purchasedAt', desc: true },

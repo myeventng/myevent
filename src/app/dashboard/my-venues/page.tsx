@@ -2,6 +2,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Badge } from '@/components/ui/badge';
 import { getServerSideAuth } from '@/lib/auth-utils';
 import { getUserVenues } from '@/actions/venue-actions';
+import { VenueWithCityAndUser } from '@/types';
 import { getCities } from '@/actions/city-actions';
 import { ClientSideVenuesWrapper } from '@/components/venue/user-client-side-venues-wrapper';
 
@@ -17,8 +18,15 @@ export default async function MyVenuesPage() {
   const venuesResponse = await getUserVenues();
   const citiesResponse = await getCities();
 
-  const venues = venuesResponse.success ? venuesResponse.data : [];
-  const cities = citiesResponse.success ? citiesResponse.data : [];
+  const venues: VenueWithCityAndUser[] = Array.isArray(venuesResponse.data)
+    ? venuesResponse.data
+    : [];
+  const cities: {
+    name: string;
+    id: string;
+    population: number | null;
+    state: string;
+  }[] = Array.isArray(citiesResponse.data) ? citiesResponse.data : [];
 
   return (
     <DashboardLayout session={session}>
@@ -27,7 +35,7 @@ export default async function MyVenuesPage() {
           <div>
             <h1 className="text-2xl font-bold">My Venues</h1>
             <p className="text-muted-foreground">
-              Manage venues you've created for your events
+              Manage venues you&apos;ve created for your events
             </p>
           </div>
 

@@ -9,19 +9,19 @@ import {
   Tag,
   ExternalLink,
   Star,
-  Share2,
 } from 'lucide-react';
 import { getEventBySlug } from '@/actions/event.actions';
 import { getEventRatings } from '@/actions/rating.actions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CompactRating } from '@/components/ui/ratings-display';
+// import { CompactRating } from '@/components/ui/ratings-display';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { EventTicketBooking } from '@/components/events/clientside/event-ticket-booking';
 import { EventGallery } from '@/components/events/clientside/event-gallery';
 import { EventReviews } from '@/components/events/clientside/event-reviews';
 import { ShareEventButton } from '@/components/events/clientside/share-event-button';
+import Image from 'next/image';
 
 interface EventPageProps {
   params: {
@@ -139,7 +139,12 @@ export default async function EventPage({ params }: EventPageProps) {
       <div className="relative">
         {event.coverImageUrl && (
           <div className="aspect-[21/9] w-full overflow-hidden">
-            <img
+            <Image
+              fill
+              priority
+              quality={100}
+              unoptimized
+              sizes="100vw"
               src={event.coverImageUrl}
               alt={event.title}
               className="h-full w-full object-cover"
@@ -359,7 +364,11 @@ export default async function EventPage({ params }: EventPageProps) {
               <CardContent>
                 <div className="flex items-center gap-3">
                   {event.user?.image && (
-                    <img
+                    <Image
+                      width={48}
+                      height={48}
+                      unoptimized
+                      quality={100}
                       src={event.user.image}
                       alt={event.user.name || 'Organizer'}
                       className="h-12 w-12 rounded-full object-cover"

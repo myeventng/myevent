@@ -35,6 +35,11 @@ export default async function VerifyEmailPage({ searchParams }: PageProps) {
         redirect('/events');
       }
     } catch (error) {
+      console.error('Error getting session:', error);
+      // If error getting session, default redirect to events
+      // This is a fallback in case session retrieval fails
+      console.error('Error retrieving user session, redirecting to events.');
+      console.error(error);
       // If error getting session, default redirect to events
       redirect('/events');
     }

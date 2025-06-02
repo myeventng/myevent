@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { BlogCard } from '@/components/blog/blog-card';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import Image from 'next/image';
 
 interface BlogPostPageProps {
   params: {
@@ -127,7 +128,8 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             {/* Featured Image */}
             {blog.featuredImage && (
               <div className="relative h-96 overflow-hidden">
-                <img
+                <Image
+                  fill
                   src={blog.featuredImage}
                   alt={blog.title}
                   className="w-full h-full object-cover"

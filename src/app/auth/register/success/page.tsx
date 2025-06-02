@@ -35,8 +35,8 @@ export default function RegisterSuccessPage() {
                 Verification Email Sent
               </p>
               <p className="text-gray-400 mt-1">
-                We've sent an email with a verification link. Please check your
-                inbox and click the link to activate your account.
+                We&apos;ve sent an email with a verification link. Please check
+                your inbox and click the link to activate your account.
               </p>
             </div>
           </div>

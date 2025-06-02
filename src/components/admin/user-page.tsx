@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { DashboardLayout } from '@/components/layout/dashboard-layout';
+// import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { isSuperAdmin } from '@/lib/client-auth-utils';
 import { AuthUser } from '@/lib/auth-utils';
 import { Button } from '@/components/ui/button';
@@ -42,7 +42,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Ban,
   CheckCircle,
-  Edit,
+  // Edit,
   Eye,
   MoreHorizontal,
   Search,
@@ -54,19 +54,20 @@ import { BanUserDialog } from '@/components/admin/ban-user-dialog';
 import { UnbanUserDialog } from '@/components/admin/unban-user-dialog';
 import { CreateUserDialog } from '@/components/admin/create-user-dialog';
 import { UserRoleDialog } from '@/components/admin/user-role-dialog';
-import { toast } from 'sonner';
+// import { toast } from 'sonner';
 
+// Updated interface to match Prisma schema exactly
 interface User {
   id: string;
   name: string;
   email: string;
   role: UserRole;
   subRole: UserSubRole;
-  image?: string | null;
-  banned?: boolean;
-  banReason?: string | null;
-  banExpires?: Date | null;
-  createdAt: string;
+  image: string | null; // Match Prisma exactly
+  banned: boolean | null; // Match Prisma exactly
+  banReason: string | null; // Match Prisma exactly
+  banExpires: string | null; // Serialized date string
+  createdAt: string; // Serialized date string
 }
 
 interface UsersPageProps {
@@ -78,7 +79,7 @@ interface UsersPageProps {
 
 export default function UsersPage({ initialUsers, session }: UsersPageProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  // const searchParams = useSearchParams();
 
   const [users, setUsers] = useState<User[]>(initialUsers);
   const [filteredUsers, setFilteredUsers] = useState<User[]>(initialUsers);
@@ -94,7 +95,7 @@ export default function UsersPage({ initialUsers, session }: UsersPageProps) {
   const [userRoleOpen, setUserRoleOpen] = useState(false);
 
   const isUserSuperAdmin = isSuperAdmin(session.user);
-  const isUserStaff = session.user.subRole === 'STAFF';
+  // const isUserStaff = session.user.subRole === 'STAFF';
 
   // Apply filters when filter states change
   useEffect(() => {
@@ -125,27 +126,33 @@ export default function UsersPage({ initialUsers, session }: UsersPageProps) {
       }
     }
 
-    // Apply status filter
+    // Apply status filter - handle null values properly
     if (statusFilter !== 'all-status') {
       result = result.filter((user) =>
-        statusFilter === 'banned' ? user.banned : !user.banned
+        statusFilter === 'banned' ? user.banned === true : user.banned !== true
       );
     }
 
     setFilteredUsers(result);
   }, [users, searchQuery, roleFilter, statusFilter]);
 
-  const handleCreateUser = (newUser: User) => {
-    setUsers((prevUsers) => [...prevUsers, newUser]);
-  };
+  // const handleCreateUser = (newUser: User) => {
+  //   setUsers((prevUsers) => [...prevUsers, newUser]);
+  // };
 
-  // Workaround to show correct initials
+  // Helper function to safely get user initials
   const getUserInitials = (name: string) => {
+    if (!name) return 'U';
     return name
       .split(' ')
       .map((n) => n[0])
       .join('')
       .toUpperCase();
+  };
+
+  // Helper function to check if user is banned
+  const isUserBanned = (user: User) => {
+    return user.banned === true;
   };
 
   return (
@@ -245,7 +252,7 @@ export default function UsersPage({ initialUsers, session }: UsersPageProps) {
                     const isAdmin = user.role === 'ADMIN';
                     const isSuperAdmin = user.subRole === 'SUPER_ADMIN';
                     const isOrganizer = user.subRole === 'ORGANIZER';
-                    const isBanned = user.banned;
+                    const isBanned = isUserBanned(user);
 
                     return (
                       <TableRow key={user.id}>
@@ -306,7 +313,6 @@ export default function UsersPage({ initialUsers, session }: UsersPageProps) {
                               <DropdownMenuLabel>Actions</DropdownMenuLabel>
                               <DropdownMenuItem
                                 onClick={() => {
-                                  // View profile functionality
                                   router.push(
                                     `/admin/dashboard/users/${user.id}`
                                   );
@@ -391,7 +397,14 @@ export default function UsersPage({ initialUsers, session }: UsersPageProps) {
               setBanUserOpen(false);
               setSelectedUser(null);
             }}
-            user={selectedUser}
+            user={{
+              id: selectedUser.id,
+              name: selectedUser.name,
+              email: selectedUser.email,
+              banned:
+                selectedUser.banned === null ? undefined : selectedUser.banned,
+              banReason: selectedUser.banReason,
+            }}
           />
 
           <UnbanUserDialog
@@ -400,7 +413,14 @@ export default function UsersPage({ initialUsers, session }: UsersPageProps) {
               setUnbanUserOpen(false);
               setSelectedUser(null);
             }}
-            user={selectedUser}
+            user={{
+              id: selectedUser.id,
+              name: selectedUser.name,
+              email: selectedUser.email,
+              banned:
+                selectedUser.banned === null ? undefined : selectedUser.banned,
+              banReason: selectedUser.banReason,
+            }}
           />
 
           <UserRoleDialog

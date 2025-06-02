@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Home, Search } from 'lucide-react';
+import { ArrowLeft, Home } from 'lucide-react';
 
 export default function NotFound() {
   return (
@@ -23,8 +23,8 @@ export default function NotFound() {
           </h1>
 
           <p className="mx-auto max-w-[600px] text-gray-500 md:text-xl">
-            We couldn't find the page you were looking for. It might have been
-            moved or doesn't exist.
+            We couldn&apos;t find the page you were looking for. It might have
+            been moved or doesn&apos;t exist.
           </p>
 
           <div className="flex flex-col sm:flex-row justify-center gap-4">
@@ -48,7 +48,8 @@ export default function NotFound() {
       <footer className="w-full border-t py-6">
         <div className="container flex flex-col items-center justify-between gap-4 md:flex-row">
           <p className="text-center text-sm leading-loose text-muted-foreground md:text-left">
-            &copy; {new Date().getFullYear()} MyEvent.com.ng All rights reserved.
+            &copy; {new Date().getFullYear()} MyEvent.com.ng All rights
+            reserved.
           </p>
         </div>
       </footer>

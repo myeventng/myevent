@@ -35,8 +35,8 @@ export default function VerificationSuccessPage() {
                 Verification Email Sent
               </p>
               <p className="text-gray-400 mt-1">
-                If you don't see the email in your inbox, please check your spam
-                folder. The verification link will expire in 24 hours.
+                If you don&apos;t see the email in your inbox, please check your
+                spam folder. The verification link will expire in 24 hours.
               </p>
             </div>
           </div>

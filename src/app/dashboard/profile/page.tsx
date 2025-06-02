@@ -16,10 +16,10 @@ import { ChangePasswordForm } from '@/components/auth/change-password-form';
 import { OrganizerProfileForm } from '@/components/auth/organizer-profile-form';
 // import { TwoFactorAuthForm } from '@/components/auth/two-factor-auth-form';
 import { ApplyOrganizerForm } from '@/components/auth/apply-organizer-form';
-import { Separator } from '@/components/ui/separator';
+// import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, Shield, User } from 'lucide-react';
+// import { AlertCircle, Shield, User } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 // import { get2FAStatusAction } from '@/actions/two-factor-auth-actions';
 

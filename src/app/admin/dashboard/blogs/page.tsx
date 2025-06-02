@@ -1,6 +1,6 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { prisma } from '@/lib/prisma';
-import { notFound } from 'next/navigation';
+// import { prisma } from '@/lib/prisma';
+// import { notFound } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
@@ -25,6 +25,7 @@ export default async function BlogsPage() {
 
   const blogs = blogsResponse.success ? blogsResponse.data.blogs : [];
   const categories = categoriesResponse.success ? categoriesResponse.data : [];
+  console.log(categories);
 
   return (
     <DashboardLayout session={session}>

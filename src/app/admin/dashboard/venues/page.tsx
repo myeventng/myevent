@@ -7,7 +7,6 @@ import { getVenues } from '@/actions/venue-actions';
 import { getCities } from '@/actions/city-actions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MapPin, List } from 'lucide-react';
-import dynamic from 'next/dynamic';
 import VenuesMapClientWrapper from '@/components/venue/venues-map-client-wrapper';
 
 export default async function Venues() {
@@ -61,13 +60,13 @@ export default async function Venues() {
           <TabsContent value="list" className="mt-4">
             <AdminVenuesTable
               initialData={venues ?? []}
-              cities={cities}
+              cities={cities ?? []}
               userCanCreate={userCanCreate}
             />
           </TabsContent>
 
           <TabsContent value="map" className="mt-4">
-            <VenuesMapClientWrapper venues={venues} />
+            <VenuesMapClientWrapper venues={venues ?? []} />
           </TabsContent>
         </Tabs>
       </div>

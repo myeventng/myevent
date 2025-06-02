@@ -47,8 +47,8 @@ export default async function BlogPage() {
 
           <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
             Discover expert tips, industry trends, and actionable insights to
-            make your events unforgettable. From planning to execution, we've
-            got you covered.
+            make your events unforgettable. From planning to execution,
+            we&apos;ve got you covered.
           </p>
 
           {/* Search Bar */}

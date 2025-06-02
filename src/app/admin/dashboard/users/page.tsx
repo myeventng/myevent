@@ -1,5 +1,6 @@
+// pages/admin/users/page.tsx (or wherever your server component is)
+
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { isSuperAdmin } from '@/lib/client-auth-utils';
 import { getServerSideAuth } from '@/lib/auth-utils';
 import { prisma } from '@/lib/prisma';
 import UsersPage from '@/components/admin/user-page';
@@ -28,11 +29,11 @@ export default async function AdminUsersPage() {
     orderBy: { createdAt: 'desc' },
   });
 
-  // Format dates for serialization
   const formattedUsers = users.map((user) => ({
     ...user,
     createdAt: user.createdAt.toISOString(),
     banExpires: user.banExpires ? user.banExpires.toISOString() : null,
+    banned: user.banned,
   }));
 
   return (

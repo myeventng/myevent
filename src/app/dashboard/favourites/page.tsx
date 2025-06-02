@@ -18,7 +18,12 @@ export default async function Favourites() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">My Favourites Events</h1>
-          <Badge>{isUserOrganizer ? 'ORGANIZER' : 'USER'}</Badge>
+          <div className="flex items-center gap-2">
+            <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600">
+              {initials}
+            </div>
+            <Badge>{isUserOrganizer ? 'ORGANIZER' : 'USER'}</Badge>
+          </div>
         </div>
 
         <div className="text-muted-foreground ">Coming Soon</div>

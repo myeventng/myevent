@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { RatingDisplay } from '@/components/ui/ratings-display';
 import Link from 'next/link';
+import Image from 'next/image';
 
 interface EventReviewsPageProps {
   params: {
@@ -167,7 +168,9 @@ export default async function EventReviewsPage({
                   <div key={review.id}>
                     <div className="flex items-start gap-4">
                       {review.user.image ? (
-                        <img
+                        <Image
+                          width={40}
+                          height={40}
                           src={review.user.image}
                           alt={review.user.name}
                           className="h-10 w-10 rounded-full object-cover"

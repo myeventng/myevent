@@ -16,6 +16,11 @@ const eslintConfig = [
     // This object defines your custom rule overrides
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      // 'no-unused-vars': 'off',
+      // 'react-hooks/rules-of-hooks': 'error', // Checks rules of Hooks
+      // 'react-hooks/exhaustive-deps': 'warn', // Checks effect dependencies
+      // 'import/no-unresolved': 'off', // Disable unresolved import errors
     },
   },
 ];

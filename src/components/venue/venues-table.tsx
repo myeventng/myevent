@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { City } from '@/generated/prisma';
-import { VenueWithCityAndUser } from '@/types';
+import { VenueWithCityAndUser, VenueWithCity } from '@/types';
 import {
   useReactTable,
   getCoreRowModel,
@@ -224,13 +224,43 @@ export const AdminVenuesTable = ({
   });
 
   // Handlers for updating the table data after CRUD operations
-  const handleVenueCreated = (newVenue: VenueWithCityAndUser) => {
-    setData((prev) => [...prev, newVenue]);
+  const handleVenueCreated = (newVenue: {
+    address: string;
+    id: string;
+    name: string;
+    cityId: string;
+    userId: string;
+    description: string | null;
+    contactInfo: string | null;
+    capacity: number | null;
+    venueImageUrl: string | null;
+    latitude: string | null;
+    longitude: string | null;
+  }) => {
+    // Optionally, you can fetch the city and user objects here if needed
+    setData((prev) => [
+      ...prev,
+      {
+        ...newVenue,
+        city: cities.find((c) => c.id === newVenue.cityId) || null,
+        user: null, // You may want to fetch or assign the user object here
+      },
+    ]);
   };
 
-  const handleVenueUpdated = (updatedVenue: VenueWithCityAndUser) => {
+  const handleVenueUpdated = (
+    updatedVenue: VenueWithCityAndUser | VenueWithCity
+  ) => {
     setData((prev) =>
-      prev.map((venue) => (venue.id === updatedVenue.id ? updatedVenue : venue))
+      prev.map((venue) =>
+        venue.id === updatedVenue.id
+          ? {
+              ...updatedVenue,
+              // Ensure 'user' property exists for VenueWithCityAndUser
+              user: (updatedVenue as any).user ?? null,
+            }
+          : venue
+      )
     );
   };
 

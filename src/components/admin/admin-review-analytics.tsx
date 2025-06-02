@@ -7,18 +7,19 @@ import {
   TrendingUp,
   Star,
   Calendar,
-  Users,
+  // Users,
   Award,
   Activity,
   ArrowUpRight,
   ArrowDownRight,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+// import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RatingDisplay, CompactRating } from '@/components/ui/ratings-display';
 import { getReviewAnalytics } from '@/actions/admin-review-actions';
 import { toast } from 'sonner';
+import Image from 'next/image';
 
 interface AnalyticsData {
   monthlyReviews: { month: string; count: number; averageRating: number }[];
@@ -43,7 +44,7 @@ interface AnalyticsData {
 export function AdminReviewsAnalytics() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedPeriod, setSelectedPeriod] = useState('12months');
+  // const [selectedPeriod, setSelectedPeriod] = useState('12months');
 
   useEffect(() => {
     loadAnalytics();
@@ -268,7 +269,7 @@ export function AdminReviewsAnalytics() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {analytics.monthlyReviews.slice(-6).map((month, index) => (
+              {analytics.monthlyReviews.slice(-6).map((month) => (
                 <div
                   key={month.month}
                   className="flex items-center justify-between"
@@ -369,7 +370,9 @@ export function AdminReviewsAnalytics() {
                 className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg"
               >
                 {activity.user.image ? (
-                  <img
+                  <Image
+                    width={32}
+                    height={32}
                     src={activity.user.image}
                     alt={activity.user.name}
                     className="h-8 w-8 rounded-full object-cover"
@@ -408,7 +411,7 @@ export function AdminReviewsAnalytics() {
                       </div>
                       {activity.comment && (
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                          "{activity.comment}"
+                          &quot;{activity.comment}&quot;
                         </p>
                       )}
                     </div>

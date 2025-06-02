@@ -59,7 +59,7 @@ export default async function LoginErrorPage({ searchParams }: PageProps) {
         {error === 'account_not_linked' && (
           <div className="text-center">
             <p className="text-gray-400 text-sm mb-2">
-              Don't have an account yet?
+              Don&apos;t have an account yet?
             </p>
             <Button
               asChild
@@ -74,7 +74,7 @@ export default async function LoginErrorPage({ searchParams }: PageProps) {
         {error === 'email_not_verified' && (
           <div className="text-center">
             <p className="text-gray-400 text-sm mb-2">
-              Didn't receive verification email?
+              Didn&apos;t receive verification email?
             </p>
             <Button
               asChild

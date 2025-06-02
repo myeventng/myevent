@@ -1223,7 +1223,7 @@ export async function updateEvent(
 
     return {
       success: true,
-      message: 'Event updated successfully',
+      message,
       data: updatedEvent,
     };
   } catch (error) {
@@ -1237,8 +1237,7 @@ export async function updateEvent(
 
 export async function updateEventStatus(
   id: string,
-  status: 'PUBLISHED' | 'REJECTED',
-  rejectionReason?: string
+  status: 'PUBLISHED' | 'REJECTED'
 ): Promise<ActionResponse<any>> {
   // Validate user permission - only admins can do this
   const headersList = await headers();
