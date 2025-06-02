@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Venue } from '@/generated/prisma';
+import { VenueWithCityAndUser } from '@/types';
 import {
   Card,
   CardContent,
@@ -33,19 +33,6 @@ const defaultIcon = new L.Icon({
   popupAnchor: [1, -34],
   shadowSize: [41, 41],
 });
-
-type VenueWithCityAndUser = Venue & {
-  city: {
-    name: string;
-    state: string;
-  };
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    image?: string;
-  } | null;
-};
 
 interface AdminVenuesMapProps {
   venues: VenueWithCityAndUser[];

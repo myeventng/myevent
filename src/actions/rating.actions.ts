@@ -410,7 +410,7 @@ export async function getEventRatings(
             },
           },
         },
-        orderBy: { id: 'desc' },
+        orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
       }),
@@ -455,7 +455,7 @@ export async function getEventRatings(
         ratings: ratings.map((r) => ({
           ...r,
           rating: Number(r.rating),
-          createdAt: r.id, // Using id as createdAt since it's auto-generated
+          createdAt: r.createdAt.toISOString(),
         })),
         totalCount,
         averageRating: Math.round(averageRating * 10) / 10,

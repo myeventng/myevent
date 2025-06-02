@@ -14,14 +14,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UpdateUserForm } from '@/components/auth/update-user-form';
 import { ChangePasswordForm } from '@/components/auth/change-password-form';
 import { OrganizerProfileForm } from '@/components/auth/organizer-profile-form';
-import { TwoFactorAuthForm } from '@/components/auth/two-factor-auth-form';
+// import { TwoFactorAuthForm } from '@/components/auth/two-factor-auth-form';
 import { ApplyOrganizerForm } from '@/components/auth/apply-organizer-form';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Shield, User } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
-import { get2FAStatusAction } from '@/actions/two-factor-auth-actions';
+// import { get2FAStatusAction } from '@/actions/two-factor-auth-actions';
 
 export default async function UserProfilePage() {
   const session = await getServerSideAuth({
@@ -44,10 +44,10 @@ export default async function UserProfilePage() {
   }
 
   // Fetch the 2FA status (you could implement this in getServerSideProps)
-  const has2FAStatusResponse = await get2FAStatusAction();
-  const has2FAEnabled = has2FAStatusResponse.success
-    ? has2FAStatusResponse.data.isEnabled
-    : false;
+  // const has2FAStatusResponse = await get2FAStatusAction();
+  // const has2FAEnabled = has2FAStatusResponse.success
+  //   ? has2FAStatusResponse.data.isEnabled
+  //   : false;
 
   return (
     <DashboardLayout session={session}>
@@ -145,7 +145,7 @@ export default async function UserProfilePage() {
               </CardContent>
             </Card>
 
-            <Card>
+            {/* <Card>
               <CardHeader>
                 <CardTitle>Two-Factor Authentication</CardTitle>
                 <CardDescription>
@@ -161,7 +161,7 @@ export default async function UserProfilePage() {
                   }}
                 />
               </CardContent>
-            </Card>
+            </Card> */}
 
             <Card>
               <CardHeader>
@@ -213,7 +213,17 @@ export default async function UserProfilePage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <OrganizerProfileForm profile={organizerProfile} />
+                  <OrganizerProfileForm
+                    profile={
+                      organizerProfile
+                        ? {
+                            ...organizerProfile,
+                            website: organizerProfile.website ?? undefined,
+                            bio: organizerProfile.bio ?? undefined,
+                          }
+                        : undefined
+                    }
+                  />
                 </CardContent>
               </Card>
             </TabsContent>

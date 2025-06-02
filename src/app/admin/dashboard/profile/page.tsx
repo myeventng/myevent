@@ -13,12 +13,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UpdateUserForm } from '@/components/auth/update-user-form';
 import { ChangePasswordForm } from '@/components/auth/change-password-form';
-import { TwoFactorAuthForm } from '@/components/auth/two-factor-auth-form';
+// import { TwoFactorAuthForm } from '@/components/auth/two-factor-auth-form';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Shield } from 'lucide-react';
-import { get2FAStatusAction } from '@/actions/two-factor-auth-actions';
+// import { get2FAStatusAction } from '@/actions/two-factor-auth-actions';
 
 export default async function AdminProfilePage() {
   const session = await getServerSideAuth({
@@ -34,10 +34,10 @@ export default async function AdminProfilePage() {
     .toUpperCase();
 
   // Fetch the 2FA status from the server
-  const has2FAStatusResponse = await get2FAStatusAction();
-  const has2FAEnabled = has2FAStatusResponse.success
-    ? has2FAStatusResponse.data.isEnabled
-    : false;
+  // const has2FAStatusResponse = await get2FAStatusAction();
+  // const has2FAEnabled = has2FAStatusResponse.success
+  //   ? has2FAStatusResponse.data.isEnabled
+  //   : false;
 
   // For admin accounts, 2FA should be required, so we'll show a warning if not enabled
 
@@ -180,7 +180,7 @@ export default async function AdminProfilePage() {
               </CardContent>
             </Card>
 
-            <Card>
+            {/* <Card>
               <CardHeader>
                 <CardTitle>Two-Factor Authentication</CardTitle>
                 <CardDescription>
@@ -200,7 +200,7 @@ export default async function AdminProfilePage() {
                   admin accounts to protect sensitive platform operations.
                 </p>
               </CardContent>
-            </Card>
+            </Card> */}
 
             <Card>
               <CardHeader>

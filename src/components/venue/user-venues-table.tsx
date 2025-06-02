@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Venue, City } from '@/generated/prisma';
+import { City } from '@/generated/prisma';
+// Import the VenueWithCity type as well
+import { VenueWithCityAndUser, VenueWithCity } from '@/types';
 import {
   useReactTable,
   getCoreRowModel,
@@ -40,22 +42,38 @@ import { CreateVenueModal } from './create-venue-modal';
 import { UpdateVenueModal } from './update-venue-modal';
 import { DeleteVenueDialog } from './delete-venue-dialog';
 import { ViewVenueModal } from './view-venue-modal';
-import { Badge } from '@/components/ui/badge';
-
-interface VenueWithCity extends Venue {
-  city: City | null;
-}
 
 interface UserVenuesTableProps {
-  initialData: VenueWithCity[];
+  initialData: VenueWithCityAndUser[];
   cities: City[];
+  onVenueCreated?: (venue: VenueWithCityAndUser) => void;
+  onVenueUpdated?: (venue: VenueWithCityAndUser) => void;
+  onVenueDeleted?: (venueId: string) => void;
 }
+
+// Type for basic venue data that comes from the modal
+type BasicVenueData = {
+  id: string;
+  name: string;
+  address: string;
+  cityId: string;
+  userId: string;
+  description: string | null;
+  contactInfo: string | null;
+  capacity: number | null;
+  venueImageUrl: string | null;
+  latitude: string | null;
+  longitude: string | null;
+};
 
 export const UserVenuesTable = ({
   initialData,
   cities,
+  onVenueCreated,
+  onVenueUpdated,
+  onVenueDeleted,
 }: UserVenuesTableProps) => {
-  const [data, setData] = useState<Venue[]>(initialData);
+  const [data, setData] = useState<VenueWithCityAndUser[]>(initialData);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
@@ -65,10 +83,32 @@ export const UserVenuesTable = ({
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [viewModalOpen, setViewModalOpen] = useState(false);
-  const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
+  const [selectedVenue, setSelectedVenue] =
+    useState<VenueWithCityAndUser | null>(null);
+
+  // Helper function to transform basic venue data to VenueWithCityAndUser
+  const transformBasicVenueToVenueWithCityAndUser = (
+    basicVenue: BasicVenueData
+  ): VenueWithCityAndUser => {
+    // Find the city for this venue
+    const city = cities.find((c) => c.id === basicVenue.cityId);
+
+    return {
+      ...basicVenue,
+      city: city
+        ? {
+            id: city.id,
+            name: city.name,
+            state: city.state,
+            population: city.population || null,
+          }
+        : null,
+      user: null, // New venues typically don't have user data populated yet in this context
+    };
+  };
 
   // Table column definitions
-  const columns: ColumnDef<Venue>[] = [
+  const columns: ColumnDef<VenueWithCityAndUser>[] = [
     {
       accessorKey: 'venueImageUrl',
       header: 'Image',
@@ -178,19 +218,43 @@ export const UserVenuesTable = ({
     getFilteredRowModel: getFilteredRowModel(),
   });
 
-  // Handlers for updating the table data after CRUD operations
-  const handleVenueCreated = (newVenue: Venue) => {
-    setData((prev) => [...prev, newVenue]);
+  // Wrapper function for CreateVenueModal callback
+  const handleCreateVenueModalCallback = (basicVenue: BasicVenueData) => {
+    // Transform basic venue to VenueWithCityAndUser
+    const venueWithCityAndUser =
+      transformBasicVenueToVenueWithCityAndUser(basicVenue);
+
+    // Update local state
+    setData((prev) => [...prev, venueWithCityAndUser]);
+
+    // Call parent callback if provided
+    onVenueCreated?.(venueWithCityAndUser);
   };
 
-  const handleVenueUpdated = (updatedVenue: Venue) => {
+  // Wrapper function for UpdateVenueModal callback
+  const handleUpdateVenueModalCallback = (
+    updatedVenue: VenueWithCityAndUser | VenueWithCity
+  ) => {
+    // Ensure the venue has user property (transform VenueWithCity to VenueWithCityAndUser if needed)
+    const venueWithCityAndUser: VenueWithCityAndUser =
+      'user' in updatedVenue
+        ? (updatedVenue as VenueWithCityAndUser)
+        : ({ ...updatedVenue, user: null } as VenueWithCityAndUser);
+
+    // Update local state
     setData((prev) =>
-      prev.map((venue) => (venue.id === updatedVenue.id ? updatedVenue : venue))
+      prev.map((venue) =>
+        venue.id === venueWithCityAndUser.id ? venueWithCityAndUser : venue
+      )
     );
+
+    // Call parent callback if provided
+    onVenueUpdated?.(venueWithCityAndUser);
   };
 
   const handleVenueDeleted = (deletedVenueId: string) => {
     setData((prev) => prev.filter((venue) => venue.id !== deletedVenueId));
+    onVenueDeleted?.(deletedVenueId);
   };
 
   return (
@@ -324,7 +388,7 @@ export const UserVenuesTable = ({
       <CreateVenueModal
         isOpen={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
-        onVenueCreated={handleVenueCreated}
+        onVenueCreated={handleCreateVenueModalCallback}
         cities={cities}
       />
 
@@ -347,7 +411,7 @@ export const UserVenuesTable = ({
             }}
             venue={selectedVenue}
             cities={cities}
-            onVenueUpdated={handleVenueUpdated}
+            onVenueUpdated={handleUpdateVenueModalCallback}
           />
 
           <DeleteVenueDialog

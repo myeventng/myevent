@@ -35,6 +35,8 @@ import { Loader2, MapPin } from 'lucide-react';
 import { createVenue } from '@/actions/venue-actions';
 import { getCities } from '@/actions/city-actions';
 import { toast } from 'sonner';
+import { City } from '@/generated/prisma';
+import { VenueWithCity, VenueWithCityAndUser } from '@/types';
 
 // Form validation schema
 const formSchema = z.object({
@@ -56,7 +58,8 @@ type FormValues = z.infer<typeof formSchema>;
 interface CreateVenueModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onVenueCreated: (venue: any) => void;
+  onVenueCreated: (venue: VenueWithCity | VenueWithCityAndUser) => void;
+  cities: City[];
 }
 
 export const CreateVenueModal = ({

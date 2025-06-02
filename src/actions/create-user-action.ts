@@ -79,11 +79,12 @@ export async function createUserAction({
     // Generate magic link and send invite
     if (sendInvite) {
       try {
-        const magicLinkUrl = await auth.api.magicLink.generate({
-          email,
-          headers: headersList,
-          callbackUrl: '/dashboard',
-        });
+        // Replace this with your actual magic link generation logic or API call
+        const magicLinkUrl = `${
+          process.env.NEXT_PUBLIC_BASE_URL || 'https://myevent.com.ng'
+        }/auth/magic-link?email=${encodeURIComponent(
+          email
+        )}&callbackUrl=/dashboard`;
 
         await sendEmailAction({
           to: email,

@@ -119,6 +119,11 @@ export function Sidebar({
       icon: <Bell className="w-5 h-5" />,
     },
     {
+      title: 'Reviews',
+      href: '/admin/dashboard/reviews',
+      icon: <Star className="w-5 h-5" />,
+    },
+    {
       title: 'Users',
       icon: <Users className="w-5 h-5" />,
       children: [

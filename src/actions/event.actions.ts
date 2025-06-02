@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import { AgeRestriction, DressCode, PublishedStatus } from '@/generated/prisma';
+import { createEventNotification } from '@/actions/notification.actions';
 
 interface EventInput {
   title: string;
@@ -1022,6 +1023,11 @@ export async function createEvent(
       },
     });
 
+    // Create notification for admin if event is submitted for review
+    if (data.publishedStatus === 'PENDING_REVIEW') {
+      await createEventNotification(newEvent.id, 'EVENT_SUBMITTED');
+    }
+
     revalidatePath('/admin/events');
     revalidatePath('/dashboard/events');
     revalidatePath('/events');
@@ -1180,7 +1186,7 @@ export async function updateEvent(
         City: data.cityId
           ? { connect: { id: data.cityId } }
           : { disconnect: true },
-        publishedStatus: data.publishedStatus || existingEvent.publishedStatus,
+        publishedStatus: isAdmin ? 'PUBLISHED' : 'PENDING_REVIEW',
       },
       include: {
         tags: true,
@@ -1192,12 +1198,28 @@ export async function updateEvent(
         },
       },
     });
+    // Create notification for admin if event is submitted for review
+    if (isAdmin) {
+      // Admin published the event - notify the organizer
+      await createEventNotification(
+        data.id,
+        'EVENT_APPROVED',
+        existingEvent.userId ?? undefined
+      );
+    } else {
+      // Organizer submitted for review - notify admins
+      await createEventNotification(data.id, 'EVENT_SUBMITTED');
+    }
 
     revalidatePath('/admin/events');
     revalidatePath('/dashboard/events');
     revalidatePath(`/events/${updatedEvent.slug}`);
     revalidatePath(`/events/${data.id}`);
     revalidatePath('/events');
+
+    const message = isAdmin
+      ? 'Event published successfully'
+      : 'Event submitted for review';
 
     return {
       success: true,
@@ -1209,6 +1231,78 @@ export async function updateEvent(
     return {
       success: false,
       message: 'Failed to update event',
+    };
+  }
+}
+
+export async function updateEventStatus(
+  id: string,
+  status: 'PUBLISHED' | 'REJECTED',
+  rejectionReason?: string
+): Promise<ActionResponse<any>> {
+  // Validate user permission - only admins can do this
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session || session.user.role !== 'ADMIN') {
+    return {
+      success: false,
+      message: 'Only administrators can approve or reject events',
+    };
+  }
+
+  try {
+    const event = await prisma.event.findUnique({
+      where: { id },
+      include: { user: true },
+    });
+
+    if (!event) {
+      return {
+        success: false,
+        message: 'Event not found',
+      };
+    }
+
+    const updatedEvent = await prisma.event.update({
+      where: { id },
+      data: {
+        publishedStatus: status,
+        // You might want to add a rejectionReason field to your Event model
+      },
+    });
+
+    // Create notification for the event organizer
+    const notificationType =
+      status === 'PUBLISHED' ? 'EVENT_APPROVED' : 'EVENT_REJECTED';
+    await createEventNotification(
+      id,
+      notificationType,
+      event.userId ?? undefined
+    );
+
+    revalidatePath('/admin/dashboard/events');
+    revalidatePath('/dashboard/events');
+    revalidatePath(`/events/${event.slug}`);
+    revalidatePath('/events');
+
+    const message =
+      status === 'PUBLISHED'
+        ? 'Event approved and published successfully'
+        : 'Event rejected successfully';
+
+    return {
+      success: true,
+      message,
+      data: updatedEvent,
+    };
+  } catch (error) {
+    console.error('Error updating event status:', error);
+    return {
+      success: false,
+      message: 'Failed to update event status',
     };
   }
 }

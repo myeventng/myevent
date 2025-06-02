@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useInView } from 'react-intersection-observer';
-import { Search, SlidersHorizontal, Calendar, Loader2 } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { SlidersHorizontal, Calendar, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,6 +21,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import { PageTitleHero } from '@/components/events/clientside/page-title-hero';
 import { EventCard } from '@/components/events/clientside/event-card';
 import { EventsFilters } from '@/components/events/clientside/event-filter';
 import {
@@ -42,7 +42,7 @@ interface FilterState {
   featured: boolean;
 }
 
-export default function SimpleAllEventsPage() {
+export default function EnhancedAllEventsPage() {
   // Data state
   const [events, setEvents] = useState<any[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -67,7 +67,11 @@ export default function SimpleAllEventsPage() {
 
   // UI state
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [filterOptions, setFilterOptions] = useState({
+  const [filterOptions, setFilterOptions] = useState<{
+    categories: any[];
+    cities: any[];
+    tags: any[];
+  }>({
     categories: [],
     cities: [],
     tags: [],
@@ -210,30 +214,52 @@ export default function SimpleAllEventsPage() {
 
   const activeFiltersCount = getActiveFiltersCount();
 
+  // Handle hero search
+  const handleHeroSearch = () => {
+    // The search will automatically trigger due to the debounced effect
+    // You can add additional logic here if needed
+  };
+
+  // Get unique cities and calculate stats
+  const uniqueCities = filterOptions.cities?.length || 0;
+  const totalAttendees = events.reduce(
+    (sum, event) => sum + (event._count?.orders || 0),
+    0
+  );
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex flex-col gap-4">
-            <div>
-              <h1 className="text-3xl font-bold">Discover Events</h1>
-              <p className="text-muted-foreground">
-                Find amazing events happening near you
-              </p>
-            </div>
+      {/* Hero Section */}
+      <PageTitleHero
+        title="Discover Amazing Events"
+        subtitle="🎉 Find Your Next Adventure"
+        description="From concerts and festivals to workshops and conferences, discover events that match your interests and connect with your community."
+        showSearch={true}
+        searchPlaceholder="Search events, venues, or organizers..."
+        searchValue={filters.search}
+        onSearchChange={(value) => updateFilter('search', value)}
+        onSearchSubmit={handleHeroSearch}
+        stats={{
+          totalEvents: totalCount,
+          totalLocations: uniqueCities,
+          totalAttendees: Math.max(totalAttendees, 1000), // Minimum display value
+        }}
+        height="lg"
+        backgroundImage="/assets/images/events-hero-bg.jpg" // Add your party/events background image
+      />
 
-            {/* Search and Sort Controls */}
-            <div className="flex flex-col sm:flex-row gap-4">
-              {/* Search Bar */}
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                <Input
-                  placeholder="Search events, venues, or organizers..."
-                  value={filters.search}
-                  onChange={(e) => updateFilter('search', e.target.value)}
-                  className="pl-10 pr-4"
-                />
+      {/* Filter Controls Section */}
+      <div className="bg-white border-b sticky top-0 z-40 shadow-sm">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+            {/* Results Info and Sort */}
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-muted-foreground">
+                {isLoading
+                  ? 'Loading events...'
+                  : isError
+                  ? 'Error loading events'
+                  : `${totalCount} event${totalCount !== 1 ? 's' : ''} found`}
               </div>
 
               {/* Sort Dropdown */}
@@ -245,7 +271,7 @@ export default function SimpleAllEventsPage() {
                   updateFilter('sortOrder', sortOrder);
                 }}
               >
-                <SelectTrigger className="w-full sm:w-48">
+                <SelectTrigger className="w-48">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -261,121 +287,139 @@ export default function SimpleAllEventsPage() {
                   <SelectItem value="createdAt-desc">Recently Added</SelectItem>
                 </SelectContent>
               </Select>
-
-              {/* Filters Button */}
-              <Sheet open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="outline" className="flex items-center gap-2">
-                    <SlidersHorizontal className="h-4 w-4" />
-                    Filters
-                    {activeFiltersCount > 0 && (
-                      <Badge variant="secondary" className="ml-1">
-                        {activeFiltersCount}
-                      </Badge>
-                    )}
-                  </Button>
-                </SheetTrigger>
-                <SheetContent className="w-full sm:max-w-md">
-                  <SheetHeader>
-                    <SheetTitle>Filter Events</SheetTitle>
-                    <SheetDescription>
-                      Narrow down events to find exactly what you're looking for
-                    </SheetDescription>
-                  </SheetHeader>
-
-                  <EventsFilters
-                    filters={filters}
-                    updateFilter={updateFilter}
-                    clearAllFilters={clearAllFilters}
-                    filterOptions={filterOptions}
-                    onClose={() => setIsFiltersOpen(false)}
-                  />
-                </SheetContent>
-              </Sheet>
             </div>
 
-            {/* Active Filters Display */}
-            {activeFiltersCount > 0 && (
-              <div className="flex flex-wrap gap-2 items-center">
-                <span className="text-sm text-muted-foreground">
-                  Active filters:
-                </span>
-
-                {filters.categoryId && (
-                  <Badge
-                    variant="secondary"
-                    className="flex items-center gap-1"
-                  >
-                    Category:{' '}
-                    {
-                      filterOptions.categories.find(
-                        (c: any) => c.id === filters.categoryId
-                      )?.name
-                    }
-                    <button
-                      onClick={() => updateFilter('categoryId', '')}
-                      className="ml-1 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
-                    >
-                      ×
-                    </button>
-                  </Badge>
-                )}
-
-                {filters.cityId && (
-                  <Badge
-                    variant="secondary"
-                    className="flex items-center gap-1"
-                  >
-                    City:{' '}
-                    {
-                      filterOptions.cities.find(
-                        (c: any) => c.id === filters.cityId
-                      )?.name
-                    }
-                    <button
-                      onClick={() => updateFilter('cityId', '')}
-                      className="ml-1 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
-                    >
-                      ×
-                    </button>
-                  </Badge>
-                )}
-
-                {filters.tagIds.length > 0 && (
-                  <Badge
-                    variant="secondary"
-                    className="flex items-center gap-1"
-                  >
-                    Tags: {filters.tagIds.length}
-                    <button
-                      onClick={() => updateFilter('tagIds', [])}
-                      className="ml-1 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
-                    >
-                      ×
-                    </button>
-                  </Badge>
-                )}
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearAllFilters}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  Clear all
+            {/* Filters Button */}
+            <Sheet open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  <SlidersHorizontal className="h-4 w-4" />
+                  Filters
+                  {activeFiltersCount > 0 && (
+                    <Badge variant="secondary" className="ml-1">
+                      {activeFiltersCount}
+                    </Badge>
+                  )}
                 </Button>
-              </div>
-            )}
+              </SheetTrigger>
+              <SheetContent className="w-full sm:max-w-md">
+                <SheetHeader>
+                  <SheetTitle>Filter Events</SheetTitle>
+                  <SheetDescription>
+                    Narrow down events to find exactly what you're looking for
+                  </SheetDescription>
+                </SheetHeader>
 
-            {/* Results Count */}
-            <div className="text-sm text-muted-foreground">
-              {isLoading
-                ? 'Loading events...'
-                : isError
-                ? 'Error loading events'
-                : `${totalCount} event${totalCount !== 1 ? 's' : ''} found`}
-            </div>
+                <EventsFilters
+                  filters={filters}
+                  updateFilter={updateFilter}
+                  clearAllFilters={clearAllFilters}
+                  filterOptions={filterOptions}
+                  onClose={() => setIsFiltersOpen(false)}
+                />
+              </SheetContent>
+            </Sheet>
           </div>
+
+          {/* Active Filters Display */}
+          {activeFiltersCount > 0 && (
+            <div className="flex flex-wrap gap-2 items-center mt-4 pt-4 border-t">
+              <span className="text-sm text-muted-foreground">
+                Active filters:
+              </span>
+
+              {filters.categoryId && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  Category:{' '}
+                  {
+                    filterOptions.categories.find(
+                      (c: any) => c.id === filters.categoryId
+                    )?.name
+                  }
+                  <button
+                    onClick={() => updateFilter('categoryId', '')}
+                    className="ml-1 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
+
+              {filters.cityId && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  City:{' '}
+                  {
+                    filterOptions.cities.find(
+                      (c: any) => c.id === filters.cityId
+                    )?.name
+                  }
+                  <button
+                    onClick={() => updateFilter('cityId', '')}
+                    className="ml-1 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
+
+              {filters.tagIds.length > 0 && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  Tags: {filters.tagIds.length}
+                  <button
+                    onClick={() => updateFilter('tagIds', [])}
+                    className="ml-1 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
+
+              {filters.dateRange && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  Date: {filters.dateRange.replace('_', ' ')}
+                  <button
+                    onClick={() => updateFilter('dateRange', '')}
+                    className="ml-1 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
+
+              {filters.priceRange && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  Price: {filters.priceRange.replace('_', ' ')}
+                  <button
+                    onClick={() => updateFilter('priceRange', '')}
+                    className="ml-1 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
+
+              {filters.featured && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  Featured only
+                  <button
+                    onClick={() => updateFilter('featured', false)}
+                    className="ml-1 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearAllFilters}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                Clear all
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 

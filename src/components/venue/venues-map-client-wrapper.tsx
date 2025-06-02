@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { type VenueWithCity } from '@/types';
+import { VenueWithCity, VenueWithCityAndUser } from '@/types';
 
 const VenuesMap = dynamic(() => import('./venues-map'), {
   ssr: false,
@@ -12,5 +12,10 @@ interface Props {
 }
 
 export default function VenuesMapClientWrapper({ venues }: Props) {
-  return <VenuesMap venues={venues} />;
+  const venuesWithUser: VenueWithCityAndUser[] = venues.map((venue) => ({
+    ...venue,
+    user: null,
+  }));
+
+  return <VenuesMap venues={venuesWithUser} />;
 }

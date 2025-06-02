@@ -138,7 +138,10 @@ export async function createTicketType(
   // Validate user permission
   const permissionCheck = await validateUserPermission(data.eventId);
   if (!permissionCheck.success) {
-    return permissionCheck;
+    return {
+      success: permissionCheck.success,
+      message: permissionCheck.message,
+    };
   }
 
   try {
@@ -204,7 +207,11 @@ export async function updateTicketType(
     // Validate user permission
     const permissionCheck = await validateUserPermission(ticketType.eventId);
     if (!permissionCheck.success) {
-      return permissionCheck;
+      return {
+        success: permissionCheck.success,
+        message: permissionCheck.message,
+        data: null,
+      };
     }
 
     // Update ticket type
@@ -258,7 +265,11 @@ export async function deleteTicketType(
     // Validate user permission
     const permissionCheck = await validateUserPermission(ticketType.eventId);
     if (!permissionCheck.success) {
-      return permissionCheck;
+      return {
+        success: permissionCheck.success,
+        message: permissionCheck.message,
+        data: null,
+      };
     }
 
     // Check if ticket type has associated tickets

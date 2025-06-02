@@ -15,6 +15,7 @@ import { getEventBySlug } from '@/actions/event.actions';
 import { getEventRatings } from '@/actions/rating.actions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { CompactRating } from '@/components/ui/ratings-display';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { EventTicketBooking } from '@/components/events/clientside/event-ticket-booking';

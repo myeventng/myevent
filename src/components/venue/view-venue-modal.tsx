@@ -10,7 +10,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Venue } from '@/generated/prisma';
 import {
   MapPin,
   Users,
@@ -26,6 +25,7 @@ import dynamic from 'next/dynamic';
 import { Skeleton } from '@/components/ui/skeleton';
 import Image from 'next/image';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { VenueWithCity, VenueWithCityAndUser } from '@/types';
 
 // Import map component dynamically to avoid SSR issues
 const StaticMap = dynamic(() => import('./static-map'), {
@@ -37,23 +37,10 @@ const StaticMap = dynamic(() => import('./static-map'), {
   ),
 });
 
-type VenueWithCityAndUser = Venue & {
-  city?: {
-    name: string;
-    state: string;
-  };
-  user?: {
-    id: string;
-    name: string;
-    email: string;
-    image?: string;
-  };
-};
-
 interface ViewVenueModalProps {
   isOpen: boolean;
   onClose: () => void;
-  venue: VenueWithCityAndUser;
+  venue: VenueWithCity | VenueWithCityAndUser;
 }
 
 export const ViewVenueModal = ({
@@ -189,7 +176,7 @@ export const ViewVenueModal = ({
               )}
 
               {/* Organizer Information */}
-              {venue.user && (
+              {'user' in venue && venue.user && (
                 <div className="border-t pt-3 mt-3">
                   <h3 className="text-sm font-medium mb-2 flex items-center">
                     <UserIcon className="h-4 w-4 mr-1" />

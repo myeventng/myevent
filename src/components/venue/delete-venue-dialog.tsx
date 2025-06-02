@@ -15,11 +15,12 @@ import { Loader2 } from 'lucide-react';
 import { deleteVenue } from '@/actions/venue-actions';
 import { Venue } from '@/generated/prisma';
 import { toast } from 'sonner';
+import { VenueWithCity, VenueWithCityAndUser } from '@/types';
 
 interface DeleteVenueDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  venue: Venue;
+  venue: VenueWithCity | VenueWithCityAndUser;
   onVenueDeleted: (venueId: string) => void;
 }
 

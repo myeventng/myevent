@@ -5,7 +5,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MapPin, List } from 'lucide-react';
 import { UserVenuesTable } from '@/components/venue/user-venues-table';
 import dynamic from 'next/dynamic';
-import { Venue, City } from '@/generated/prisma';
+import { City } from '@/generated/prisma';
+import { VenueWithCityAndUser, VenueWithCity } from '@/types';
 
 // Import map component dynamically to avoid SSR issues
 const UserVenuesMapClientWrapper = dynamic(
@@ -14,7 +15,7 @@ const UserVenuesMapClientWrapper = dynamic(
 );
 
 interface ClientSideVenuesWrapperProps {
-  initialVenues: Venue[];
+  initialVenues: VenueWithCityAndUser[];
   cities: City[];
 }
 
@@ -22,14 +23,14 @@ export function ClientSideVenuesWrapper({
   initialVenues,
   cities,
 }: ClientSideVenuesWrapperProps) {
-  const [venues, setVenues] = useState<Venue[]>(initialVenues);
+  const [venues, setVenues] = useState<VenueWithCityAndUser[]>(initialVenues);
   const [activeTab, setActiveTab] = useState('list');
 
-  const handleVenueCreated = (newVenue: Venue) => {
+  const handleVenueCreated = (newVenue: VenueWithCityAndUser) => {
     setVenues((prev) => [...prev, newVenue]);
   };
 
-  const handleVenueUpdated = (updatedVenue: Venue) => {
+  const handleVenueUpdated = (updatedVenue: VenueWithCityAndUser) => {
     setVenues((prev) =>
       prev.map((venue) => (venue.id === updatedVenue.id ? updatedVenue : venue))
     );
@@ -58,7 +59,13 @@ export function ClientSideVenuesWrapper({
       </TabsList>
 
       <TabsContent value="list" className="mt-4">
-        <UserVenuesTable initialData={venues} cities={cities} />
+        <UserVenuesTable
+          initialData={venues}
+          cities={cities}
+          onVenueCreated={handleVenueCreated}
+          onVenueUpdated={handleVenueUpdated}
+          onVenueDeleted={handleVenueDeleted}
+        />
       </TabsContent>
 
       <TabsContent value="map" className="mt-4">

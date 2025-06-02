@@ -37,6 +37,7 @@ import { City, Venue } from '@/generated/prisma';
 import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
 import { FileUploader } from '../layout/file-uploader';
+import { VenueWithCity, VenueWithCityAndUser } from '@/types';
 
 // Import map components dynamically to avoid SSR issues
 const MapPicker = dynamic(() => import('./map-picker'), {
@@ -72,9 +73,9 @@ type FormValues = z.infer<typeof formSchema>;
 interface UpdateVenueModalProps {
   isOpen: boolean;
   onClose: () => void;
-  venue: Venue;
+  venue: VenueWithCity | VenueWithCityAndUser;
   cities: City[];
-  onVenueUpdated: (venue: Venue) => void;
+  onVenueUpdated: (venue: VenueWithCity | VenueWithCityAndUser) => void;
 }
 
 export const UpdateVenueModal = ({

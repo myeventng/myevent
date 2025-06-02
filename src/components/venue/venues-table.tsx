@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Venue, City } from '@/generated/prisma';
+import { City } from '@/generated/prisma';
+import { VenueWithCityAndUser } from '@/types';
 import {
   useReactTable,
   getCoreRowModel,
@@ -34,14 +35,12 @@ import {
   Plus,
   Eye,
   Image as ImageIcon,
-  User,
 } from 'lucide-react';
 import Image from 'next/image';
 import { CreateVenueModal } from './create-venue-modal';
 import { UpdateVenueModal } from './update-venue-modal';
 import { DeleteVenueDialog } from './delete-venue-dialog';
 import { ViewVenueModal } from './view-venue-modal';
-import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Tooltip,
@@ -49,16 +48,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-
-interface VenueWithCityAndUser extends Venue {
-  city: City | null;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    image?: string;
-  } | null;
-}
 
 interface AdminVenuesTableProps {
   initialData: VenueWithCityAndUser[];

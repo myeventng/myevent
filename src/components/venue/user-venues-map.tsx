@@ -17,6 +17,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { ViewVenueModal } from './view-venue-modal';
+import { VenueWithCityAndUser } from '@/types';
 import { CreateVenueModal } from './create-venue-modal';
 import Image from 'next/image';
 
@@ -28,15 +29,10 @@ const defaultIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
-type VenueWithCity = Venue & {
-  city: {
-    name: string;
-    state: string;
-  };
-};
-
 interface VenuesMapProps {
-  venues: VenueWithCity[];
+  venues: VenueWithCityAndUser[];
+  // Assuming cities is an array of objects with at least id, name, and state properties
+  // Adjust the type as per your actual City type definition
   cities: any[];
   onVenueCreated: (venue: Venue) => void;
 }
@@ -46,8 +42,8 @@ const VenueMarker = ({
   venue,
   onSelectVenue,
 }: {
-  venue: VenueWithCity;
-  onSelectVenue: (venue: Venue) => void;
+  venue: VenueWithCityAndUser;
+  onSelectVenue: (venue: VenueWithCityAndUser) => void;
 }) => {
   const markerRef = useRef<L.Marker>(null);
   const map = useMap();
@@ -156,7 +152,8 @@ const UserVenuesMap: React.FC<VenuesMapProps> = ({
   cities,
   onVenueCreated,
 }) => {
-  const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
+  const [selectedVenue, setSelectedVenue] =
+    useState<VenueWithCityAndUser | null>(null);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
@@ -179,7 +176,7 @@ const UserVenuesMap: React.FC<VenuesMapProps> = ({
     return [totalLat / venues.length, totalLng / venues.length];
   };
 
-  const handleSelectVenue = (venue: Venue) => {
+  const handleSelectVenue = (venue: VenueWithCityAndUser) => {
     setSelectedVenue(venue);
     setViewModalOpen(true);
   };
