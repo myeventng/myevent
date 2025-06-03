@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
+import { useForm, type FieldValues } from 'react-hook-form';
 import { AgeRestriction, DressCode } from '@/generated/prisma';
 import { Button } from '@/components/ui/button';
 import {
@@ -31,22 +31,8 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Plus, Loader2 } from 'lucide-react';
 
-// Explicit type definition for the form values
-interface FormValues {
-  title: string;
-  description: string;
-  categoryId?: string;
-  tagIds: string[]; // not optional, always an array
-  age?: AgeRestriction;
-  dressCode?: DressCode;
-  isFree: boolean;
-  idRequired: boolean;
-  attendeeLimit?: number;
-  url?: string;
-}
-
-// Form schema for this step
-const formSchema: z.ZodType<FormValues> = z.object({
+// Form schema - let TypeScript infer the type
+const formSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
   categoryId: z.string().optional(),
@@ -58,6 +44,9 @@ const formSchema: z.ZodType<FormValues> = z.object({
   attendeeLimit: z.number().optional(),
   url: z.string().url().optional().or(z.literal('')),
 });
+
+// Infer the type from the schema
+type FormValues = z.infer<typeof formSchema>;
 
 interface EventBasicInfoProps {
   formData: any;
@@ -80,8 +69,9 @@ export function EventBasicInfo({
   const [newTagColor, setNewTagColor] = useState('#3b82f6');
   const [isCreatingTag, setIsCreatingTag] = useState(false);
 
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+  // Type assertion to fix the compatibility issue
+  const form = useForm<FormValues & FieldValues>({
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       title: formData.title || '',
       description: formData.description || '',
@@ -141,7 +131,7 @@ export function EventBasicInfo({
 
   // Toggle tag selection
   const toggleTag = (tagId: string) => {
-    const currentTags = form.getValues('tagIds');
+    const currentTags = form.getValues('tagIds') as string[];
     let newTags: string[];
 
     if (currentTags.includes(tagId)) {
@@ -170,7 +160,7 @@ export function EventBasicInfo({
         setTags((prev) => [...prev, response.data]);
 
         // Auto-select the newly created tag
-        const currentTags = form.getValues('tagIds');
+        const currentTags = form.getValues('tagIds') as string[];
         form.setValue('tagIds', [...currentTags, response.data.id], {
           shouldValidate: true,
         });
@@ -397,9 +387,9 @@ export function EventBasicInfo({
               ) : (
                 <>
                   {tags.map((tag) => {
-                    const isSelected = form
-                      .getValues('tagIds')
-                      .includes(tag.id);
+                    const isSelected = (
+                      form.getValues('tagIds') as string[]
+                    ).includes(tag.id);
                     return (
                       <Badge
                         key={tag.id}
@@ -418,7 +408,7 @@ export function EventBasicInfo({
                       </Badge>
                     );
                   })}
-                  {form.getValues('tagIds').length === 0 &&
+                  {(form.getValues('tagIds') as string[]).length === 0 &&
                     !isLoading &&
                     tags.length > 0 && (
                       <div className="text-sm text-muted-foreground italic">

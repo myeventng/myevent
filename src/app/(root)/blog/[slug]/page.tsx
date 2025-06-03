@@ -15,14 +15,17 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
 
+// Updated interface to match Next.js App Router expectations
 interface BlogPostPageProps {
-  params: {
+  params: Promise<{
     slug: string;
-  };
+  }>;
 }
 
 export async function generateMetadata({ params }: BlogPostPageProps) {
-  const response = await getBlogBySlug(params.slug);
+  // Await the params before using them
+  const { slug } = await params;
+  const response = await getBlogBySlug(slug);
 
   if (!response.success) {
     return {
@@ -51,7 +54,9 @@ export async function generateMetadata({ params }: BlogPostPageProps) {
 }
 
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
-  const response = await getBlogBySlug(params.slug);
+  // Await the params before using them
+  const { slug } = await params;
+  const response = await getBlogBySlug(slug);
 
   if (!response.success) {
     notFound();
@@ -61,6 +66,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
   // Get related posts from same category
   const relatedResponse = await getPublishedBlogs(1, 3, blog.categoryId);
+
   interface RelatedPost {
     id: string;
     title: string;
