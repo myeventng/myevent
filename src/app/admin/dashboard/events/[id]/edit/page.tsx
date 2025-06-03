@@ -5,9 +5,9 @@ import { getEventById } from '@/actions/event.actions';
 import { getServerSideAuth } from '@/lib/auth-utils';
 
 interface AdminEditEventPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export default async function AdminEditEventPage({
@@ -19,7 +19,8 @@ export default async function AdminEditEventPage({
   });
 
   // Fetch the event
-  const response = await getEventById(params.id);
+  const { id } = await params;
+  const response = await getEventById(id);
 
   if (!response.success || !response.data) {
     notFound();
