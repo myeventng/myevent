@@ -24,15 +24,14 @@ import { ShareEventButton } from '@/components/events/clientside/share-event-but
 import Image from 'next/image';
 
 interface EventPageProps {
-  params: {
+  params: Promise<{
     slug: string;
-  };
+  }>;
 }
 
-export async function generateMetadata({
-  params,
-}: EventPageProps): Promise<Metadata> {
-  const response = await getEventBySlug(params.slug);
+export async function generateMetadata({ params }: EventPageProps) {
+  const { slug } = await params;
+  const response = await getEventBySlug(slug);
 
   if (!response.success || !response.data) {
     return {
@@ -89,7 +88,8 @@ export async function generateMetadata({
 }
 
 export default async function EventPage({ params }: EventPageProps) {
-  const response = await getEventBySlug(params.slug);
+  const { slug } = await params;
+  const response = await getEventBySlug(slug);
 
   if (!response.success || !response.data) {
     notFound();
