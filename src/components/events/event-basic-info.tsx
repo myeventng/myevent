@@ -442,7 +442,7 @@ export function EventBasicInfo({
                 Create New Tag
               </Button>
               <span className="text-sm text-muted-foreground">
-                Can't find the right tag? Create one!
+                Can&apos;t find the right tag? Create one!
               </span>
             </div>
 
