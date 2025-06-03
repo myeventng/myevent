@@ -162,7 +162,7 @@ export function TicketDetailsPage({ params }: TicketDetailsPageProps) {
         <TicketIcon className="h-12 w-12 text-muted-foreground mb-4" />
         <h2 className="text-xl font-bold mb-2">Ticket Not Found</h2>
         <p className="text-muted-foreground mb-6">
-          The ticket you're looking for could not be found.
+          The ticket you&apos;re looking for could not be found.
         </p>
         <Button asChild>
           <Link href="/dashboard/tickets">

@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { format } from 'date-fns';
+import Image from 'next/image';
 
 interface Event {
   id: string;
@@ -126,7 +127,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ featuredEvents }) => {
           >
             <div className="absolute inset-0 bg-black/40" />
             {event.coverImageUrl && (
-              <img
+              <Image
+                width={1920}
+                height={1080}
+                unoptimized
+                priority
+                quality={90}
                 src={event.coverImageUrl}
                 alt={event.title}
                 className="w-full h-full object-cover"

@@ -69,6 +69,7 @@ import {
   bulkDeleteRatings,
   getReviewsStats,
 } from '@/actions/admin-review-actions';
+import Image from 'next/image';
 
 interface Review {
   id: string;
@@ -481,7 +482,9 @@ export function AdminReviewsDashboard() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {review.user.image ? (
-                              <img
+                              <Image
+                                width={32}
+                                height={32}
                                 src={review.user.image}
                                 alt={review.user.name}
                                 className="h-8 w-8 rounded-full object-cover"
@@ -693,7 +696,9 @@ export function AdminReviewsDashboard() {
                   <h4 className="font-medium mb-2">Reviewer</h4>
                   <div className="flex items-center gap-2">
                     {viewReview.user.image ? (
-                      <img
+                      <Image
+                        width={40}
+                        height={40}
                         src={viewReview.user.image}
                         alt={viewReview.user.name}
                         className="h-10 w-10 rounded-full object-cover"

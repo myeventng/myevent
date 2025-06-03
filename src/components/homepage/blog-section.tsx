@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import Link from 'next/link';
 import { format } from 'date-fns';
+import Image from 'next/image';
 
 interface BlogPost {
   id: string;
@@ -68,7 +69,12 @@ export const BlogSection: React.FC<BlogSectionProps> = ({ blogPosts }) => {
             >
               <div className="aspect-[16/10] overflow-hidden">
                 {post.featuredImage ? (
-                  <img
+                  <Image
+                    width={800}
+                    height={500}
+                    unoptimized
+                    priority
+                    quality={90}
                     src={post.featuredImage}
                     alt={post.title}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"

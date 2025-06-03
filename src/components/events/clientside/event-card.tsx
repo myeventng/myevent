@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar, MapPin, Users, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { CompactRating } from '@/components/ui/ratings-display';
+import Image from 'next/image';
 
 interface EventCardProps {
   event: {
@@ -40,7 +41,12 @@ export function EventCard({ event }: EventCardProps) {
       {/* Event Image */}
       {event.coverImageUrl && (
         <div className="aspect-[16/9] overflow-hidden">
-          <img
+          <Image
+            width={800}
+            height={450}
+            unoptimized
+            priority
+            quality={90}
             src={event.coverImageUrl}
             alt={event.title}
             className="w-full h-full object-cover"

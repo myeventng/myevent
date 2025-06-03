@@ -318,7 +318,7 @@ export const UserVenuesTable = ({
                   {data.length === 0 ? (
                     <div className="py-8">
                       <p className="text-muted-foreground mb-2">
-                        You haven't created any venues yet
+                        You haven&apos;t created any venues yet
                       </p>
                       <Button
                         variant="outline"

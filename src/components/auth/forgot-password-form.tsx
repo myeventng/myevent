@@ -71,8 +71,8 @@ export const ForgotPasswordForm = () => {
       </Button>
 
       <p className="text-xs text-gray-500 text-center">
-        We'll send a password reset link to your email if we find an account
-        associated with it.
+        We&apos;ll send a password reset link to your email if we find an
+        account associated with it.
       </p>
     </form>
   );

@@ -5,6 +5,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import Image from 'next/image';
 
 interface EventGalleryProps {
   images: string[];
@@ -54,7 +55,12 @@ export function EventGallery({ images, title }: EventGalleryProps) {
                 className="aspect-square cursor-pointer overflow-hidden rounded-lg bg-muted hover:opacity-80 transition-opacity"
                 onClick={() => openLightbox(index)}
               >
-                <img
+                <Image
+                  width={300}
+                  height={300}
+                  unoptimized
+                  priority
+                  quality={90}
                   src={image}
                   alt={`${title} - Image ${index + 1}`}
                   className="h-full w-full object-cover"
@@ -80,7 +86,12 @@ export function EventGallery({ images, title }: EventGalleryProps) {
 
             {selectedImage !== null && (
               <>
-                <img
+                <Image
+                  width={800}
+                  height={600}
+                  unoptimized
+                  priority
+                  quality={90}
                   src={images[selectedImage]}
                   alt={`${title} - Image ${selectedImage + 1}`}
                   className="w-full h-auto max-h-[80vh] object-contain"

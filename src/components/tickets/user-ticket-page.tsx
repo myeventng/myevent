@@ -141,7 +141,7 @@ export function UserTicketsPage() {
               <Ticket className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-medium">No upcoming tickets</h3>
               <p className="text-muted-foreground mt-1">
-                You don't have any tickets for upcoming events.
+                You don&apos;t have any tickets for upcoming events.
               </p>
               <Button className="mt-4" asChild>
                 <Link href="/events">Browse Events</Link>
@@ -207,7 +207,7 @@ export function UserTicketsPage() {
               <Ticket className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <h3 className="text-lg font-medium">No past tickets</h3>
               <p className="text-muted-foreground mt-1">
-                You haven't attended any events yet.
+                You haven&apos;t attended any events yet.
               </p>
             </div>
           ) : (

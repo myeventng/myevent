@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import Link from 'next/link';
 import { format } from 'date-fns';
+import Image from 'next/image';
 
 interface Event {
   id: string;
@@ -106,7 +107,12 @@ export const ExploreEventsSection: React.FC<ExploreEventsSectionProps> = ({
                 >
                   <div className="aspect-[4/3] overflow-hidden">
                     {event.coverImageUrl ? (
-                      <img
+                      <Image
+                        width={800}
+                        height={600}
+                        unoptimized
+                        priority
+                        quality={90}
                         src={event.coverImageUrl}
                         alt={event.title}
                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"

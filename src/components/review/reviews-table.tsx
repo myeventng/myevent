@@ -72,6 +72,7 @@ import {
   exportReviews,
   getUserReviews,
 } from '@/actions/admin-review-actions';
+import Image from 'next/image';
 
 interface Review {
   id: string;
@@ -525,7 +526,9 @@ export function ReviewsTable({
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {review.user.image ? (
-                              <img
+                              <Image
+                                width={32}
+                                height={32}
                                 src={review.user.image}
                                 alt={review.user.name}
                                 className="h-8 w-8 rounded-full object-cover"
@@ -752,7 +755,10 @@ export function ReviewsTable({
                   <h4 className="font-medium mb-2">Reviewer</h4>
                   <div className="flex items-center gap-2">
                     {viewReview.user.image ? (
-                      <img
+                      <Image
+                        width={40}
+                        height={40}
+                        unoptimized
                         src={viewReview.user.image}
                         alt={viewReview.user.name}
                         className="h-10 w-10 rounded-full object-cover"
@@ -915,7 +921,7 @@ export function ReviewsTable({
                         </p>
                         {review.comment && (
                           <p className="text-sm text-muted-foreground">
-                            "{review.comment}"
+                            &apos;{review.comment}&apos;
                           </p>
                         )}
                       </div>
@@ -927,7 +933,7 @@ export function ReviewsTable({
                 ))}
                 {userReviewsData.reviews.length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">
-                    This user hasn't written any reviews yet.
+                    This user hasn&apos;t written any reviews yet.
                   </div>
                 )}
               </div>

@@ -40,6 +40,7 @@ import {
   canUserReviewEvent,
 } from '@/actions/rating.actions';
 import { ReviewModal } from '@/components/events/clientside/review-modal';
+import Image from 'next/image';
 
 interface Rating {
   id: string;
@@ -360,7 +361,11 @@ export function EventReviews({
                     <div key={review.id} className="space-y-2">
                       <div className="flex items-start gap-3">
                         {review.user.image ? (
-                          <img
+                          <Image
+                            width={32}
+                            height={32}
+                            unoptimized
+                            priority
                             src={review.user.image}
                             alt={review.user.name}
                             className="h-8 w-8 rounded-full object-cover"

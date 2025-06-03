@@ -82,7 +82,8 @@ export const MagicLinkLoginForm = () => {
             </Button>
 
             <p className="text-xs text-gray-400">
-              We'll send a secure login link to your email. No password needed!
+              We&apos;ll send a secure login link to your email. No password
+              needed!
             </p>
           </form>
         </div>

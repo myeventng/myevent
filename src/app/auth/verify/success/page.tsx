@@ -21,8 +21,8 @@ export default function VerificationSuccessPage() {
         </div>
         <h1 className="text-3xl font-bold">Email Sent</h1>
         <p className="text-gray-400 max-w-sm mx-auto">
-          We've sent a new verification link to your email address. Please check
-          your inbox and click the link to verify your account.
+          We&apos;ve sent a new verification link to your email address. Please
+          check your inbox and click the link to verify your account.
         </p>
       </div>
 

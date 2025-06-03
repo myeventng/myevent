@@ -185,7 +185,7 @@ const UserVenuesMap: React.FC<VenuesMapProps> = ({
     return (
       <div className="flex flex-col items-center justify-center text-center p-8 border rounded-lg bg-background">
         <p className="text-muted-foreground mb-4">
-          You haven't created any venues yet to display on the map.
+          You haven&apos;t created any venues yet to display on the map.
         </p>
         <Button variant="default" onClick={() => setCreateModalOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />

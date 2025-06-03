@@ -198,7 +198,7 @@ export function OrganizerProfileForm({
                     <Input placeholder="https://your-website.com" {...field} />
                   </FormControl>
                   <FormDescription>
-                    Your organization's website (optional).
+                    Your organization&apos;s website (optional).
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

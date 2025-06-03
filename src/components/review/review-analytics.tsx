@@ -17,7 +17,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+// import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RatingDisplay, CompactRating } from '@/components/ui/ratings-display';
 import {
@@ -25,6 +25,7 @@ import {
   getReviewsStats,
 } from '@/actions/admin-review-actions';
 import { toast } from 'sonner';
+import Image from 'next/image';
 
 interface AnalyticsData {
   monthlyReviews: { month: string; count: number; averageRating: number }[];
@@ -413,7 +414,9 @@ export function ReviewsAnalytics() {
                 className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg"
               >
                 {activity.user.image ? (
-                  <img
+                  <Image
+                    width={32}
+                    height={32}
                     src={activity.user.image}
                     alt={activity.user.name}
                     className="h-8 w-8 rounded-full object-cover"
@@ -452,7 +455,7 @@ export function ReviewsAnalytics() {
                       </div>
                       {activity.comment && (
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                          "{activity.comment}"
+                          &apos;{activity.comment}&apos;
                         </p>
                       )}
                     </div>

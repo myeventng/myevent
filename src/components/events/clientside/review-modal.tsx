@@ -150,7 +150,7 @@ export function ReviewModal({
             {isEditing ? 'Edit Your Review' : 'Write a Review'}
           </DialogTitle>
           <DialogDescription>
-            Share your experience with "{eventTitle}"
+            Share your experience with &apos;{eventTitle}&apos;
           </DialogDescription>
         </DialogHeader>
 

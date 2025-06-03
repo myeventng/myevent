@@ -59,7 +59,6 @@ interface CreateVenueModalProps {
   isOpen: boolean;
   onClose: () => void;
   onVenueCreated: (venue: VenueWithCity | VenueWithCityAndUser) => void;
-  cities: City[];
 }
 
 export const CreateVenueModal = ({

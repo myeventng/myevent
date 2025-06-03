@@ -276,7 +276,7 @@ export function EventSchedule({
                   />
                   <FormDescription>
                     The latest date attendees can enter the event. Leave empty
-                    if there's no late entry restriction.
+                    if there&apos;s no late entry restriction.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

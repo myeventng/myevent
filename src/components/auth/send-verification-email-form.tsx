@@ -71,8 +71,8 @@ export const SendVerificationEmailForm = () => {
       </Button>
 
       <p className="text-xs text-gray-500 text-center">
-        We'll send a new verification link to the email address associated with
-        your account.
+        We&apos;ll send a new verification link to the email address associated
+        with your account.
       </p>
     </form>
   );

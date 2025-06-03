@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { format } from 'date-fns';
+import Image from 'next/image';
 
 interface Event {
   id: string;
@@ -57,7 +58,7 @@ export const FeaturedEventsSection: React.FC<FeaturedEventsSectionProps> = ({
             Featured Events
           </h2>
           <p className="text-xl text-white/90">
-            Don't miss these amazing upcoming events
+            Don&apos;t miss these amazing upcoming events
           </p>
         </div>
 
@@ -69,7 +70,9 @@ export const FeaturedEventsSection: React.FC<FeaturedEventsSectionProps> = ({
             >
               <div className="aspect-[4/3] overflow-hidden">
                 {event.coverImageUrl ? (
-                  <img
+                  <Image
+                    width={500}
+                    height={500}
                     src={event.coverImageUrl}
                     alt={event.title}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"

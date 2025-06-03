@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
+// import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { getVenues } from '@/actions/venue-actions';
 import { getUserVenues } from '@/actions/venue-actions';
@@ -228,7 +228,7 @@ export function EventLocationDetails({
                       Create New Venue
                     </Button>
                     <span className="text-sm text-muted-foreground">
-                      Can't find your venue? Create one!
+                      Can&apos;t find your venue? Create one!
                     </span>
                   </div>
                 </div>
