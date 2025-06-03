@@ -12,13 +12,14 @@ import Link from 'next/link';
 import Image from 'next/image';
 
 interface EventReviewsPageProps {
-  params: {
+  params: Promise<{
     eventId: string;
-  };
+  }>;
 }
 
 export async function generateMetadata({ params }: EventReviewsPageProps) {
-  const eventResponse = await getEventById(params.eventId);
+  const { eventId } = await params;
+  const eventResponse = await getEventById(eventId);
 
   if (!eventResponse.success || !eventResponse.data) {
     return {
@@ -35,9 +36,10 @@ export async function generateMetadata({ params }: EventReviewsPageProps) {
 export default async function EventReviewsPage({
   params,
 }: EventReviewsPageProps) {
+  const { eventId } = await params;
   const [eventResponse, reviewsResponse] = await Promise.all([
-    getEventById(params.eventId),
-    getEventReviewsAdmin(params.eventId, 1, 50),
+    getEventById(eventId),
+    getEventReviewsAdmin(eventId, 1, 50),
   ]);
 
   if (!eventResponse.success || !eventResponse.data) {
