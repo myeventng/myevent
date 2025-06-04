@@ -131,7 +131,7 @@ const MainHeader: React.FC = () => {
             onClick={() => setMobileMenuOpen(true)}
           >
             <span className="sr-only">Open main menu</span>
-            <Menu className="h-6 w-6" aria-hidden="true" />
+            <Menu className="h-6 w-6 text-white" aria-hidden="true" />
           </button>
         </div>
 
@@ -200,7 +200,7 @@ const MainHeader: React.FC = () => {
                 className={`text-sm font-semibold leading-6 ${
                   scrolled
                     ? 'text-white hover:text-indigo-300'
-                    : 'text-gray-900 hover:text-indigo-600'
+                    : 'text-white hover:text-indigo-600'
                 }`}
               >
                 Log in

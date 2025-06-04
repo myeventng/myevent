@@ -245,7 +245,7 @@ export default function EnhancedAllEventsPage() {
           totalAttendees: Math.max(totalAttendees, 1000), // Minimum display value
         }}
         height="lg"
-        backgroundImage="/assets/images/events-hero-bg.jpg" // Add your party/events background image
+        backgroundImage="/assets/images/events-hero-bg.jpg"
       />
 
       {/* Filter Controls Section */}
