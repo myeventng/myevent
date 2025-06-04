@@ -3,9 +3,9 @@ import { TicketDetailsPage } from '@/components/tickets/ticket-details-page';
 import { getServerSideAuth } from '@/lib/auth-utils';
 
 interface TicketDetailsProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export default async function TicketDetails({ params }: TicketDetailsProps) {
@@ -13,9 +13,12 @@ export default async function TicketDetails({ params }: TicketDetailsProps) {
     roles: ['USER', 'ADMIN'],
   });
 
+  // Await the params Promise
+  const { id } = await params;
+
   return (
     <DashboardLayout session={session}>
-      <TicketDetailsPage params={params} />
+      <TicketDetailsPage params={{ id }} />
     </DashboardLayout>
   );
 }
