@@ -16,7 +16,7 @@ const authClient = createAuthClient({
     adminClient({ ac, roles }),
     customSessionClient<typeof auth>(),
     magicLinkClient(),
-    twoFactorClient(),
+    // twoFactorClient(),
   ],
 });
 
@@ -30,5 +30,5 @@ export const {
   forgetPassword,
   resetPassword,
   updateUser,
-  twoFactor,
+  // twoFactor,
 } = authClient;

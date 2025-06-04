@@ -169,19 +169,19 @@ const options = {
         });
       },
     }),
-    twoFactor({
-      issuer: 'MyEventComNg',
-      otpOptions: {
-        period: 30,
-        digits: 6,
-        algorithm: 'SHA1',
-      },
-      backupCodes: {
-        enabled: true,
-        amount: 10,
-        length: 8,
-      },
-    }),
+    // twoFactor({
+    //   issuer: 'MyEventComNg',
+    //   otpOptions: {
+    //     period: 30,
+    //     digits: 6,
+    //     // algorithm: 'SHA1',
+    //   },
+    //   backupCodes: {
+    //     enabled: true,
+    //     amount: 10,
+    //     length: 8,
+    //   },
+    // }),
   ],
 } satisfies BetterAuthOptions;
 
