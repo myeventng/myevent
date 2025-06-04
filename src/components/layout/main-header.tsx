@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useSession, signOut } from '@/lib/auth-client';
 import { Menu, X, ChevronDown, User } from 'lucide-react';
 import Image from 'next/image';
+import { Button } from '../ui/button';
 
 interface NavLink {
   name: string;
@@ -140,7 +141,7 @@ const MainHeader: React.FC = () => {
             <Link
               key={item.name}
               href={item.href}
-              className={`text-xl font-semibold leading-6 ${
+              className={`text-lg font-semibold leading-6 ${
                 scrolled
                   ? 'text-white hover:text-indigo-300'
                   : 'text-white hover:text-indigo-600'
@@ -195,16 +196,16 @@ const MainHeader: React.FC = () => {
             </div>
           ) : (
             <>
-              <Link
-                href="/auth/login"
-                className={`text-sm font-semibold leading-6 ${
-                  scrolled
-                    ? 'text-white hover:text-indigo-300'
-                    : 'text-white hover:text-indigo-600'
-                }`}
+              <Button
+                type="button"
+                onClick={() => router.push('/auth/login')}
+                size="lg"
+                variant="outline"
+                className="border-white text-white hover:bg-white/10 bg-transparent backdrop-blur-sm
+                transition-all duration-300"
               >
                 Log in
-              </Link>
+              </Button>
               <Link
                 href="/auth/register"
                 className={`rounded-md px-3.5 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${

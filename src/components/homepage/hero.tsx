@@ -150,11 +150,11 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ featuredEvents }) => {
                 <h1 className="text-4xl md:text-6xl font-bold mb-6 max-w-4xl mx-auto">
                   {event.title}
                 </h1>
-                {event.description && (
+                {/* {event.description && (
                   <p className="text-xl md:text-2xl mb-8 max-w-2xl mx-auto opacity-90">
                     {event.description}
                   </p>
-                )}
+                )} */}
 
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
                   <div className="flex items-center gap-2">
@@ -188,7 +188,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ featuredEvents }) => {
                   <Button
                     size="lg"
                     variant="outline"
-                    className="border-white text-white hover:bg-white/10"
+                    className="border-white text-white hover:bg-white/10 bg-transparent backdrop-blur-sm"
                   >
                     {event.isFree
                       ? 'Free Event'
