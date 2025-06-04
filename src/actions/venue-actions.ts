@@ -37,38 +37,45 @@ interface ActionResponse<T> {
   data?: T;
 }
 
+// Update the permission validation return type
+interface PermissionValidationResult {
+  success: boolean;
+  message?: string;
+  userId?: string;
+  isAdmin?: boolean;
+}
+
 // Validate if user has permission to manage venues
-const validateUserPermission = async () => {
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
+const validateUserPermission =
+  async (): Promise<PermissionValidationResult> => {
+    const headersList = await headers();
+    const session = await auth.api.getSession({
+      headers: headersList,
+    });
 
-  if (!session) {
+    if (!session) {
+      return {
+        success: false,
+        message: 'Not authenticated',
+      };
+    }
+
+    const { role, subRole } = session.user;
+
+    // For venues, even regular users with "organizer" subRole can create/manage venues
+    if (role !== 'ADMIN' && subRole !== 'ORGANIZER') {
+      return {
+        success: false,
+        message: 'You do not have permission to perform this action',
+      };
+    }
+
     return {
-      success: false,
-      message: 'Not authenticated',
-    };
-  }
-
-  const { role, subRole } = session.user;
-
-  // For venues, even regular users with "organizer" subRole can create/manage venues
-  if (role !== 'ADMIN' && subRole !== 'ORGANIZER') {
-    return {
-      success: false,
-      message: 'You do not have permission to perform this action',
-    };
-  }
-
-  return {
-    success: true,
-    data: {
+      success: true,
       userId: session.user.id,
       isAdmin: role === 'ADMIN',
-    },
+    };
   };
-};
 
 // Get user's own venues
 export async function getUserVenues(): Promise<ActionResponse<any[]>> {
@@ -204,10 +211,13 @@ export async function createVenue(
   // Validate user permission
   const permissionCheck = await validateUserPermission();
   if (!permissionCheck.success) {
-    return permissionCheck;
+    return {
+      success: false,
+      message: permissionCheck.message,
+    };
   }
 
-  const userId = permissionCheck.data!.userId;
+  const userId = permissionCheck.userId!;
 
   try {
     // Check if city exists
@@ -277,11 +287,14 @@ export async function updateVenue(
   // Validate user permission
   const permissionCheck = await validateUserPermission();
   if (!permissionCheck.success) {
-    return permissionCheck;
+    return {
+      success: false,
+      message: permissionCheck.message,
+    };
   }
 
-  const userId = permissionCheck.data!.userId;
-  const isAdmin = permissionCheck.data!.isAdmin;
+  const userId = permissionCheck.userId!;
+  const isAdmin = permissionCheck.isAdmin!;
 
   try {
     // Check if venue exists
@@ -369,11 +382,14 @@ export async function deleteVenue(id: string): Promise<ActionResponse<null>> {
   // Validate user permission
   const permissionCheck = await validateUserPermission();
   if (!permissionCheck.success) {
-    return permissionCheck;
+    return {
+      success: false,
+      message: permissionCheck.message,
+    };
   }
 
-  const userId = permissionCheck.data!.userId;
-  const isAdmin = permissionCheck.data!.isAdmin;
+  const userId = permissionCheck.userId!;
+  const isAdmin = permissionCheck.isAdmin!;
 
   try {
     // Check if venue exists
@@ -420,6 +436,7 @@ export async function deleteVenue(id: string): Promise<ActionResponse<null>> {
     return {
       success: true,
       message: 'Venue deleted successfully',
+      data: null,
     };
   } catch (error) {
     console.error('Error deleting venue:', error);
