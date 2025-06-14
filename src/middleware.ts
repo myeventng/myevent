@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 
 const protectedRoutes = ['/dashboard', '/admin'];
 const authRoutes = [
@@ -19,12 +18,31 @@ export async function middleware(req: NextRequest) {
   const pathname = nextUrl.pathname;
 
   try {
-    // Validate the session using better-auth
-    const session = await auth.api.getSession({
-      headers: req.headers,
-    });
+    // Use fetch to validate session instead of importing auth directly
+    const sessionResponse = await fetch(
+      new URL('/api/auth/get-session', req.url),
+      {
+        method: 'GET',
+        headers: {
+          cookie: req.headers.get('cookie') || '',
+          'x-forwarded-for': req.headers.get('x-forwarded-for') || '',
+          'user-agent': req.headers.get('user-agent') || '',
+        },
+        cache: 'no-store', // Prevent caching of session checks
+      }
+    );
+
+    let session = null;
+    if (sessionResponse.ok) {
+      try {
+        session = await sessionResponse.json();
+      } catch (e) {
+        console.error('Failed to parse session response:', e);
+      }
+    }
 
     const isLoggedIn = !!session?.user;
+
     const isOnProtectedRoute = protectedRoutes.some((route) =>
       pathname.startsWith(route)
     );
@@ -32,13 +50,14 @@ export async function middleware(req: NextRequest) {
       pathname.startsWith(route)
     );
 
-    console.log('Middleware Debug:', {
-      pathname,
-      isLoggedIn,
-      isOnProtectedRoute,
-      isOnAuthRoute,
-      userId: session?.user?.id,
-    });
+    // console.log('Middleware Debug:', {
+    //   pathname,
+    //   isLoggedIn,
+    //   isOnProtectedRoute,
+    //   isOnAuthRoute,
+    //   userId: session?.user?.id,
+    //   sessionResponseStatus: sessionResponse.status,
+    // });
 
     // Redirect to login if accessing protected routes without valid session
     if (isOnProtectedRoute && !isLoggedIn) {

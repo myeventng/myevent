@@ -33,10 +33,9 @@ const navigation: NavLink[] = [
   {
     name: 'Create Event',
     href: '/events/create',
-    requiresAuth: true,
-    roles: ['ORGANIZER', 'ADMIN'],
+    // requiresAuth: true,
+    // roles: ['ORGANIZER', 'ADMIN'],
   },
-  { name: 'Dashboard', href: '/dashboard', requiresAuth: true },
 ];
 
 const MainHeader: React.FC = () => {
