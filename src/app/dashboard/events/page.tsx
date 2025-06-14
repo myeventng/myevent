@@ -1,13 +1,19 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { OrganizerEventsTable } from '@/components/organizer/organizer-events-table';
 import { getUserEvents } from '@/actions/event.actions';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
+import { redirect } from 'next/navigation';
 
 export default async function OrganizerEvents() {
   const session = await getServerSideAuth({
     roles: ['USER', 'ADMIN'], // Allow users and admins
     subRoles: ['ORGANIZER', 'STAFF', 'SUPER_ADMIN'], // But only organizers and admin roles
   });
+
+  if (!session) {
+    console.log('No session found, redirecting to unauthorized');
+    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+  }
 
   // Fetch user's events
   const response = await getUserEvents();

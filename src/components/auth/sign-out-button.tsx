@@ -12,23 +12,47 @@ export const SignOutButton = ({ className }: { className?: string }) => {
   const router = useRouter();
 
   async function handleClick() {
-    await signOut({
-      fetchOptions: {
-        onRequest: () => {
-          setIsPending(true);
+    setIsPending(true);
+
+    try {
+      await signOut({
+        fetchOptions: {
+          onError: (ctx) => {
+            toast.error(ctx.error.message);
+            setIsPending(false);
+          },
+          onSuccess: () => {
+            // Clear all storage
+            if (typeof window !== 'undefined') {
+              localStorage.clear();
+              sessionStorage.clear();
+
+              // Clear all cookies by setting them to expire
+              document.cookie.split(';').forEach((c) => {
+                const eqPos = c.indexOf('=');
+                const name = eqPos > -1 ? c.substr(0, eqPos) : c;
+                document.cookie =
+                  name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+                document.cookie =
+                  name +
+                  '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' +
+                  window.location.hostname;
+              });
+            }
+
+            toast.success("You've logged out. See you soon!");
+            setIsPending(false);
+            router.push('/auth/login');
+            // Force a hard refresh to ensure all state is cleared
+            window.location.reload();
+          },
         },
-        onResponse: () => {
-          setIsPending(false);
-        },
-        onError: (ctx) => {
-          toast.error(ctx.error.message);
-        },
-        onSuccess: () => {
-          toast.success('You’ve logged out. See you soon!');
-          router.push('/auth/login');
-        },
-      },
-    });
+      });
+    } catch (error) {
+      console.error('Sign out error:', error);
+      toast.error('Failed to sign out. Please try again.');
+      setIsPending(false);
+    }
   }
 
   return (
@@ -39,7 +63,7 @@ export const SignOutButton = ({ className }: { className?: string }) => {
       disabled={isPending}
       className={twMerge('', className)}
     >
-      Sign out
+      {isPending ? 'Signing out...' : 'Sign out'}
     </Button>
   );
 };

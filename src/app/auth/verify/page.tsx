@@ -2,7 +2,7 @@ import { SendVerificationEmailForm } from '@/components/auth/send-verification-e
 import Link from 'next/link';
 import { ArrowLeftIcon, AlertCircle } from 'lucide-react';
 import { redirect } from 'next/navigation';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
 
 interface PageProps {
   searchParams: Promise<{ error: string }>;
@@ -16,22 +16,28 @@ export default async function VerifyEmailPage({ searchParams }: PageProps) {
     try {
       // If no error, get user session to determine where to redirect
       const session = await getServerSideAuth();
-      const userRole = session.user.role;
-      const userSubRole = session.user.subRole;
 
-      // Redirect based on user role
-      if (
-        userRole === 'ADMIN' &&
-        (userSubRole === 'STAFF' || userSubRole === 'SUPER_ADMIN')
-      ) {
-        redirect('/admin/dashboard');
-      } else if (
-        userRole === 'USER' &&
-        (userSubRole === 'ORDINARY' || userSubRole === 'ORGANIZER')
-      ) {
-        redirect('/dashboard');
+      if (session && session.user) {
+        const userRole = session.user.role;
+        const userSubRole = session.user.subRole;
+
+        // Redirect based on user role
+        if (
+          userRole === 'ADMIN' &&
+          (userSubRole === 'STAFF' || userSubRole === 'SUPER_ADMIN')
+        ) {
+          redirect('/admin/dashboard');
+        } else if (
+          userRole === 'USER' &&
+          (userSubRole === 'ORDINARY' || userSubRole === 'ORGANIZER')
+        ) {
+          redirect('/dashboard');
+        } else {
+          // Fallback for any other role combination
+          redirect('/events');
+        }
       } else {
-        // Fallback for any other role combination
+        // If session or user is null, redirect to events
         redirect('/events');
       }
     } catch (error) {

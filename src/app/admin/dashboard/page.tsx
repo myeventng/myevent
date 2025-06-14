@@ -1,7 +1,7 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { StatsCard } from '@/components/stats-card';
-import { isSuperAdmin } from '@/lib/client-auth-utils';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
+import { isSuperAdmin } from '@/lib/auth-utils';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -22,6 +22,7 @@ import {
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 export default async function AdminDashboardPage() {
   const session = await getServerSideAuth({
@@ -29,7 +30,12 @@ export default async function AdminDashboardPage() {
     subRoles: ['STAFF', 'SUPER_ADMIN'], // Allow only STAFF and SUPER_ADMIN subroles
   });
 
-  // Check if the user is a super admin for certain privileged actions
+  if (!session) {
+    console.log('No session found, redirecting to login');
+    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+  }
+
+  // Use server-side function
   const isUserSuperAdmin = isSuperAdmin(session.user);
 
   return (

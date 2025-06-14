@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { EditEventForm } from '@/components/events/edit-event-form';
 import { getEventById } from '@/actions/event.actions';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
 
 interface AdminEditEventPageProps {
   params: Promise<{
@@ -17,6 +17,11 @@ export default async function AdminEditEventPage({
     roles: ['ADMIN'],
     subRoles: ['STAFF', 'SUPER_ADMIN'],
   });
+
+  if (!session) {
+    console.log('No session found, redirecting to unauthorized');
+    notFound(); // Redirect to unauthorized page if no session
+  }
 
   // Fetch the event
   const { id } = await params;

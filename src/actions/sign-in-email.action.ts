@@ -13,14 +13,17 @@ export async function signInEmailAction(formData: FormData) {
   if (!password) return { error: 'Please enter your password' };
 
   try {
-    await auth.api.signInEmail({
+    const result = await auth.api.signInEmail({
       headers: await headers(),
       body: {
         email,
         password,
       },
     });
-    return { error: null };
+
+    // If successful, the session will be automatically set via cookies
+    // No need to manually store in localStorage on server side
+    return { error: null, success: true };
   } catch (err) {
     if (err instanceof APIError) {
       const errCode = err.body ? (err.body.code as ErrorCode) : 'UNKNOWN';

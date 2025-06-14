@@ -1,16 +1,20 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Badge } from '@/components/ui/badge';
-import { isSuperAdmin } from '@/lib/client-auth-utils';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
+import { isSuperAdmin } from '@/lib/auth-utils';
 import { CategoriesTable } from '@/components/categories/categories-table';
 import { getCategories } from '@/actions/category-actions';
+import { redirect } from 'next/navigation';
 
 export default async function Categories() {
   const session = await getServerSideAuth({
     roles: ['ADMIN'], // Allow only ADMIN role
     subRoles: ['STAFF', 'SUPER_ADMIN'], // Allow only STAFF and SUPER_ADMIN subroles
   });
-
+  if (!session) {
+    console.log('No session found, redirecting to login');
+    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+  }
   const isUserSuperAdmin = isSuperAdmin(session.user);
 
   // Fetch categories from database

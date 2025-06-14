@@ -1,4 +1,4 @@
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -11,9 +11,15 @@ import {
   Ticket,
   Users,
 } from 'lucide-react';
+import { redirect } from 'next/navigation';
 
 export default async function BecomeOrganizerPage() {
   const session = await getServerSideAuth();
+
+  if (!session) {
+    console.log('No session found, redirecting to unauthorized');
+    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+  }
 
   return (
     <DashboardLayout session={session}>

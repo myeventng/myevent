@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 // import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { isSuperAdmin } from '@/lib/client-auth-utils';
-import { AuthUser } from '@/lib/auth-utils';
+import { AuthUser } from '@/lib/auth-client';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -54,6 +53,8 @@ import { BanUserDialog } from '@/components/admin/ban-user-dialog';
 import { UnbanUserDialog } from '@/components/admin/unban-user-dialog';
 import { CreateUserDialog } from '@/components/admin/create-user-dialog';
 import { UserRoleDialog } from '@/components/admin/user-role-dialog';
+import { isSuperAdmin } from '@/lib/auth-utils';
+
 // import { toast } from 'sonner';
 
 // Updated interface to match Prisma schema exactly
@@ -94,8 +95,19 @@ export default function UsersPage({ initialUsers, session }: UsersPageProps) {
   const [unbanUserOpen, setUnbanUserOpen] = useState(false);
   const [userRoleOpen, setUserRoleOpen] = useState(false);
 
-  const isUserSuperAdmin = isSuperAdmin(session.user);
+  const [isUserSuperAdmin, setIsUserSuperAdmin] = useState(false);
   // const isUserStaff = session.user.subRole === 'STAFF';
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      const result = isSuperAdmin(session.user);
+      if (isMounted) setIsUserSuperAdmin(result);
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [session.user]);
 
   // Apply filters when filter states change
   useEffect(() => {

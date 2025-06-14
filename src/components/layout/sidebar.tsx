@@ -1,7 +1,7 @@
 'use client';
 
-import { AuthUser } from '@/lib/auth-utils';
-import { isAdmin, isOrganizer } from '@/lib/client-auth-utils';
+import { AuthUser } from '@/lib/auth-client';
+import { isOrganizer } from '@/lib/auth-client';
 import { cn } from '@/lib/utils';
 import {
   BarChart3,

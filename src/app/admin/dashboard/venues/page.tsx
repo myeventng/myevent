@@ -1,7 +1,8 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Badge } from '@/components/ui/badge';
-import { isSuperAdmin } from '@/lib/client-auth-utils';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
+import { isSuperAdmin } from '@/lib/auth-utils';
+import { redirect } from 'next/navigation';
 import { AdminVenuesTable } from '@/components/venue/venues-table';
 import { getVenues } from '@/actions/venue-actions';
 import { getCities } from '@/actions/city-actions';
@@ -14,6 +15,11 @@ export default async function Venues() {
     roles: ['ADMIN'], // Allow ADMIN role
     subRoles: ['ORGANIZER', 'STAFF', 'SUPER_ADMIN'], // Allow these subroles
   });
+
+  if (!session) {
+    console.log('No session found, redirecting to unauthorized');
+    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+  }
 
   const isUserSuperAdmin = isSuperAdmin(session.user);
 

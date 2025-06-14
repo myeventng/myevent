@@ -2,12 +2,12 @@
 
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { EditBlogWrapper } from '@/components/blog/edit-blog-wrapper';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
+import { isSuperAdmin } from '@/lib/auth-utils';
 import { getBlogCategories } from '@/actions/blog-actions';
 import { Badge } from '@/components/ui/badge';
-import { isSuperAdmin } from '@/lib/client-auth-utils';
 import { prisma } from '@/lib/prisma';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
 interface EditBlogPageProps {
   params: Promise<{
@@ -44,6 +44,11 @@ export default async function EditBlogPage({ params }: EditBlogPageProps) {
     roles: ['ADMIN'],
     subRoles: ['STAFF', 'SUPER_ADMIN'],
   });
+
+  if (!session) {
+    console.log('No session found, redirecting to login');
+    redirect('/unauthorized');
+  }
 
   const isUserSuperAdmin = isSuperAdmin(session.user);
 

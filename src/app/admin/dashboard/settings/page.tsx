@@ -1,6 +1,7 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { isSuperAdmin } from '@/lib/client-auth-utils';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
+import { isSuperAdmin } from '@/lib/auth-utils';
+import { redirect } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 
 export default async function Settings() {
@@ -8,6 +9,10 @@ export default async function Settings() {
     roles: ['ADMIN'], // Allow only ADMIN role
     subRoles: ['STAFF', 'SUPER_ADMIN'], // Allow only STAFF and SUPER_ADMIN subroles
   });
+  if (!session) {
+    console.log('No session found, redirecting to unauthorized');
+    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+  }
   const isUserSuperAdmin = isSuperAdmin(session.user);
   return (
     <DashboardLayout session={session}>

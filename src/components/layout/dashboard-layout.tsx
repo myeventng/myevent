@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Sidebar } from './sidebar';
 import { Header } from './header';
-import { AuthSession } from '@/lib/auth-utils';
+import { AuthSession } from '@/lib/auth-client';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;

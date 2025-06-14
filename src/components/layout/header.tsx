@@ -1,4 +1,4 @@
-import { AuthUser } from '@/lib/auth-utils';
+import { AuthUser, getProfileUrl, getSettingsUrl } from '@/lib/auth-client';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -25,8 +25,6 @@ export function Header({ user, onMobileToggle }: HeaderProps) {
     .map((n) => n[0])
     .join('')
     .toUpperCase();
-  const profilePath =
-    user.role === 'ADMIN' ? '/admin/dashboard/profile' : '/dashboard/profile';
 
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between h-16 px-4 bg-white border-b border-gray-200">
@@ -70,20 +68,13 @@ export function Header({ user, onMobileToggle }: HeaderProps) {
             </DropdownMenuItem>
 
             <DropdownMenuItem asChild>
-              <Link href={profilePath} className="cursor-pointer">
+              <Link href={getProfileUrl(user)} className="cursor-pointer">
                 <User className="mr-2 h-4 w-4" />
                 <span>Profile</span>
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link
-                href={
-                  user.role === 'ADMIN'
-                    ? '/admin/dashboard/settings'
-                    : '/dashboard/settings'
-                }
-                className="cursor-pointer"
-              >
+              <Link href={getSettingsUrl(user)} className="cursor-pointer">
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Settings</span>
               </Link>

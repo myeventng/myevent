@@ -4,17 +4,23 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
-import { isSuperAdmin } from '@/lib/client-auth-utils';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
+import { isSuperAdmin } from '@/lib/auth-utils';
 import { BlogTable } from '@/components/blog/blog-table';
 import { getBlogs, getBlogCategories } from '@/actions/blog-actions';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 export default async function BlogsPage() {
   const session = await getServerSideAuth({
     roles: ['ADMIN'],
     subRoles: ['STAFF', 'SUPER_ADMIN'],
   });
+
+  if (!session) {
+    console.log('No session found, redirecting to login');
+    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+  }
 
   const isUserSuperAdmin = isSuperAdmin(session.user);
 

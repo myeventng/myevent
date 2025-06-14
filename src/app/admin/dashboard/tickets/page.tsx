@@ -1,6 +1,7 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { AdminTicketsTable } from '@/components/admin/admin-tickets-table';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
+import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 
 export default async function AdminTickets() {
@@ -8,6 +9,11 @@ export default async function AdminTickets() {
     roles: ['ADMIN'], // Only allow admins
     subRoles: ['STAFF', 'SUPER_ADMIN'], // Allow only STAFF and SUPER_ADMIN subroles
   });
+
+  if (!session) {
+    console.log('No session found, redirecting to unauthorized');
+    redirect('/unauthorized');
+  }
 
   // Fetch all tickets with related data
   const tickets = await prisma.ticket.findMany({

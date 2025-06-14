@@ -1,6 +1,8 @@
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
 import { redirect } from 'next/navigation';
 import { ReactNode } from 'react';
+
+
 
 interface RoleGuardProps {
   children: ReactNode;
@@ -16,6 +18,11 @@ export async function RoleGuard({
   requireOrganizer = false,
 }: RoleGuardProps) {
   const session = await getServerSideAuth();
+
+  if (!session || !session.user) {
+    redirect('/unauthorized');
+    return null;
+  }
 
   const userRole = session.user.role;
   const userSubRole = session.user.subRole;

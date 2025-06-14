@@ -1,12 +1,18 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { CreateEventForm } from '@/components/events/create-event-form';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
+import { redirect } from 'next/navigation';
 
 export default async function AdminCreateEvent() {
   const session = await getServerSideAuth({
     roles: ['ADMIN'],
     subRoles: ['STAFF', 'SUPER_ADMIN'],
   });
+
+  if (!session) {
+    console.log('No session found, redirecting to unauthorized');
+    redirect('/unauthorized'); // Handle unauthorized access appropriately
+  }
 
   return (
     <DashboardLayout session={session}>

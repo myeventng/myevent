@@ -1,6 +1,5 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { isSuperAdmin } from '@/lib/client-auth-utils';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -13,11 +12,13 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UpdateUserForm } from '@/components/auth/update-user-form';
 import { ChangePasswordForm } from '@/components/auth/change-password-form';
+import { isSuperAdmin } from '@/lib/auth-utils';
 // import { TwoFactorAuthForm } from '@/components/auth/two-factor-auth-form';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Shield } from 'lucide-react';
+import { redirect } from 'next/navigation';
 // import { get2FAStatusAction } from '@/actions/two-factor-auth-actions';
 
 export default async function AdminProfilePage() {
@@ -25,6 +26,11 @@ export default async function AdminProfilePage() {
     roles: ['ADMIN'], // Allow only ADMIN role
     subRoles: ['STAFF', 'SUPER_ADMIN'], // Allow only STAFF and SUPER_ADMIN subroles
   });
+
+  if (!session) {
+    console.log('No session found, redirecting to unauthorized');
+    return redirect('/unauthorized'); // Redirect to unauthorized page if no session
+  }
 
   const isUserSuperAdmin = isSuperAdmin(session.user);
   const initials = session.user.name

@@ -1,14 +1,35 @@
+'use client';
+
+import { createAuthClient } from 'better-auth/react';
 import {
   inferAdditionalFields,
   adminClient,
   customSessionClient,
   magicLinkClient,
-  twoFactorClient,
 } from 'better-auth/client/plugins';
-import { createAuthClient } from 'better-auth/react';
 import type { auth } from '@/lib/auth';
 import { ac, roles } from '@/lib/permissions';
 
+// Import shared types and utilities
+export type {
+  RoleType,
+  SubRoleType,
+  AuthUser,
+  AuthSession,
+} from './auth-types';
+export {
+  isAdmin,
+  isOrganizer,
+  isOrdinaryUser,
+  isSuperAdmin,
+  getDashboardUrl,
+  getProfileUrl,
+  getSettingsUrl,
+  convertSessionUser,
+  filterNavigation,
+} from './auth-utils';
+
+// Auth Client
 const authClient = createAuthClient({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
   plugins: [
@@ -16,10 +37,10 @@ const authClient = createAuthClient({
     adminClient({ ac, roles }),
     customSessionClient<typeof auth>(),
     magicLinkClient(),
-    // twoFactorClient(),
   ],
 });
 
+// Export all auth functions
 export const {
   signIn,
   signUp,
@@ -30,5 +51,4 @@ export const {
   forgetPassword,
   resetPassword,
   updateUser,
-  // twoFactor,
 } = authClient;

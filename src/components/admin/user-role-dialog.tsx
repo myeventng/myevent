@@ -22,7 +22,7 @@ import {
 import { changeUserRoleAction } from '@/actions/change-user-role-action';
 import { toast } from 'sonner';
 import { UserRole, UserSubRole } from '@/generated/prisma';
-import { AuthUser } from '@/lib/auth-utils';
+import { AuthUser } from '@/lib/auth-client';
 
 interface UserRoleDialogProps {
   isOpen: boolean;

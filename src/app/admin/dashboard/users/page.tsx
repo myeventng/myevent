@@ -1,9 +1,11 @@
 // pages/admin/users/page.tsx (or wherever your server component is)
 
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
 import { prisma } from '@/lib/prisma';
 import UsersPage from '@/components/admin/user-page';
+import { redirect } from 'next/navigation';
+
 
 export default async function AdminUsersPage() {
   // Get authenticated session with proper admin role checking
@@ -11,6 +13,10 @@ export default async function AdminUsersPage() {
     roles: ['ADMIN'], // Allow only ADMIN role
     subRoles: ['STAFF', 'SUPER_ADMIN'], // Allow only STAFF and SUPER_ADMIN subroles
   });
+  if (!session) {
+    console.log('No session found, redirecting to unauthorized');
+    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+  }
 
   // Fetch users from database
   const users = await prisma.user.findMany({

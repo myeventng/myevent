@@ -1,12 +1,18 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { getServerSideAuth } from '@/lib/auth-utils';
-import { isOrganizer } from '@/lib/client-auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
+import { isOrganizer } from '@/lib/auth-client';
 import { Badge } from '@/components/ui/badge';
+import {redirect } from 'next/navigation';
 
 export default async function Settings() {
   const session = await getServerSideAuth({
     roles: ['USER'], // Allow only USER role
   });
+
+  if (!session) {
+    console.log('No session found, redirecting to unauthorized');
+    redirect('/unauthorized'); 
+  }
   const isUserOrganizer = isOrganizer(session.user);
   const initials = session.user.name
     .split(' ')

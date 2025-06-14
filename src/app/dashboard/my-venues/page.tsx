@@ -1,10 +1,11 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Badge } from '@/components/ui/badge';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
 import { getUserVenues } from '@/actions/venue-actions';
 import { VenueWithCityAndUser } from '@/types';
 import { getCities } from '@/actions/city-actions';
 import { ClientSideVenuesWrapper } from '@/components/venue/user-client-side-venues-wrapper';
+import { redirect } from 'next/navigation';
 
 export default async function MyVenuesPage() {
   // Get the authenticated session
@@ -13,6 +14,11 @@ export default async function MyVenuesPage() {
     roles: ['USER', 'ADMIN'],
     subRoles: ['ORGANIZER'],
   });
+
+  if (!session) {
+    console.log('No session found, redirecting to unauthorized');
+    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+  }
 
   // Fetch user's venues and cities from database
   const venuesResponse = await getUserVenues();

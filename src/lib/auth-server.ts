@@ -1,29 +1,14 @@
-import { ReactNode } from 'react';
+'use server';
+
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-
-type RoleType = 'ADMIN' | 'USER';
-type SubRoleType = 'ORDINARY' | 'ORGANIZER' | 'STAFF' | 'SUPER_ADMIN';
-
-export interface AuthUser {
-  id: string;
-  name: string;
-  email: string;
-  image?: string;
-  createdAt: Date;
-  role: RoleType;
-  subRole: SubRoleType;
-}
-
-export interface AuthSession {
-  user: AuthUser;
-  session: {
-    expiresAt: Date;
-    token: string;
-    userAgent?: string;
-  };
-}
+import type {
+  RoleType,
+  SubRoleType,
+  AuthUser,
+  AuthSession,
+} from './auth-types';
 
 /**
  * Server component utility to get the authenticated user
@@ -34,23 +19,17 @@ export async function getServerSideAuth(options?: {
   subRoles?: SubRoleType[];
   skipRedirect?: boolean;
 }): Promise<AuthSession | null> {
-  console.log('[getServerSideAuth] Getting headers');
   const headersList = await headers();
 
   try {
-    console.log('[getServerSideAuth] Getting session from API');
     const session = await auth.api.getSession({
       headers: headersList,
     });
 
-    console.log('[getServerSideAuth] Session result:', !!session);
-
     if (!session) {
       if (options?.skipRedirect) {
-        console.log('[getServerSideAuth] No session, but skipRedirect is true');
         return null;
       }
-      console.log('[getServerSideAuth] No session, redirecting to login');
       redirect('/auth/login');
     }
 
@@ -72,7 +51,24 @@ export async function getServerSideAuth(options?: {
       }
     }
 
-    return session as AuthSession;
+    // Convert session to match our AuthSession type
+    return {
+      user: {
+        id: session.user.id,
+        name: session.user.name,
+        email: session.user.email,
+        image: session.user.image || undefined, // Convert null to undefined
+        createdAt: session.user.createdAt,
+        role: session.user.role as RoleType,
+        subRole: session.user.subRole as SubRoleType,
+        giraffeFact: session.user.giraffeFact,
+      },
+      session: {
+        expiresAt: session.session.expiresAt,
+        token: session.session.token,
+        userAgent: session.session.userAgent,
+      },
+    } as AuthSession;
   } catch (error) {
     console.error('[getServerSideAuth] Error:', error);
     if (options?.skipRedirect) {

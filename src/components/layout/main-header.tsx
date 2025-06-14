@@ -1,9 +1,20 @@
 'use client';
+
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { useSession, signOut } from '@/lib/auth-client';
+import {
+  useSession,
+  signOut,
+  filterNavigation,
+  getDashboardUrl,
+  getProfileUrl,
+  isAdmin,
+  isSuperAdmin,
+  convertSessionUser,
+  type AuthUser,
+} from '@/lib/auth-client';
 import { Menu, X, ChevronDown, User } from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '../ui/button';
@@ -23,31 +34,34 @@ const navigation: NavLink[] = [
     name: 'Create Event',
     href: '/events/create',
     requiresAuth: true,
-    roles: ['organizer', 'admin'],
+    roles: ['ORGANIZER', 'ADMIN'],
   },
   { name: 'Dashboard', href: '/dashboard', requiresAuth: true },
 ];
 
 const MainHeader: React.FC = () => {
-  const { data: session } = useSession();
+  const { data: session, isPending, error } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [isPending, setIsPending] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const router = useRouter();
 
-  const userRole = session?.user?.role || '';
-  const userSubRole = session?.user?.subRole || '';
-  const isAdmin = userRole === 'ADMIN';
+  // Convert session user to AuthUser for type safety
+  const authUser: AuthUser | undefined = session?.user
+    ? convertSessionUser(session.user)
+    : undefined;
 
-  // Helper function to get dashboard URL based on user role
-  const getDashboardUrl = () => {
-    return isAdmin ? '/admin/dashboard' : '/dashboard';
-  };
-
-  // Helper function to get profile URL based on user role
-  const getProfileUrl = () => {
-    return isAdmin ? '/admin/dashboard/profile' : '/dashboard/profile';
-  };
+  // Debug logging
+  useEffect(() => {
+    console.log('=== HEADER DEBUG ===');
+    console.log('Session:', session);
+    console.log('AuthUser:', authUser);
+    console.log('isPending:', isPending);
+    console.log('Error:', error);
+    console.log('User Role:', authUser?.role);
+    console.log('User SubRole:', authUser?.subRole);
+    console.log('===================');
+  }, [session, authUser, isPending, error]);
 
   // Handle scroll event to change header appearance
   useEffect(() => {
@@ -58,49 +72,97 @@ const MainHeader: React.FC = () => {
       }
     };
 
-    // Add scroll event listener
     window.addEventListener('scroll', handleScroll);
-
-    // Remove event listener on cleanup
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-    };
+    return () => window.removeEventListener('scroll', handleScroll);
   }, [scrolled]);
 
-  const handleLogout = () => {
-    signOut({
-      fetchOptions: {
-        onRequest: () => {
-          setIsPending(true);
-        },
-        onResponse: () => {
-          setIsPending(false);
-        },
-        onError: (ctx) => {
-          toast.error(ctx.error.message);
-        },
+  const handleLogout = async () => {
+    setIsSigningOut(true);
 
-        onSuccess: () => {
-          toast.success("You've logged out. See you soon!");
-          router.push('/auth/login');
+    try {
+      await signOut({
+        fetchOptions: {
+          onError: (ctx) => {
+            console.error('Logout error:', ctx.error);
+            toast.error(ctx.error.message);
+            setIsSigningOut(false);
+          },
+          onSuccess: () => {
+            console.log('Logout successful');
+            // Clear all storage
+            if (typeof window !== 'undefined') {
+              localStorage.clear();
+              sessionStorage.clear();
+
+              // Clear all cookies by setting them to expire
+              document.cookie.split(';').forEach((c) => {
+                const eqPos = c.indexOf('=');
+                const name = eqPos > -1 ? c.substr(0, eqPos) : c;
+                document.cookie =
+                  name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+                document.cookie =
+                  name +
+                  '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' +
+                  window.location.hostname;
+              });
+            }
+
+            toast.success("You've logged out. See you soon!");
+            setIsSigningOut(false);
+            router.push('/auth/login');
+            // Force a hard refresh to ensure all state is cleared
+            window.location.reload();
+          },
         },
-      },
-    });
+      });
+    } catch (error) {
+      console.error('Sign out error:', error);
+      setIsSigningOut(false);
+    }
   };
 
+  // Update navigation with dynamic dashboard URL
   const updatedNavigation = navigation.map((item) => {
-    if (item.name === 'Dashboard' && item.href === '/dashboard') {
-      return { ...item, href: getDashboardUrl() };
+    if (item.name === 'Dashboard' && item.href === '/dashboard' && authUser) {
+      return {
+        ...item,
+        href: getDashboardUrl(authUser),
+      };
     }
     return item;
   });
 
-  const filteredNav = updatedNavigation.filter((item) => {
-    if (!item.requiresAuth) return true;
-    if (!session) return false;
-    if (!item.roles) return true;
-    return item.roles.includes(userSubRole) || item.roles.includes(userRole);
-  });
+  // Filter navigation based on user session and roles
+  const filteredNav = authUser
+    ? filterNavigation(updatedNavigation, authUser)
+    : updatedNavigation.filter((item) => !item.requiresAuth);
+
+  // Show loading state during pending
+  if (isPending) {
+    return (
+      <header
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+          scrolled ? 'bg-black/50 backdrop-blur-lg shadow-lg' : 'bg-transparent'
+        }`}
+      >
+        <nav className="mx-auto flex max-w-7xl items-center justify-between p-4 lg:px-8">
+          <div className="flex lg:flex-1">
+            <Link href="/" className="-m-1.5 p-1.5">
+              <Image
+                src="/assets/icons/logo-myevent.png"
+                alt="myevent.com.ng Logo"
+                width={200}
+                height={80}
+              />
+            </Link>
+          </div>
+          <div className="hidden lg:flex lg:flex-1 lg:justify-end">
+            <div className="text-white">Loading...</div>
+          </div>
+        </nav>
+      </header>
+    );
+  }
 
   return (
     <header
@@ -152,45 +214,53 @@ const MainHeader: React.FC = () => {
           ))}
         </div>
 
+        {/* Debug info - Remove in production */}
+        {process.env.NODE_ENV === 'development' && authUser && (
+          <div className="hidden lg:flex text-xs text-white bg-red-500 px-2 py-1 rounded">
+            {authUser.role}:{authUser.subRole}
+          </div>
+        )}
+
         <div className="hidden lg:flex lg:flex-1 lg:justify-end lg:gap-x-4">
-          {session ? (
+          {authUser ? (
             <div className="relative group">
               <button className="flex items-center text-sm font-semibold leading-6 group text-white">
                 <User className="h-5 w-5 mr-1" />
-                {session.user?.name || 'User'}
+                {authUser.name || 'User'}
                 <ChevronDown className="h-4 w-4 ml-1" />
               </button>
               <div className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
                 <div className="px-4 py-2 border-b">
                   <p className="text-sm font-medium text-gray-900">
-                    {session.user?.name}
+                    {authUser.name}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {userSubRole
+                    {authUser.subRole
                       ? `${
-                          userSubRole.charAt(0).toUpperCase() +
-                          userSubRole.slice(1)
+                          authUser.subRole.charAt(0).toUpperCase() +
+                          authUser.subRole.slice(1)
                         }`
-                      : userRole}
+                      : authUser.role}
                   </p>
                 </div>
                 <Link
-                  href={getProfileUrl()}
+                  href={getProfileUrl(authUser)}
                   className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                 >
                   Profile
                 </Link>
                 <Link
-                  href={getDashboardUrl()}
+                  href={getDashboardUrl(authUser)}
                   className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                 >
                   Dashboard
                 </Link>
                 <button
                   onClick={handleLogout}
-                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  disabled={isSigningOut}
+                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
                 >
-                  Sign out
+                  {isSigningOut ? 'Signing out...' : 'Sign out'}
                 </button>
               </div>
             </div>
@@ -201,8 +271,7 @@ const MainHeader: React.FC = () => {
                 onClick={() => router.push('/auth/login')}
                 size="lg"
                 variant="outline"
-                className="border-white text-white hover:bg-white/10 bg-transparent backdrop-blur-sm
-                transition-all duration-300"
+                className="border-white text-white hover:bg-white/10 bg-transparent backdrop-blur-sm transition-all duration-300"
               >
                 Log in
               </Button>
@@ -254,24 +323,23 @@ const MainHeader: React.FC = () => {
                   ))}
                 </div>
                 <div className="py-6">
-                  {session ? (
+                  {authUser ? (
                     <>
                       <Link
-                        href={getProfileUrl()}
+                        href={getProfileUrl(authUser)}
                         className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10"
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         Profile
                       </Link>
                       <Link
-                        href={getDashboardUrl()}
+                        href={getDashboardUrl(authUser)}
                         className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10"
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         Dashboard
                       </Link>
-                      {(userSubRole === 'SUPER_ADMIN' ||
-                        userRole === 'ADMIN') && (
+                      {(isSuperAdmin(authUser) || isAdmin(authUser)) && (
                         <Link
                           href="/admin/dashboard"
                           className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10"
@@ -285,9 +353,10 @@ const MainHeader: React.FC = () => {
                           handleLogout();
                           setMobileMenuOpen(false);
                         }}
-                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10 w-full text-left"
+                        disabled={isSigningOut}
+                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10 w-full text-left disabled:opacity-50"
                       >
-                        Sign out
+                        {isSigningOut ? 'Signing out...' : 'Sign out'}
                       </button>
                     </>
                   ) : (

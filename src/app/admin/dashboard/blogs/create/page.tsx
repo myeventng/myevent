@@ -1,15 +1,21 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { CreateBlogWrapper } from '@/components/blog/create-blog-wrapper';
-import { getServerSideAuth } from '@/lib/auth-utils';
 import { getBlogCategories } from '@/actions/blog-actions';
 import { Badge } from '@/components/ui/badge';
-import { isSuperAdmin } from '@/lib/client-auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
+import { isSuperAdmin } from '@/lib/auth-utils';
+import { redirect } from 'next/navigation';
 
 export default async function CreateBlogPage() {
   const session = await getServerSideAuth({
     roles: ['ADMIN'],
     subRoles: ['STAFF', 'SUPER_ADMIN'],
   });
+
+  if (!session) {
+    console.log('No session found, redirecting unauthorized');
+    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+  }
 
   const isUserSuperAdmin = isSuperAdmin(session.user);
 

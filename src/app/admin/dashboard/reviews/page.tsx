@@ -1,13 +1,14 @@
 // app/admin/dashboard/reviews/page.tsx
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Badge } from '@/components/ui/badge';
-import { isSuperAdmin } from '@/lib/client-auth-utils';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { redirect } from 'next/navigation';
+import { getServerSideAuth } from '@/lib/auth-server';
 import { ReviewsTable } from '@/components/review/reviews-table';
 import {
   getAdminReviews,
   getReviewsStats,
 } from '@/actions/admin-review-actions';
+import { isSuperAdmin } from '@/lib/auth-utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ReviewsAnalytics } from '@/components/review/review-analytics';
 
@@ -16,6 +17,10 @@ export default async function AdminReviewsPage() {
     roles: ['ADMIN'], // Allow only ADMIN role
     subRoles: ['STAFF', 'SUPER_ADMIN'], // Allow only STAFF and SUPER_ADMIN subroles
   });
+  if (!session) {
+    console.log('No session found, redirecting to unauthorized');
+    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+  }
 
   const isUserSuperAdmin = isSuperAdmin(session.user);
 

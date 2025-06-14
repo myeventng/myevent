@@ -23,7 +23,7 @@ import {
 import { createUserAction } from '@/actions/create-user-action';
 import { toast } from 'sonner';
 import { UserRole, UserSubRole } from '@/generated/prisma';
-import { AuthUser } from '@/lib/auth-utils';
+import { AuthUser } from '@/lib/auth-client';
 
 interface CreateUserDialogProps {
   isOpen: boolean;

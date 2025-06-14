@@ -1,13 +1,19 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { AdminEventsTable } from '@/components/admin/admin-events-table';
 import { getEvents } from '@/actions/event.actions';
-import { getServerSideAuth } from '@/lib/auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
+import { redirect } from 'next/navigation';
 
 export default async function AdminEvents() {
   const session = await getServerSideAuth({
     roles: ['ADMIN'], // Only allow admins
     subRoles: ['STAFF', 'SUPER_ADMIN'], // Allow only STAFF and SUPER_ADMIN subroles
   });
+
+  if (!session) {
+    console.log('No session found, redirecting to unauthorized');
+    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+  }
 
   // Fetch all events (published and unpublished for admin view)
   const response = await getEvents(false); // false to get all events

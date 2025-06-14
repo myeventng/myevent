@@ -1,6 +1,6 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { getServerSideAuth } from '@/lib/auth-utils';
-import { isOrganizer } from '@/lib/client-auth-utils';
+import { getServerSideAuth } from '@/lib/auth-server';
+import { isOrganizer } from '@/lib/auth-client';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { redirect } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UpdateUserForm } from '@/components/auth/update-user-form';
 import { ChangePasswordForm } from '@/components/auth/change-password-form';
@@ -27,6 +28,11 @@ export default async function UserProfilePage() {
   const session = await getServerSideAuth({
     roles: ['USER'], // Allow only USER role
   });
+
+  if (!session) {
+    console.log('No session found, redirecting to unauthorized');
+    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+  }
 
   const isUserOrganizer = isOrganizer(session.user);
   const initials = session.user.name
