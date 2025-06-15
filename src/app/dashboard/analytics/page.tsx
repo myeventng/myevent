@@ -1,6 +1,5 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { getServerSideAuth } from '@/lib/auth-server';
-import { isOrganizer } from '@/lib/auth-client';
 import { Badge } from '@/components/ui/badge';
 import { redirect } from 'next/navigation';
 
@@ -12,7 +11,8 @@ export default async function Analytics() {
     console.log('No session found, redirecting to unauthorized');
     redirect('/unauthorized'); // Redirect to unauthorized page if no session
   }
-  const isUserOrganizer = isOrganizer(session.user);
+  const isUserOrganizer =
+    session.user.role === 'USER' && session.user.subRole === 'ORGANIZER';
   const initials = session.user.name
     .split(' ')
     .map((n) => n[0])

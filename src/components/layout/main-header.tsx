@@ -12,10 +12,12 @@ import {
   getProfileUrl,
   isAdmin,
   isSuperAdmin,
+  isOrganizer,
+  isOrdinaryUser,
   convertSessionUser,
   type AuthUser,
 } from '@/lib/auth-client';
-import { Menu, X, ChevronDown, User } from 'lucide-react';
+import { Menu, X, ChevronDown, User, Plus, Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '../ui/button';
 
@@ -26,16 +28,36 @@ interface NavLink {
   roles?: string[];
 }
 
+// Helper function to get dynamic Create Event URL based on user role
+const getCreateEventUrl = (authUser: AuthUser | undefined): string => {
+  if (!authUser) return '/events/create'; // Not logged in - show become organizer page
+
+  if (isAdmin(authUser) || isSuperAdmin(authUser)) {
+    return '/admin/dashboard/events/create';
+  } else if (isOrganizer(authUser)) {
+    return '/dashboard/events/create';
+  } else {
+    return '/events/create'; // Ordinary user - show become organizer page
+  }
+};
+
+// Helper function to get dynamic Create Event text based on user role
+const getCreateEventText = (authUser: AuthUser | undefined): string => {
+  if (!authUser) return '🚀 Host Your Event';
+
+  if (isAdmin(authUser) || isSuperAdmin(authUser)) {
+    return '⚡ Create Event';
+  } else if (isOrganizer(authUser)) {
+    return '✨ New Event';
+  } else {
+    return '🌟 Become Host';
+  }
+};
+
 const navigation: NavLink[] = [
   { name: 'Home', href: '/' },
   { name: 'Events', href: '/events' },
   { name: 'Blog', href: '/blog' },
-  {
-    name: 'Create Event',
-    href: '/events/create',
-    // requiresAuth: true,
-    // roles: ['ORGANIZER', 'ADMIN'],
-  },
 ];
 
 const MainHeader: React.FC = () => {
@@ -59,6 +81,8 @@ const MainHeader: React.FC = () => {
     console.log('Error:', error);
     console.log('User Role:', authUser?.role);
     console.log('User SubRole:', authUser?.subRole);
+    console.log('Create Event URL:', getCreateEventUrl(authUser));
+    console.log('Create Event Text:', getCreateEventText(authUser));
     console.log('===================');
   }, [session, authUser, isPending, error]);
 
@@ -120,21 +144,10 @@ const MainHeader: React.FC = () => {
     }
   };
 
-  // Update navigation with dynamic dashboard URL
-  const updatedNavigation = navigation.map((item) => {
-    if (item.name === 'Dashboard' && item.href === '/dashboard' && authUser) {
-      return {
-        ...item,
-        href: getDashboardUrl(authUser),
-      };
-    }
-    return item;
-  });
-
   // Filter navigation based on user session and roles
   const filteredNav = authUser
-    ? filterNavigation(updatedNavigation, authUser)
-    : updatedNavigation.filter((item) => !item.requiresAuth);
+    ? filterNavigation(navigation, authUser)
+    : navigation.filter((item) => !item.requiresAuth);
 
   // Show loading state during pending
   if (isPending) {
@@ -197,33 +210,46 @@ const MainHeader: React.FC = () => {
           </button>
         </div>
 
-        <div className="hidden lg:flex lg:gap-x-12">
+        <div className="hidden lg:flex lg:gap-x-12 lg:items-center">
           {filteredNav.map((item) => (
             <Link
               key={item.name}
               href={item.href}
-              className={`text-lg font-semibold leading-6 ${
+              className={`text-lg font-semibold leading-6 transition-colors duration-200 ${
                 scrolled
-                  ? 'text-white hover:text-indigo-300'
-                  : 'text-white hover:text-indigo-600'
+                  ? 'text-white hover:text-purple-300'
+                  : 'text-white hover:text-purple-400'
               }`}
             >
               {item.name}
             </Link>
           ))}
+
+          {/* Dynamic Create Event Button */}
+          <Link
+            href={getCreateEventUrl(authUser)}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full font-semibold text-sm transition-all duration-300 transform hover:scale-105 ${
+              scrolled
+                ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg'
+                : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-xl'
+            }`}
+          >
+            <Plus className="h-4 w-4" />
+            {getCreateEventText(authUser)}
+          </Link>
         </div>
 
         {/* Debug info - Remove in production */}
-        {process.env.NODE_ENV === 'development' && authUser && (
+        {/* {process.env.NODE_ENV === 'development' && authUser && (
           <div className="hidden lg:flex text-xs text-white bg-red-500 px-2 py-1 rounded">
             {authUser.role}:{authUser.subRole}
           </div>
-        )}
+        )} */}
 
         <div className="hidden lg:flex lg:flex-1 lg:justify-end lg:gap-x-4">
           {authUser ? (
             <div className="relative group">
-              <button className="flex items-center text-sm font-semibold leading-6 group text-white">
+              <button className="flex items-center text-sm font-semibold leading-6 group text-white transition-colors duration-200 hover:text-purple-300">
                 <User className="h-5 w-5 mr-1" />
                 {authUser.name || 'User'}
                 <ChevronDown className="h-4 w-4 ml-1" />
@@ -244,20 +270,20 @@ const MainHeader: React.FC = () => {
                 </div>
                 <Link
                   href={getProfileUrl(authUser)}
-                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                 >
                   Profile
                 </Link>
                 <Link
                   href={getDashboardUrl(authUser)}
-                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                 >
                   Dashboard
                 </Link>
                 <button
                   onClick={handleLogout}
                   disabled={isSigningOut}
-                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 transition-colors"
                 >
                   {isSigningOut ? 'Signing out...' : 'Sign out'}
                 </button>
@@ -276,7 +302,7 @@ const MainHeader: React.FC = () => {
               </Button>
               <Link
                 href="/auth/register"
-                className={`rounded-md px-3.5 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
+                className={`rounded-md px-3.5 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all duration-300 ${
                   scrolled
                     ? 'bg-indigo-500 hover:bg-indigo-400'
                     : 'bg-indigo-600 hover:bg-indigo-500'
@@ -296,7 +322,7 @@ const MainHeader: React.FC = () => {
           <div className="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-black/90 backdrop-blur-lg px-6 py-6 sm:max-w-sm sm:ring-1 sm:ring-gray-900/10">
             <div className="flex items-center justify-between">
               <Link href="/" className="-m-1.5 p-1.5">
-                <span className="text-xl font-bold text-white">EventHub</span>
+                <span className="text-xl font-bold text-white">MyEvent</span>
               </Link>
               <button
                 type="button"
@@ -314,26 +340,36 @@ const MainHeader: React.FC = () => {
                     <Link
                       key={item.name}
                       href={item.href}
-                      className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 text-white hover:bg-white/10"
+                      className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 text-white hover:bg-white/10 transition-colors"
                       onClick={() => setMobileMenuOpen(false)}
                     >
                       {item.name}
                     </Link>
                   ))}
+
+                  {/* Mobile Create Event Button */}
+                  <Link
+                    href={getCreateEventUrl(authUser)}
+                    className="-mx-3 flex items-center gap-2 rounded-lg px-3 py-2 text-base font-semibold leading-7 bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 transition-all"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Plus className="h-4 w-4" />
+                    {getCreateEventText(authUser)}
+                  </Link>
                 </div>
                 <div className="py-6">
                   {authUser ? (
                     <>
                       <Link
                         href={getProfileUrl(authUser)}
-                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10"
+                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10 transition-colors"
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         Profile
                       </Link>
                       <Link
                         href={getDashboardUrl(authUser)}
-                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10"
+                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10 transition-colors"
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         Dashboard
@@ -341,7 +377,7 @@ const MainHeader: React.FC = () => {
                       {(isSuperAdmin(authUser) || isAdmin(authUser)) && (
                         <Link
                           href="/admin/dashboard"
-                          className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10"
+                          className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10 transition-colors"
                           onClick={() => setMobileMenuOpen(false)}
                         >
                           Admin Panel
@@ -353,7 +389,7 @@ const MainHeader: React.FC = () => {
                           setMobileMenuOpen(false);
                         }}
                         disabled={isSigningOut}
-                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10 w-full text-left disabled:opacity-50"
+                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10 w-full text-left disabled:opacity-50 transition-colors"
                       >
                         {isSigningOut ? 'Signing out...' : 'Sign out'}
                       </button>
@@ -362,14 +398,14 @@ const MainHeader: React.FC = () => {
                     <>
                       <Link
                         href="/auth/login"
-                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10"
+                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10 transition-colors"
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         Log in
                       </Link>
                       <Link
                         href="/auth/register"
-                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 bg-indigo-600 text-white hover:bg-indigo-500"
+                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         Sign up

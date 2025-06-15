@@ -247,9 +247,25 @@ export function Sidebar({
       icon: <Home className="w-5 h-5" />,
     },
     {
-      title: 'Notifications',
-      href: '/dashboard/notifications',
-      icon: <Bell className="w-5 h-5" />,
+      title: 'Events',
+      icon: <Calendar className="w-5 h-5" />,
+      children: [
+        {
+          title: 'My Events',
+          href: '/dashboard/events',
+          icon: <List className="w-4 h-4" />,
+        },
+        {
+          title: 'Create Event',
+          href: '/dashboard/create-event',
+          icon: <Plus className="w-4 h-4" />,
+        },
+        {
+          title: 'Drafts',
+          href: '/dashboard/events/drafts',
+          icon: <Edit className="w-4 h-4" />,
+        },
+      ],
     },
     {
       title: 'My Tickets',
