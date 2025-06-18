@@ -1,4 +1,5 @@
 'use client';
+export const dynamic = 'force-dynamic';
 
 import { LoginForm } from '@/components/auth/login-form';
 import { MagicLinkLoginForm } from '@/components/auth/magic-link-login-form';
