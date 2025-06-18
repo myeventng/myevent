@@ -1,6 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
+import { Suspense } from 'react';
 import { LoginForm } from '@/components/auth/login-form';
 import { MagicLinkLoginForm } from '@/components/auth/magic-link-login-form';
 import { SignInOauthButton } from '@/components/auth/sign-in-oauth-button';
@@ -8,7 +9,7 @@ import { useSearchParams } from 'next/navigation';
 import { HomeIcon, CalendarIcon } from 'lucide-react';
 import Link from 'next/link';
 
-export default function LoginPage() {
+function LoginContent() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirectTo') || '/events';
 
@@ -55,7 +56,6 @@ export default function LoginPage() {
         </div>
 
         <LoginForm />
-
         <MagicLinkLoginForm />
 
         <div className="text-center space-y-2">
@@ -81,5 +81,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="text-center mt-10">Loading...</div>}>
+      <LoginContent />
+    </Suspense>
   );
 }
