@@ -47,6 +47,7 @@ interface PermissionValidationResult {
   userData?: {
     userId: string;
     isAdmin: boolean;
+    canCreateEvents: boolean;
   };
 }
 
@@ -94,7 +95,7 @@ const generateSlug = async (
   return slug;
 };
 
-// Fixed: Updated return type to match usage
+// Updated permission validation - removed approval status check
 const validateUserPermission =
   async (): Promise<PermissionValidationResult> => {
     const headersList = await headers();
@@ -118,6 +119,7 @@ const validateUserPermission =
         userData: {
           userId: session.user.id,
           isAdmin: true,
+          canCreateEvents: true,
         },
       };
     }
@@ -142,6 +144,7 @@ const validateUserPermission =
         userData: {
           userId: session.user.id,
           isAdmin: false,
+          canCreateEvents: true,
         },
       };
     }
@@ -151,6 +154,441 @@ const validateUserPermission =
       message: 'You do not have permission to perform this action',
     };
   };
+
+// Create event with proper notification workflow
+export async function createEvent(
+  data: EventInput
+): Promise<ActionResponse<any>> {
+  // Validate user permission
+  const permissionCheck = await validateUserPermission();
+  if (!permissionCheck.success) {
+    return {
+      success: false,
+      message: permissionCheck.message,
+    };
+  }
+
+  const { userId, isAdmin } = permissionCheck.userData!;
+
+  try {
+    // Validate venue exists
+    const venue = await prisma.venue.findUnique({
+      where: { id: data.venueId },
+    });
+
+    if (!venue) {
+      return {
+        success: false,
+        message: 'Venue not found',
+      };
+    }
+
+    // Validate category if provided
+    if (data.categoryId) {
+      const category = await prisma.category.findUnique({
+        where: { id: data.categoryId },
+      });
+
+      if (!category) {
+        return {
+          success: false,
+          message: 'Category not found',
+        };
+      }
+    }
+
+    // Validate tags if provided
+    if (data.tagIds && data.tagIds.length > 0) {
+      const tagCount = await prisma.tag.count({
+        where: {
+          id: {
+            in: data.tagIds,
+          },
+        },
+      });
+
+      if (tagCount !== data.tagIds.length) {
+        return {
+          success: false,
+          message: 'One or more tags not found',
+        };
+      }
+    }
+
+    // Generate unique slug
+    const slug = await generateSlug(data.title);
+
+    if (!slug) {
+      return {
+        success: false,
+        message: 'Failed to generate unique slug for event',
+      };
+    }
+
+    // Determine publish status based on user role
+    let publishedStatus: PublishedStatus;
+    if (isAdmin) {
+      // Admins can publish directly or set custom status
+      publishedStatus = data.publishedStatus || 'PUBLISHED';
+    } else {
+      // Organizers must submit for review unless saving as draft
+      publishedStatus =
+        data.publishedStatus === 'DRAFT' ? 'DRAFT' : 'PENDING_REVIEW';
+    }
+
+    // Create new event
+    const newEvent = await prisma.event.create({
+      data: {
+        title: data.title,
+        slug,
+        description: data.description,
+        location: data.location,
+        coverImageUrl: data.coverImageUrl,
+        startDateTime: data.startDateTime,
+        endDateTime: data.endDateTime,
+        isFree: data.isFree,
+        url: data.url,
+        lateEntry: data.lateEntry,
+        idRequired: data.idRequired,
+        attendeeLimit: data.attendeeLimit,
+        embeddedVideoUrl: data.embeddedVideoUrl,
+        dressCode: data.dressCode,
+        age: data.age,
+        imageUrls: data.imageUrls,
+        tags: {
+          connect: data.tagIds.map((id) => ({ id })),
+        },
+        category: data.categoryId
+          ? { connect: { id: data.categoryId } }
+          : undefined,
+        venue: { connect: { id: data.venueId } },
+        City: data.cityId ? { connect: { id: data.cityId } } : undefined,
+        user: { connect: { id: userId } },
+        publishedStatus,
+      },
+      include: {
+        tags: true,
+        category: true,
+        venue: {
+          include: {
+            city: true,
+          },
+        },
+      },
+    });
+
+    // Create notification for admin if event is submitted for review
+    if (publishedStatus === 'PENDING_REVIEW') {
+      await createEventNotification(newEvent.id, 'EVENT_SUBMITTED');
+    }
+
+    revalidatePath('/admin/events');
+    revalidatePath('/dashboard/events');
+    revalidatePath('/events');
+
+    const message =
+      publishedStatus === 'PUBLISHED'
+        ? 'Event created and published successfully'
+        : publishedStatus === 'PENDING_REVIEW'
+        ? 'Event created and submitted for review'
+        : 'Event saved as draft';
+
+    return {
+      success: true,
+      message,
+      data: newEvent,
+    };
+  } catch (error) {
+    console.error('Error creating event:', error);
+    return {
+      success: false,
+      message: 'Failed to create event',
+    };
+  }
+}
+
+// Update event with proper notification workflow
+export async function updateEvent(
+  data: UpdateEventInput
+): Promise<ActionResponse<any>> {
+  // Validate user permission
+  const permissionCheck = await validateUserPermission();
+  if (!permissionCheck.success) {
+    return {
+      success: false,
+      message: permissionCheck.message,
+    };
+  }
+
+  const { userId, isAdmin } = permissionCheck.userData!;
+
+  try {
+    // Check if event exists
+    const existingEvent = await prisma.event.findUnique({
+      where: { id: data.id },
+      include: {
+        tags: true,
+      },
+    });
+
+    if (!existingEvent) {
+      return {
+        success: false,
+        message: 'Event not found',
+      };
+    }
+
+    // If not an admin, check if the user owns this event
+    if (!isAdmin && existingEvent.userId !== userId) {
+      return {
+        success: false,
+        message: 'You can only update events that you created',
+      };
+    }
+
+    // Validate venue exists
+    const venue = await prisma.venue.findUnique({
+      where: { id: data.venueId },
+    });
+
+    if (!venue) {
+      return {
+        success: false,
+        message: 'Venue not found',
+      };
+    }
+
+    // Validate category if provided
+    if (data.categoryId) {
+      const category = await prisma.category.findUnique({
+        where: { id: data.categoryId },
+      });
+
+      if (!category) {
+        return {
+          success: false,
+          message: 'Category not found',
+        };
+      }
+    }
+
+    // Validate tags if provided
+    if (data.tagIds && data.tagIds.length > 0) {
+      const tagCount = await prisma.tag.count({
+        where: {
+          id: {
+            in: data.tagIds,
+          },
+        },
+      });
+
+      if (tagCount !== data.tagIds.length) {
+        return {
+          success: false,
+          message: 'One or more tags not found',
+        };
+      }
+    }
+
+    // Generate new slug if title changed or if slug is missing
+    let slug = existingEvent.slug;
+    if (data.title !== existingEvent.title || !existingEvent.slug) {
+      slug = await generateSlug(data.title, data.id);
+    }
+
+    if (!slug) {
+      return {
+        success: false,
+        message: 'Failed to generate or maintain event slug',
+      };
+    }
+
+    // Get the existing tag IDs
+    const existingTagIds = existingEvent.tags.map((tag) => tag.id);
+
+    // Create arrays for disconnecting and connecting tags
+    const disconnectTags = existingTagIds.filter(
+      (id) => !data.tagIds.includes(id)
+    );
+    const connectTags = data.tagIds.filter(
+      (id) => !existingTagIds.includes(id)
+    );
+
+    // Determine publish status based on user role and current status
+    let publishedStatus: PublishedStatus;
+    if (isAdmin) {
+      // Admins can set any status or default to published
+      publishedStatus = data.publishedStatus || 'PUBLISHED';
+    } else {
+      // Organizers: if saving as draft, keep as draft, otherwise submit for review
+      publishedStatus =
+        data.publishedStatus === 'DRAFT' ? 'DRAFT' : 'PENDING_REVIEW';
+    }
+
+    // Update event
+    const updatedEvent = await prisma.event.update({
+      where: { id: data.id },
+      data: {
+        title: data.title,
+        slug,
+        description: data.description,
+        location: data.location,
+        coverImageUrl: data.coverImageUrl,
+        startDateTime: data.startDateTime,
+        endDateTime: data.endDateTime,
+        isFree: data.isFree,
+        url: data.url,
+        lateEntry: data.lateEntry,
+        idRequired: data.idRequired,
+        attendeeLimit: data.attendeeLimit,
+        embeddedVideoUrl: data.embeddedVideoUrl,
+        dressCode: data.dressCode,
+        age: data.age,
+        imageUrls: data.imageUrls,
+        tags: {
+          disconnect: disconnectTags.map((id) => ({ id })),
+          connect: connectTags.map((id) => ({ id })),
+        },
+        category: data.categoryId
+          ? { connect: { id: data.categoryId } }
+          : { disconnect: true },
+        venue: { connect: { id: data.venueId } },
+        City: data.cityId
+          ? { connect: { id: data.cityId } }
+          : { disconnect: true },
+        publishedStatus,
+      },
+      include: {
+        tags: true,
+        category: true,
+        venue: {
+          include: {
+            city: true,
+          },
+        },
+      },
+    });
+
+    // Create notifications based on status change
+    if (
+      isAdmin &&
+      publishedStatus === 'PUBLISHED' &&
+      existingEvent.publishedStatus !== 'PUBLISHED'
+    ) {
+      // Admin published the event - notify the organizer
+      await createEventNotification(
+        data.id,
+        'EVENT_APPROVED',
+        existingEvent.userId ?? undefined
+      );
+    } else if (
+      !isAdmin &&
+      publishedStatus === 'PENDING_REVIEW' &&
+      existingEvent.publishedStatus !== 'PENDING_REVIEW'
+    ) {
+      // Organizer submitted for review - notify admins
+      await createEventNotification(data.id, 'EVENT_SUBMITTED');
+    }
+
+    revalidatePath('/admin/events');
+    revalidatePath('/dashboard/events');
+    revalidatePath(`/events/${updatedEvent.slug}`);
+    revalidatePath(`/events/${data.id}`);
+    revalidatePath('/events');
+
+    const message =
+      publishedStatus === 'PUBLISHED'
+        ? 'Event updated and published successfully'
+        : publishedStatus === 'PENDING_REVIEW'
+        ? 'Event updated and submitted for review'
+        : 'Event updated and saved as draft';
+
+    return {
+      success: true,
+      message,
+      data: updatedEvent,
+    };
+  } catch (error) {
+    console.error('Error updating event:', error);
+    return {
+      success: false,
+      message: 'Failed to update event',
+    };
+  }
+}
+
+// Admin function to update event status (approve/reject)
+export async function updateEventStatus(
+  id: string,
+  status: 'PUBLISHED' | 'REJECTED',
+  rejectionReason?: string
+): Promise<ActionResponse<any>> {
+  // Validate user permission - only admins can do this
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session || session.user.role !== 'ADMIN') {
+    return {
+      success: false,
+      message: 'Only administrators can approve or reject events',
+    };
+  }
+
+  try {
+    const event = await prisma.event.findUnique({
+      where: { id },
+      include: { user: true },
+    });
+
+    if (!event) {
+      return {
+        success: false,
+        message: 'Event not found',
+      };
+    }
+
+    const updatedEvent = await prisma.event.update({
+      where: { id },
+      data: {
+        publishedStatus: status,
+        // You might want to add a rejectionReason field to your Event model
+      },
+    });
+
+    // Create notification for the event organizer
+    const notificationType =
+      status === 'PUBLISHED' ? 'EVENT_APPROVED' : 'EVENT_REJECTED';
+    await createEventNotification(
+      id,
+      notificationType,
+      event.userId ?? undefined
+    );
+
+    revalidatePath('/admin/dashboard/events');
+    revalidatePath('/dashboard/events');
+    revalidatePath(`/events/${event.slug}`);
+    revalidatePath('/events');
+
+    const message =
+      status === 'PUBLISHED'
+        ? 'Event approved and published successfully'
+        : 'Event rejected successfully';
+
+    return {
+      success: true,
+      message,
+      data: updatedEvent,
+    };
+  } catch (error) {
+    console.error('Error updating event status:', error);
+    return {
+      success: false,
+      message: 'Failed to update event status',
+    };
+  }
+}
 
 export async function getFeaturedEvents(): Promise<ActionResponse<any[]>> {
   try {
@@ -908,400 +1346,6 @@ export async function getEventBySlug(
     return {
       success: false,
       message: 'Failed to fetch event',
-    };
-  }
-}
-
-export async function createEvent(
-  data: EventInput
-): Promise<ActionResponse<any>> {
-  // Validate user permission
-  const permissionCheck = await validateUserPermission();
-  if (!permissionCheck.success) {
-    return {
-      success: false,
-      message: permissionCheck.message,
-    };
-  }
-
-  const userId = permissionCheck.userData!.userId;
-
-  try {
-    // Validate venue exists
-    const venue = await prisma.venue.findUnique({
-      where: { id: data.venueId },
-    });
-
-    if (!venue) {
-      return {
-        success: false,
-        message: 'Venue not found',
-      };
-    }
-
-    // Validate category if provided
-    if (data.categoryId) {
-      const category = await prisma.category.findUnique({
-        where: { id: data.categoryId },
-      });
-
-      if (!category) {
-        return {
-          success: false,
-          message: 'Category not found',
-        };
-      }
-    }
-
-    // Validate tags if provided
-    if (data.tagIds && data.tagIds.length > 0) {
-      const tagCount = await prisma.tag.count({
-        where: {
-          id: {
-            in: data.tagIds,
-          },
-        },
-      });
-
-      if (tagCount !== data.tagIds.length) {
-        return {
-          success: false,
-          message: 'One or more tags not found',
-        };
-      }
-    }
-
-    // Generate unique slug - always generate for new events
-    const slug = await generateSlug(data.title);
-
-    // Validate that slug was generated successfully
-    if (!slug) {
-      return {
-        success: false,
-        message: 'Failed to generate unique slug for event',
-      };
-    }
-
-    // Create new event
-    const newEvent = await prisma.event.create({
-      data: {
-        title: data.title,
-        slug,
-        description: data.description,
-        location: data.location,
-        coverImageUrl: data.coverImageUrl,
-        startDateTime: data.startDateTime,
-        endDateTime: data.endDateTime,
-        isFree: data.isFree,
-        url: data.url,
-        lateEntry: data.lateEntry,
-        idRequired: data.idRequired,
-        attendeeLimit: data.attendeeLimit,
-        embeddedVideoUrl: data.embeddedVideoUrl,
-        dressCode: data.dressCode,
-        age: data.age,
-        imageUrls: data.imageUrls,
-        tags: {
-          connect: data.tagIds.map((id) => ({ id })),
-        },
-        category: data.categoryId
-          ? { connect: { id: data.categoryId } }
-          : undefined,
-        venue: { connect: { id: data.venueId } },
-        City: data.cityId ? { connect: { id: data.cityId } } : undefined,
-        user: { connect: { id: userId } },
-        publishedStatus: data.publishedStatus || 'DRAFT',
-      },
-      include: {
-        tags: true,
-        category: true,
-        venue: {
-          include: {
-            city: true,
-          },
-        },
-      },
-    });
-
-    // Create notification for admin if event is submitted for review
-    if (data.publishedStatus === 'PENDING_REVIEW') {
-      await createEventNotification(newEvent.id, 'EVENT_SUBMITTED');
-    }
-
-    revalidatePath('/admin/events');
-    revalidatePath('/dashboard/events');
-    revalidatePath('/events');
-
-    return {
-      success: true,
-      message: 'Event created successfully',
-      data: newEvent,
-    };
-  } catch (error) {
-    console.error('Error creating event:', error);
-    return {
-      success: false,
-      message: 'Failed to create event',
-    };
-  }
-}
-
-export async function updateEvent(
-  data: UpdateEventInput
-): Promise<ActionResponse<any>> {
-  // Validate user permission
-  const permissionCheck = await validateUserPermission();
-  if (!permissionCheck.success) {
-    return {
-      success: false,
-      message: permissionCheck.message,
-    };
-  }
-
-  const userId = permissionCheck.userData!.userId;
-  const isAdmin = permissionCheck.userData!.isAdmin;
-
-  try {
-    // Check if event exists
-    const existingEvent = await prisma.event.findUnique({
-      where: { id: data.id },
-      include: {
-        tags: true,
-      },
-    });
-
-    if (!existingEvent) {
-      return {
-        success: false,
-        message: 'Event not found',
-      };
-    }
-
-    // If not an admin, check if the user owns this event
-    if (!isAdmin && existingEvent.userId !== userId) {
-      return {
-        success: false,
-        message: 'You can only update events that you created',
-      };
-    }
-
-    // Validate venue exists
-    const venue = await prisma.venue.findUnique({
-      where: { id: data.venueId },
-    });
-
-    if (!venue) {
-      return {
-        success: false,
-        message: 'Venue not found',
-      };
-    }
-
-    // Validate category if provided
-    if (data.categoryId) {
-      const category = await prisma.category.findUnique({
-        where: { id: data.categoryId },
-      });
-
-      if (!category) {
-        return {
-          success: false,
-          message: 'Category not found',
-        };
-      }
-    }
-
-    // Validate tags if provided
-    if (data.tagIds && data.tagIds.length > 0) {
-      const tagCount = await prisma.tag.count({
-        where: {
-          id: {
-            in: data.tagIds,
-          },
-        },
-      });
-
-      if (tagCount !== data.tagIds.length) {
-        return {
-          success: false,
-          message: 'One or more tags not found',
-        };
-      }
-    }
-
-    // Generate new slug if title changed or if slug is missing
-    let slug = existingEvent.slug;
-    if (data.title !== existingEvent.title || !existingEvent.slug) {
-      slug = await generateSlug(data.title, data.id);
-      console.log(`Generated new slug for event ${data.id}: "${slug}"`);
-    }
-
-    // Validate that slug exists
-    if (!slug) {
-      return {
-        success: false,
-        message: 'Failed to generate or maintain event slug',
-      };
-    }
-
-    // Get the existing tag IDs
-    const existingTagIds = existingEvent.tags.map((tag) => tag.id);
-
-    // Create arrays for disconnecting and connecting tags
-    const disconnectTags = existingTagIds.filter(
-      (id) => !data.tagIds.includes(id)
-    );
-    const connectTags = data.tagIds.filter(
-      (id) => !existingTagIds.includes(id)
-    );
-
-    // Update event
-    const updatedEvent = await prisma.event.update({
-      where: { id: data.id },
-      data: {
-        title: data.title,
-        slug,
-        description: data.description,
-        location: data.location,
-        coverImageUrl: data.coverImageUrl,
-        startDateTime: data.startDateTime,
-        endDateTime: data.endDateTime,
-        isFree: data.isFree,
-        url: data.url,
-        lateEntry: data.lateEntry,
-        idRequired: data.idRequired,
-        attendeeLimit: data.attendeeLimit,
-        embeddedVideoUrl: data.embeddedVideoUrl,
-        dressCode: data.dressCode,
-        age: data.age,
-        imageUrls: data.imageUrls,
-        tags: {
-          disconnect: disconnectTags.map((id) => ({ id })),
-          connect: connectTags.map((id) => ({ id })),
-        },
-        category: data.categoryId
-          ? { connect: { id: data.categoryId } }
-          : { disconnect: true },
-        venue: { connect: { id: data.venueId } },
-        City: data.cityId
-          ? { connect: { id: data.cityId } }
-          : { disconnect: true },
-        publishedStatus: isAdmin ? 'PUBLISHED' : 'PENDING_REVIEW',
-      },
-      include: {
-        tags: true,
-        category: true,
-        venue: {
-          include: {
-            city: true,
-          },
-        },
-      },
-    });
-    // Create notification for admin if event is submitted for review
-    if (isAdmin) {
-      // Admin published the event - notify the organizer
-      await createEventNotification(
-        data.id,
-        'EVENT_APPROVED',
-        existingEvent.userId ?? undefined
-      );
-    } else {
-      // Organizer submitted for review - notify admins
-      await createEventNotification(data.id, 'EVENT_SUBMITTED');
-    }
-
-    revalidatePath('/admin/events');
-    revalidatePath('/dashboard/events');
-    revalidatePath(`/events/${updatedEvent.slug}`);
-    revalidatePath(`/events/${data.id}`);
-    revalidatePath('/events');
-
-    const message = isAdmin
-      ? 'Event published successfully'
-      : 'Event submitted for review';
-
-    return {
-      success: true,
-      message,
-      data: updatedEvent,
-    };
-  } catch (error) {
-    console.error('Error updating event:', error);
-    return {
-      success: false,
-      message: 'Failed to update event',
-    };
-  }
-}
-
-export async function updateEventStatus(
-  id: string,
-  status: 'PUBLISHED' | 'REJECTED'
-): Promise<ActionResponse<any>> {
-  // Validate user permission - only admins can do this
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
-
-  if (!session || session.user.role !== 'ADMIN') {
-    return {
-      success: false,
-      message: 'Only administrators can approve or reject events',
-    };
-  }
-
-  try {
-    const event = await prisma.event.findUnique({
-      where: { id },
-      include: { user: true },
-    });
-
-    if (!event) {
-      return {
-        success: false,
-        message: 'Event not found',
-      };
-    }
-
-    const updatedEvent = await prisma.event.update({
-      where: { id },
-      data: {
-        publishedStatus: status,
-        // You might want to add a rejectionReason field to your Event model
-      },
-    });
-
-    // Create notification for the event organizer
-    const notificationType =
-      status === 'PUBLISHED' ? 'EVENT_APPROVED' : 'EVENT_REJECTED';
-    await createEventNotification(
-      id,
-      notificationType,
-      event.userId ?? undefined
-    );
-
-    revalidatePath('/admin/dashboard/events');
-    revalidatePath('/dashboard/events');
-    revalidatePath(`/events/${event.slug}`);
-    revalidatePath('/events');
-
-    const message =
-      status === 'PUBLISHED'
-        ? 'Event approved and published successfully'
-        : 'Event rejected successfully';
-
-    return {
-      success: true,
-      message,
-      data: updatedEvent,
-    };
-  } catch (error) {
-    console.error('Error updating event status:', error);
-    return {
-      success: false,
-      message: 'Failed to update event status',
     };
   }
 }

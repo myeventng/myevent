@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
+import { createOrganizerUpgradeNotification } from '@/actions/notification.actions';
 
 interface OrganizerProfileInput {
   organizationName: string;
@@ -57,7 +58,7 @@ export async function getUserOrganizerProfile(): Promise<ActionResponse<any>> {
   }
 }
 
-// Create or update organizer profile// Create or update organizer profile
+// Create or update organizer profile with notification system
 export async function saveOrganizerProfile(
   data: OrganizerProfileInput
 ): Promise<ActionResponse<any>> {
@@ -79,6 +80,7 @@ export async function saveOrganizerProfile(
       where: { userId: session.user.id },
     });
 
+    const isNewProfile = !existingProfile;
     let profile;
 
     if (existingProfile) {
@@ -92,39 +94,65 @@ export async function saveOrganizerProfile(
         },
       });
     } else {
-      // Create new profile
-      profile = await prisma.organizerProfile.create({
-        data: {
-          organizationName: data.organizationName,
-          bio: data.bio,
-          website: data.website,
-          user: { connect: { id: session.user.id } },
-        },
-      });
-
-      // Only update user subrole to ORGANIZER if they are a regular USER with ORDINARY subRole
-      // Don't change subRole for ADMIN users with STAFF or SUPER_ADMIN privileges
-      const shouldUpdateSubRole =
-        session.user.role === 'USER' && session.user.subRole === 'ORDINARY';
-
-      if (shouldUpdateSubRole) {
-        await prisma.user.update({
-          where: { id: session.user.id },
+      // Use transaction to ensure consistency for new profile creation
+      const result = await prisma.$transaction(async (tx) => {
+        // Create new profile
+        const newProfile = await tx.organizerProfile.create({
           data: {
-            subRole: 'ORGANIZER',
+            organizationName: data.organizationName,
+            bio: data.bio,
+            website: data.website,
+            user: { connect: { id: session.user.id } },
           },
         });
+
+        // Only update user subrole to ORGANIZER if they are a regular USER with ORDINARY subRole
+        // Don't change subRole for ADMIN users with STAFF or SUPER_ADMIN privileges
+        const shouldUpdateSubRole =
+          session.user.role === 'USER' && session.user.subRole === 'ORDINARY';
+
+        if (shouldUpdateSubRole) {
+          await tx.user.update({
+            where: { id: session.user.id },
+            data: {
+              subRole: 'ORGANIZER',
+            },
+          });
+        }
+
+        return newProfile;
+      });
+
+      profile = result;
+    }
+
+    // If this is a new profile and user was upgraded to organizer, notify admins
+    if (
+      isNewProfile &&
+      session.user.role === 'USER' &&
+      session.user.subRole === 'ORDINARY'
+    ) {
+      try {
+        await createOrganizerUpgradeNotification(session.user.id);
+      } catch (notificationError) {
+        // Log error but don't fail the profile creation
+        console.error(
+          'Failed to create organizer upgrade notification:',
+          notificationError
+        );
       }
     }
 
     revalidatePath('/dashboard/profile');
     revalidatePath('/dashboard/organizer');
+    revalidatePath('/dashboard/create-event');
+    revalidatePath('/dashboard/events');
 
     return {
       success: true,
       message: existingProfile
         ? 'Profile updated successfully'
-        : 'Organizer profile created successfully',
+        : 'Organizer profile created successfully! You can now create events.',
       data: profile,
     };
   } catch (error) {
@@ -132,6 +160,53 @@ export async function saveOrganizerProfile(
     return {
       success: false,
       message: 'Failed to save organizer profile',
+    };
+  }
+}
+
+// Check if user can create events (organizer with profile or admin)
+export async function canUserCreateEvents(): Promise<ActionResponse<boolean>> {
+  try {
+    const headersList = await headers();
+    const session = await auth.api.getSession({
+      headers: headersList,
+    });
+
+    if (!session) {
+      return {
+        success: false,
+        message: 'Not authenticated',
+      };
+    }
+
+    // Admins can always create events
+    if (session.user.role === 'ADMIN') {
+      return {
+        success: true,
+        data: true,
+      };
+    }
+
+    // Check if user is an organizer with a profile
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        subRole: true,
+        organizerProfile: true,
+      },
+    });
+
+    const canCreate = user?.subRole === 'ORGANIZER' && !!user?.organizerProfile;
+
+    return {
+      success: true,
+      data: canCreate,
+    };
+  } catch (error) {
+    console.error('Error checking user create events permission:', error);
+    return {
+      success: false,
+      message: 'Failed to check permissions',
     };
   }
 }
@@ -157,6 +232,11 @@ export async function getOrganizers(): Promise<ActionResponse<any[]>> {
       },
       include: {
         organizerProfile: true,
+        _count: {
+          select: {
+            eventsHosted: true,
+          },
+        },
       },
       orderBy: {
         name: 'asc',
@@ -172,6 +252,72 @@ export async function getOrganizers(): Promise<ActionResponse<any[]>> {
     return {
       success: false,
       message: 'Failed to fetch organizers',
+    };
+  }
+}
+
+// Get organizer statistics for admin dashboard
+export async function getOrganizerStats(): Promise<ActionResponse<any>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session || session.user.role !== 'ADMIN') {
+    return {
+      success: false,
+      message: 'Not authorized',
+    };
+  }
+
+  try {
+    const [totalOrganizers, newOrganizersThisMonth, activeOrganizers] =
+      await Promise.all([
+        // Total organizers
+        prisma.user.count({
+          where: {
+            subRole: 'ORGANIZER',
+          },
+        }),
+
+        // New organizers this month - using User.createdAt since OrganizerProfile doesn't have createdAt
+        prisma.user.count({
+          where: {
+            subRole: 'ORGANIZER',
+            organizerProfile: {
+              isNot: null, // Ensure they have an organizer profile
+            },
+            createdAt: {
+              gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+            },
+          },
+        }),
+
+        // Active organizers (those with at least one event)
+        prisma.user.count({
+          where: {
+            subRole: 'ORGANIZER',
+            eventsHosted: {
+              some: {},
+            },
+          },
+        }),
+      ]);
+
+    return {
+      success: true,
+      data: {
+        totalOrganizers,
+        newOrganizersThisMonth,
+        activeOrganizers,
+        inactiveOrganizers: totalOrganizers - activeOrganizers,
+      },
+    };
+  } catch (error) {
+    console.error('Error fetching organizer stats:', error);
+    return {
+      success: false,
+      message: 'Failed to fetch organizer statistics',
     };
   }
 }

@@ -421,7 +421,9 @@ function TestimonialCard({
             <div className="text-gray-400 text-sm">{role}</div>
           </div>
         </div>
-        <blockquote className="text-gray-300 mb-4">"{quote}"</blockquote>
+        <blockquote className="text-gray-300 mb-4">
+          &quot;{quote}&quot;
+        </blockquote>
         <div className="flex items-center text-purple-400 font-semibold">
           <TrendingUp className="w-4 h-4 mr-1" />
           {metric}

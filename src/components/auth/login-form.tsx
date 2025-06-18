@@ -81,7 +81,9 @@ export const LoginForm = () => {
         <div className="bg-purple-900/20 border border-purple-600/30 rounded-lg p-3">
           <div className="flex items-center space-x-2 text-purple-300 text-sm">
             <ArrowLeftIcon className="h-4 w-4" />
-            <span>You'll be redirected to your requested page after login</span>
+            <span>
+              You&apos;ll be redirected to your requested page after login
+            </span>
           </div>
           <div className="text-xs text-purple-400 mt-1">
             Destination: {redirectTo}

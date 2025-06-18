@@ -64,7 +64,7 @@ export async function createNotification(
   }
 }
 
-// Get notifications for current user
+// Get notifications for current user - FIXED FILTERING
 export async function getUserNotifications(
   limit: number = 20,
   offset: number = 0
@@ -82,14 +82,21 @@ export async function getUserNotifications(
       };
     }
 
+    // Build where clause based on user role and subRole
     const whereClause: any = {
       OR: [
+        // Personal notifications for this user
         { userId: session.user.id },
-        ...(session.user.role === 'ADMIN'
-          ? [{ isAdminNotification: true }]
-          : []),
       ],
     };
+
+    // Only add admin notifications if user is ADMIN with STAFF or SUPER_ADMIN subRole
+    if (
+      session.user.role === 'ADMIN' &&
+      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole)
+    ) {
+      whereClause.OR.push({ isAdminNotification: true });
+    }
 
     const notifications = await prisma.notification.findMany({
       where: whereClause,
@@ -141,7 +148,7 @@ export async function getUserNotifications(
   }
 }
 
-// Get unread notification count
+// Get unread notification count - FIXED FILTERING
 export async function getUnreadNotificationCount(): Promise<
   ActionResponse<number>
 > {
@@ -158,15 +165,22 @@ export async function getUnreadNotificationCount(): Promise<
       };
     }
 
+    // Build where clause based on user role and subRole
     const whereClause: any = {
       status: 'UNREAD',
       OR: [
+        // Personal notifications for this user
         { userId: session.user.id },
-        ...(session.user.role === 'ADMIN'
-          ? [{ isAdminNotification: true }]
-          : []),
       ],
     };
+
+    // Only add admin notifications if user is ADMIN with STAFF or SUPER_ADMIN subRole
+    if (
+      session.user.role === 'ADMIN' &&
+      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole)
+    ) {
+      whereClause.OR.push({ isAdminNotification: true });
+    }
 
     const count = await prisma.notification.count({
       where: whereClause,
@@ -185,7 +199,7 @@ export async function getUnreadNotificationCount(): Promise<
   }
 }
 
-// Mark notification as read
+// Mark notification as read - FIXED FILTERING
 export async function markNotificationAsRead(
   notificationId: string
 ): Promise<ActionResponse<any>> {
@@ -202,16 +216,25 @@ export async function markNotificationAsRead(
       };
     }
 
+    // Build where clause based on user role and subRole
+    const whereClause: any = {
+      id: notificationId,
+      OR: [
+        // Personal notifications for this user
+        { userId: session.user.id },
+      ],
+    };
+
+    // Only add admin notifications if user is ADMIN with STAFF or SUPER_ADMIN subRole
+    if (
+      session.user.role === 'ADMIN' &&
+      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole)
+    ) {
+      whereClause.OR.push({ isAdminNotification: true });
+    }
+
     const notification = await prisma.notification.update({
-      where: {
-        id: notificationId,
-        OR: [
-          { userId: session.user.id },
-          ...(session.user.role === 'ADMIN'
-            ? [{ isAdminNotification: true }]
-            : []),
-        ],
-      },
+      where: whereClause,
       data: {
         status: 'READ',
       },
@@ -233,7 +256,7 @@ export async function markNotificationAsRead(
   }
 }
 
-// Mark all notifications as read
+// Mark all notifications as read - FIXED FILTERING
 export async function markAllNotificationsAsRead(): Promise<
   ActionResponse<any>
 > {
@@ -250,15 +273,22 @@ export async function markAllNotificationsAsRead(): Promise<
       };
     }
 
+    // Build where clause based on user role and subRole
     const whereClause: any = {
       status: 'UNREAD',
       OR: [
+        // Personal notifications for this user
         { userId: session.user.id },
-        ...(session.user.role === 'ADMIN'
-          ? [{ isAdminNotification: true }]
-          : []),
       ],
     };
+
+    // Only add admin notifications if user is ADMIN with STAFF or SUPER_ADMIN subRole
+    if (
+      session.user.role === 'ADMIN' &&
+      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole)
+    ) {
+      whereClause.OR.push({ isAdminNotification: true });
+    }
 
     await prisma.notification.updateMany({
       where: whereClause,
@@ -282,7 +312,7 @@ export async function markAllNotificationsAsRead(): Promise<
   }
 }
 
-// Delete notification
+// Delete notification - FIXED FILTERING
 export async function deleteNotification(
   notificationId: string
 ): Promise<ActionResponse<any>> {
@@ -299,16 +329,25 @@ export async function deleteNotification(
       };
     }
 
+    // Build where clause based on user role and subRole
+    const whereClause: any = {
+      id: notificationId,
+      OR: [
+        // Personal notifications for this user
+        { userId: session.user.id },
+      ],
+    };
+
+    // Only add admin notifications if user is ADMIN with STAFF or SUPER_ADMIN subRole
+    if (
+      session.user.role === 'ADMIN' &&
+      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole)
+    ) {
+      whereClause.OR.push({ isAdminNotification: true });
+    }
+
     await prisma.notification.delete({
-      where: {
-        id: notificationId,
-        OR: [
-          { userId: session.user.id },
-          ...(session.user.role === 'ADMIN'
-            ? [{ isAdminNotification: true }]
-            : []),
-        ],
-      },
+      where: whereClause,
     });
 
     revalidatePath('/admin/dashboard');
@@ -397,6 +436,52 @@ export async function createEventNotification(
     return {
       success: false,
       message: 'Failed to create event notification',
+    };
+  }
+}
+
+// NEW: Helper function to create organizer upgrade notification
+export async function createOrganizerUpgradeNotification(
+  userId: string
+): Promise<ActionResponse<any>> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        organizerProfile: true,
+      },
+    });
+
+    if (!user) {
+      return {
+        success: false,
+        message: 'User not found',
+      };
+    }
+
+    const title = 'New Organizer Registration';
+    const message = `${user.name} has upgraded to an organizer account and can now create events`;
+    const actionUrl = `/admin/dashboard/users/${user.id}`;
+
+    return await createNotification({
+      type: 'USER_UPGRADED_TO_ORGANIZER' as NotificationType,
+      title,
+      message,
+      actionUrl,
+      userId: undefined, // Don't send to specific user
+      isAdminNotification: true, // Send to all admins
+      metadata: {
+        organizerName: user.name,
+        organizerEmail: user.email,
+        organizationName: user.organizerProfile?.organizationName,
+        upgradedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('Error creating organizer upgrade notification:', error);
+    return {
+      success: false,
+      message: 'Failed to create organizer upgrade notification',
     };
   }
 }
