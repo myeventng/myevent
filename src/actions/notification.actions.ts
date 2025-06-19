@@ -1,10 +1,9 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
-import { NotificationType } from '@/generated/prisma';
+import { revalidatePath } from 'next/cache';
 
 interface ActionResponse<T> {
   success: boolean;
@@ -12,48 +11,101 @@ interface ActionResponse<T> {
   data?: T;
 }
 
-interface CreateNotificationInput {
+import type { NotificationType } from '@/generated/prisma';
+
+interface CreateNotificationData {
   type: NotificationType;
   title: string;
   message: string;
   actionUrl?: string;
-  metadata?: any;
-  userId?: string;
-  isAdminNotification?: boolean;
-  eventId?: string;
-  blogId?: string;
-  orderId?: string;
-  venueId?: string;
+  userId?: string; // Specific user to notify
+  isAdminNotification?: boolean; // Send to all admins
+  metadata?: Record<string, any>;
 }
 
-// Create a new notification
+// Define which notification types are for admins vs users
+const ADMIN_NOTIFICATION_TYPES = [
+  'EVENT_SUBMITTED',
+  'BLOG_SUBMITTED',
+  'VENUE_SUBMITTED',
+  'USER_REGISTERED',
+  'USER_UPGRADED_TO_ORGANIZER',
+  'PAYMENT_RECEIVED',
+];
+
+const ORGANIZER_NOTIFICATION_TYPES = [
+  'EVENT_APPROVED',
+  'EVENT_REJECTED',
+  'VENUE_APPROVED',
+  'VENUE_REJECTED',
+  'TICKET_PURCHASED',
+  'PAYMENT_RECEIVED',
+];
+
+const USER_NOTIFICATION_TYPES = [
+  'TICKET_PURCHASED',
+  'EVENT_CANCELLED',
+  'REFUND_PROCESSED',
+  'SYSTEM_UPDATE',
+];
+
+// Core function to create notifications
 export async function createNotification(
-  input: CreateNotificationInput
+  data: CreateNotificationData
 ): Promise<ActionResponse<any>> {
   try {
-    const notification = await prisma.notification.create({
-      data: {
-        type: input.type,
-        title: input.title,
-        message: input.message,
-        actionUrl: input.actionUrl,
-        metadata: input.metadata,
-        userId: input.userId,
-        isAdminNotification: input.isAdminNotification || false,
-        eventId: input.eventId,
-        blogId: input.blogId,
-        orderId: input.orderId,
-        venueId: input.venueId,
-      },
-    });
+    if (data.isAdminNotification) {
+      // Send to all admin users
+      const adminUsers = await prisma.user.findMany({
+        where: {
+          role: 'ADMIN',
+        },
+        select: { id: true },
+      });
 
-    // Revalidate notification-related paths
-    revalidatePath('/admin/dashboard');
-    revalidatePath('/dashboard');
+      const notifications = await Promise.all(
+        adminUsers.map((admin) =>
+          prisma.notification.create({
+            data: {
+              type: data.type,
+              title: data.title,
+              message: data.message,
+              actionUrl: data.actionUrl,
+              metadata: data.metadata,
+              user: { connect: { id: admin.id } },
+            },
+          })
+        )
+      );
+
+      return {
+        success: true,
+        message: `Notification sent to ${adminUsers.length} admins`,
+        data: notifications,
+      };
+    } else if (data.userId) {
+      // Send to specific user
+      const notification = await prisma.notification.create({
+        data: {
+          type: data.type,
+          title: data.title,
+          message: data.message,
+          actionUrl: data.actionUrl,
+          metadata: data.metadata,
+          user: { connect: { id: data.userId } },
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Notification sent successfully',
+        data: notification,
+      };
+    }
 
     return {
-      success: true,
-      data: notification,
+      success: false,
+      message: 'Must specify either userId or isAdminNotification',
     };
   } catch (error) {
     console.error('Error creating notification:', error);
@@ -64,10 +116,10 @@ export async function createNotification(
   }
 }
 
-// Get notifications for current user - FIXED FILTERING
+// Get user notifications with proper filtering based on role
 export async function getUserNotifications(
-  limit: number = 20,
-  offset: number = 0
+  limit = 20,
+  offset = 0
 ): Promise<ActionResponse<any[]>> {
   try {
     const headersList = await headers();
@@ -82,51 +134,10 @@ export async function getUserNotifications(
       };
     }
 
-    // Build where clause based on user role and subRole
-    const whereClause: any = {
-      OR: [
-        // Personal notifications for this user
-        { userId: session.user.id },
-      ],
-    };
-
-    // Only add admin notifications if user is ADMIN with STAFF or SUPER_ADMIN subRole
-    if (
-      session.user.role === 'ADMIN' &&
-      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole)
-    ) {
-      whereClause.OR.push({ isAdminNotification: true });
-    }
-
+    // Filter notifications based on user role
     const notifications = await prisma.notification.findMany({
-      where: whereClause,
-      include: {
-        event: {
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-          },
-        },
-        venue: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        order: {
-          select: {
-            id: true,
-            totalAmount: true,
-          },
-        },
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
+      where: {
+        userId: session.user.id,
       },
       orderBy: {
         createdAt: 'desc',
@@ -148,7 +159,7 @@ export async function getUserNotifications(
   }
 }
 
-// Get unread notification count - FIXED FILTERING
+// Get unread notification count
 export async function getUnreadNotificationCount(): Promise<
   ActionResponse<number>
 > {
@@ -165,25 +176,11 @@ export async function getUnreadNotificationCount(): Promise<
       };
     }
 
-    // Build where clause based on user role and subRole
-    const whereClause: any = {
-      status: 'UNREAD',
-      OR: [
-        // Personal notifications for this user
-        { userId: session.user.id },
-      ],
-    };
-
-    // Only add admin notifications if user is ADMIN with STAFF or SUPER_ADMIN subRole
-    if (
-      session.user.role === 'ADMIN' &&
-      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole)
-    ) {
-      whereClause.OR.push({ isAdminNotification: true });
-    }
-
     const count = await prisma.notification.count({
-      where: whereClause,
+      where: {
+        userId: session.user.id,
+        status: 'UNREAD',
+      },
     });
 
     return {
@@ -191,15 +188,15 @@ export async function getUnreadNotificationCount(): Promise<
       data: count,
     };
   } catch (error) {
-    console.error('Error fetching unread count:', error);
+    console.error('Error counting notifications:', error);
     return {
       success: false,
-      message: 'Failed to fetch unread count',
+      message: 'Failed to count notifications',
     };
   }
 }
 
-// Mark notification as read - FIXED FILTERING
+// Mark notification as read
 export async function markNotificationAsRead(
   notificationId: string
 ): Promise<ActionResponse<any>> {
@@ -216,35 +213,19 @@ export async function markNotificationAsRead(
       };
     }
 
-    // Build where clause based on user role and subRole
-    const whereClause: any = {
-      id: notificationId,
-      OR: [
-        // Personal notifications for this user
-        { userId: session.user.id },
-      ],
-    };
-
-    // Only add admin notifications if user is ADMIN with STAFF or SUPER_ADMIN subRole
-    if (
-      session.user.role === 'ADMIN' &&
-      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole)
-    ) {
-      whereClause.OR.push({ isAdminNotification: true });
-    }
-
     const notification = await prisma.notification.update({
-      where: whereClause,
+      where: {
+        id: notificationId,
+        userId: session.user.id, // Ensure user owns the notification
+      },
       data: {
         status: 'READ',
       },
     });
 
-    revalidatePath('/admin/dashboard');
-    revalidatePath('/dashboard');
-
     return {
       success: true,
+      message: 'Notification marked as read',
       data: notification,
     };
   } catch (error) {
@@ -256,7 +237,7 @@ export async function markNotificationAsRead(
   }
 }
 
-// Mark all notifications as read - FIXED FILTERING
+// Mark all notifications as read
 export async function markAllNotificationsAsRead(): Promise<
   ActionResponse<any>
 > {
@@ -273,35 +254,20 @@ export async function markAllNotificationsAsRead(): Promise<
       };
     }
 
-    // Build where clause based on user role and subRole
-    const whereClause: any = {
-      status: 'UNREAD',
-      OR: [
-        // Personal notifications for this user
-        { userId: session.user.id },
-      ],
-    };
-
-    // Only add admin notifications if user is ADMIN with STAFF or SUPER_ADMIN subRole
-    if (
-      session.user.role === 'ADMIN' &&
-      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole)
-    ) {
-      whereClause.OR.push({ isAdminNotification: true });
-    }
-
-    await prisma.notification.updateMany({
-      where: whereClause,
+    const result = await prisma.notification.updateMany({
+      where: {
+        userId: session.user.id,
+        status: 'UNREAD',
+      },
       data: {
         status: 'READ',
       },
     });
 
-    revalidatePath('/admin/dashboard');
-    revalidatePath('/dashboard');
-
     return {
       success: true,
+      message: `Marked ${result.count} notifications as read`,
+      data: result,
     };
   } catch (error) {
     console.error('Error marking all notifications as read:', error);
@@ -312,7 +278,7 @@ export async function markAllNotificationsAsRead(): Promise<
   }
 }
 
-// Delete notification - FIXED FILTERING
+// Delete notification
 export async function deleteNotification(
   notificationId: string
 ): Promise<ActionResponse<any>> {
@@ -329,32 +295,16 @@ export async function deleteNotification(
       };
     }
 
-    // Build where clause based on user role and subRole
-    const whereClause: any = {
-      id: notificationId,
-      OR: [
-        // Personal notifications for this user
-        { userId: session.user.id },
-      ],
-    };
-
-    // Only add admin notifications if user is ADMIN with STAFF or SUPER_ADMIN subRole
-    if (
-      session.user.role === 'ADMIN' &&
-      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole)
-    ) {
-      whereClause.OR.push({ isAdminNotification: true });
-    }
-
     await prisma.notification.delete({
-      where: whereClause,
+      where: {
+        id: notificationId,
+        userId: session.user.id, // Ensure user owns the notification
+      },
     });
-
-    revalidatePath('/admin/dashboard');
-    revalidatePath('/dashboard');
 
     return {
       success: true,
+      message: 'Notification deleted',
     };
   } catch (error) {
     console.error('Error deleting notification:', error);
@@ -365,82 +315,7 @@ export async function deleteNotification(
   }
 }
 
-// Helper function to create event-related notifications
-export async function createEventNotification(
-  eventId: string,
-  type: NotificationType,
-  userId?: string
-): Promise<ActionResponse<any>> {
-  try {
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
-      include: {
-        user: {
-          select: { name: true, email: true },
-        },
-      },
-    });
-
-    if (!event) {
-      return {
-        success: false,
-        message: 'Event not found',
-      };
-    }
-
-    let title = '';
-    let message = '';
-    let actionUrl = '';
-
-    switch (type) {
-      case 'EVENT_SUBMITTED':
-        title = 'New Event Submitted for Review';
-        message = `Event "${event.title}" has been submitted for review by ${event.user?.name}`;
-        actionUrl = `/admin/dashboard/events/${event.id}`;
-        break;
-      case 'EVENT_APPROVED':
-        title = 'Event Approved';
-        message = `Your event "${event.title}" has been approved and is now published`;
-        actionUrl = `/dashboard/events/${event.id}`;
-        break;
-      case 'EVENT_REJECTED':
-        title = 'Event Rejected';
-        message = `Your event "${event.title}" has been rejected. Please review and resubmit`;
-        actionUrl = `/dashboard/events/${event.id}`;
-        break;
-      default:
-        title = 'Event Update';
-        message = `Event "${event.title}" has been updated`;
-        actionUrl = `/dashboard/events/${event.id}`;
-    }
-
-    return await createNotification({
-      type,
-      title,
-      message,
-      actionUrl,
-      eventId,
-      userId:
-        type === 'EVENT_SUBMITTED'
-          ? undefined
-          : userId ?? event.userId ?? undefined,
-      isAdminNotification: type === 'EVENT_SUBMITTED',
-      metadata: {
-        eventTitle: event.title,
-        organizerName: event.user?.name,
-        organizerEmail: event.user?.email,
-      },
-    });
-  } catch (error) {
-    console.error('Error creating event notification:', error);
-    return {
-      success: false,
-      message: 'Failed to create event notification',
-    };
-  }
-}
-
-// NEW: Helper function to create organizer upgrade notification
+// Helper function to create organizer upgrade notification
 export async function createOrganizerUpgradeNotification(
   userId: string
 ): Promise<ActionResponse<any>> {
@@ -464,12 +339,11 @@ export async function createOrganizerUpgradeNotification(
     const actionUrl = `/admin/dashboard/users/${user.id}`;
 
     return await createNotification({
-      type: 'USER_UPGRADED_TO_ORGANIZER' as NotificationType,
+      type: 'USER_UPGRADED_TO_ORGANIZER',
       title,
       message,
       actionUrl,
-      userId: undefined, // Don't send to specific user
-      isAdminNotification: true, // Send to all admins
+      isAdminNotification: true,
       metadata: {
         organizerName: user.name,
         organizerEmail: user.email,
@@ -482,6 +356,370 @@ export async function createOrganizerUpgradeNotification(
     return {
       success: false,
       message: 'Failed to create organizer upgrade notification',
+    };
+  }
+}
+
+// Helper function to create event submission notification
+export async function createEventSubmissionNotification(
+  eventId: string
+): Promise<ActionResponse<any>> {
+  try {
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!event) {
+      return {
+        success: false,
+        message: 'Event not found',
+      };
+    }
+
+    const title = 'New Event Submitted for Review';
+    const message = `${event.user?.name || 'Unknown user'} has submitted "${
+      event.title
+    }" for approval`;
+    const actionUrl = `/admin/dashboard/events/${eventId}`;
+
+    return await createNotification({
+      type: 'EVENT_SUBMITTED',
+      title,
+      message,
+      actionUrl,
+      isAdminNotification: true,
+      metadata: {
+        eventId: event.id,
+        eventTitle: event.title,
+        organizerName: event.user?.name,
+        submittedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('Error creating event submission notification:', error);
+    return {
+      success: false,
+      message: 'Failed to create event submission notification',
+    };
+  }
+}
+
+// Helper function to create event approval/rejection notification
+export async function createEventStatusNotification(
+  eventId: string,
+  status: 'approved' | 'rejected',
+  rejectionReason?: string
+): Promise<ActionResponse<any>> {
+  try {
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!event) {
+      return {
+        success: false,
+        message: 'Event not found',
+      };
+    }
+
+    const title =
+      status === 'approved' ? 'Event Approved!' : 'Event Requires Changes';
+
+    const message =
+      status === 'approved'
+        ? `Your event "${event.title}" has been approved and is now live!`
+        : `Your event "${
+            event.title
+          }" needs some changes before it can be published${
+            rejectionReason ? `: ${rejectionReason}` : '.'
+          }`;
+
+    const actionUrl = `/dashboard/events/${eventId}`;
+
+    return await createNotification({
+      type: status === 'approved' ? 'EVENT_APPROVED' : 'EVENT_REJECTED',
+      title,
+      message,
+      actionUrl,
+      userId: event.userId!,
+      metadata: {
+        eventId: event.id,
+        eventTitle: event.title,
+        status,
+        rejectionReason,
+        processedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('Error creating event status notification:', error);
+    return {
+      success: false,
+      message: 'Failed to create event status notification',
+    };
+  }
+}
+
+// Helper function to create ticket purchase notification
+export async function createTicketPurchaseNotification(
+  ticketId: string,
+  userId: string,
+  organizerId: string
+): Promise<ActionResponse<any>> {
+  try {
+    // First get the ticket with proper relations
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        ticketType: {
+          include: {
+            event: true,
+          },
+        },
+        user: true,
+      },
+    });
+
+    if (!ticket) {
+      return {
+        success: false,
+        message: 'Ticket not found',
+      };
+    }
+
+    const event = ticket.ticketType.event;
+    const user = ticket.user;
+
+    // Notify the user who purchased the ticket
+    const userNotification = await createNotification({
+      type: 'TICKET_PURCHASED',
+      title: 'Ticket Purchase Confirmed',
+      message: `Your ticket for "${event.title}" has been confirmed!`,
+      actionUrl: `/dashboard/tickets/${ticketId}`,
+      userId: userId,
+      metadata: {
+        ticketId: ticket.id,
+        eventTitle: event.title,
+        eventDate: event.startDateTime,
+        purchasedAt: new Date().toISOString(),
+      },
+    });
+
+    // Notify the organizer about the purchase
+    const organizerNotification = await createNotification({
+      type: 'TICKET_PURCHASED',
+      title: 'New Ticket Sale',
+      message: `${user?.name || 'Someone'} purchased a ticket for "${
+        event.title
+      }"`,
+      actionUrl: `/dashboard/events/${event.id}/attendees`,
+      userId: organizerId,
+      metadata: {
+        ticketId: ticket.id,
+        eventTitle: event.title,
+        buyerName: user?.name,
+        purchasedAt: new Date().toISOString(),
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Ticket purchase notifications sent',
+      data: { userNotification, organizerNotification },
+    };
+  } catch (error) {
+    console.error('Error creating ticket purchase notification:', error);
+    return {
+      success: false,
+      message: 'Failed to create ticket purchase notification',
+    };
+  }
+}
+
+// Main notification function used by event actions - THIS IS THE MISSING FUNCTION
+export async function createEventNotification(
+  eventId: string,
+  type: 'EVENT_SUBMITTED' | 'EVENT_APPROVED' | 'EVENT_REJECTED',
+  specificUserId?: string
+): Promise<ActionResponse<any>> {
+  try {
+    switch (type) {
+      case 'EVENT_SUBMITTED':
+        return await createEventSubmissionNotification(eventId);
+
+      case 'EVENT_APPROVED':
+        return await createEventStatusNotification(eventId, 'approved');
+
+      case 'EVENT_REJECTED':
+        return await createEventStatusNotification(eventId, 'rejected');
+
+      default:
+        return {
+          success: false,
+          message: 'Invalid notification type',
+        };
+    }
+  } catch (error) {
+    console.error('Error creating event notification:', error);
+    return {
+      success: false,
+      message: 'Failed to create event notification',
+    };
+  }
+}
+
+// Additional helper functions for different notification types
+
+// Helper function to create venue submission notification
+export async function createVenueSubmissionNotification(
+  venueId: string
+): Promise<ActionResponse<any>> {
+  try {
+    const venue = await prisma.venue.findUnique({
+      where: { id: venueId },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!venue) {
+      return {
+        success: false,
+        message: 'Venue not found',
+      };
+    }
+
+    const title = 'New Venue Submitted for Review';
+    const message = `${venue.user?.name || 'Unknown user'} has submitted "${
+      venue.name
+    }" for approval`;
+    const actionUrl = `/admin/dashboard/venues/${venueId}`;
+
+    return await createNotification({
+      type: 'VENUE_SUBMITTED',
+      title,
+      message,
+      actionUrl,
+      isAdminNotification: true,
+      metadata: {
+        venueId: venue.id,
+        venueName: venue.name,
+        organizerName: venue.user?.name,
+        submittedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('Error creating venue submission notification:', error);
+    return {
+      success: false,
+      message: 'Failed to create venue submission notification',
+    };
+  }
+}
+
+// Helper function to create venue status notification
+export async function createVenueStatusNotification(
+  venueId: string,
+  status: 'approved' | 'rejected',
+  rejectionReason?: string
+): Promise<ActionResponse<any>> {
+  try {
+    const venue = await prisma.venue.findUnique({
+      where: { id: venueId },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!venue) {
+      return {
+        success: false,
+        message: 'Venue not found',
+      };
+    }
+
+    const title =
+      status === 'approved' ? 'Venue Approved!' : 'Venue Requires Changes';
+
+    const message =
+      status === 'approved'
+        ? `Your venue "${venue.name}" has been approved and is now available for events!`
+        : `Your venue "${
+            venue.name
+          }" needs some changes before it can be published${
+            rejectionReason ? `: ${rejectionReason}` : '.'
+          }`;
+
+    const actionUrl = `/dashboard/venues/${venueId}`;
+
+    return await createNotification({
+      type: status === 'approved' ? 'VENUE_APPROVED' : 'VENUE_REJECTED',
+      title,
+      message,
+      actionUrl,
+      userId: venue.userId!,
+      metadata: {
+        venueId: venue.id,
+        venueName: venue.name,
+        status,
+        rejectionReason,
+        processedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('Error creating venue status notification:', error);
+    return {
+      success: false,
+      message: 'Failed to create venue status notification',
+    };
+  }
+}
+
+// Helper function to create system update notification
+export async function createSystemUpdateNotification(
+  title: string,
+  message: string,
+  actionUrl?: string
+): Promise<ActionResponse<any>> {
+  try {
+    // Get all users to send system update to everyone
+    const users = await prisma.user.findMany({
+      select: { id: true },
+    });
+
+    const notifications = await Promise.all(
+      users.map((user) =>
+        prisma.notification.create({
+          data: {
+            type: 'SYSTEM_UPDATE',
+            title,
+            message,
+            actionUrl,
+            user: { connect: { id: user.id } },
+            metadata: {
+              systemUpdate: true,
+              sentAt: new Date().toISOString(),
+            },
+          },
+        })
+      )
+    );
+
+    return {
+      success: true,
+      message: `System notification sent to ${users.length} users`,
+      data: notifications,
+    };
+  } catch (error) {
+    console.error('Error creating system update notification:', error);
+    return {
+      success: false,
+      message: 'Failed to create system update notification',
     };
   }
 }

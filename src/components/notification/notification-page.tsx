@@ -7,11 +7,16 @@ import {
   Check,
   CheckCheck,
   Trash2,
-  Filter,
   Search,
-  Archive,
   Eye,
   EyeOff,
+  Calendar,
+  FileText,
+  Ticket,
+  DollarSign,
+  MapPin,
+  User,
+  UserPlus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -59,7 +64,7 @@ export function NotificationsPage() {
     setIsLoading(true);
     try {
       const [notificationsRes, countRes] = await Promise.all([
-        getUserNotifications(50, 0), // Get more notifications for the page
+        getUserNotifications(50, 0),
         getUnreadNotificationCount(),
       ]);
 
@@ -154,38 +159,110 @@ export function NotificationsPage() {
     }
   };
 
-  // Get notification icon
+  // Get notification icon with proper icons
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'EVENT_SUBMITTED':
+        return <Calendar className="w-5 h-5 text-yellow-600" />;
       case 'EVENT_APPROVED':
+        return <Calendar className="w-5 h-5 text-green-600" />;
       case 'EVENT_REJECTED':
-        return '📅';
+        return <Calendar className="w-5 h-5 text-red-600" />;
       case 'BLOG_SUBMITTED':
+        return <FileText className="w-5 h-5 text-yellow-600" />;
       case 'BLOG_APPROVED':
+        return <FileText className="w-5 h-5 text-green-600" />;
       case 'BLOG_REJECTED':
-        return '📝';
+        return <FileText className="w-5 h-5 text-red-600" />;
       case 'TICKET_PURCHASED':
-        return '🎟️';
+        return <Ticket className="w-5 h-5 text-blue-600" />;
       case 'PAYMENT_RECEIVED':
-        return '💰';
+        return <DollarSign className="w-5 h-5 text-green-600" />;
       case 'VENUE_SUBMITTED':
+        return <MapPin className="w-5 h-5 text-yellow-600" />;
       case 'VENUE_APPROVED':
+        return <MapPin className="w-5 h-5 text-green-600" />;
       case 'VENUE_REJECTED':
-        return '📍';
+        return <MapPin className="w-5 h-5 text-red-600" />;
       case 'USER_REGISTERED':
-        return '👤';
+        return <User className="w-5 h-5 text-blue-600" />;
+      case 'USER_UPGRADED_TO_ORGANIZER':
+        return <UserPlus className="w-5 h-5 text-purple-600" />;
+      case 'EVENT_CANCELLED':
+        return <Calendar className="w-5 h-5 text-red-600" />;
+      case 'REFUND_PROCESSED':
+        return <DollarSign className="w-5 h-5 text-orange-600" />;
+      case 'SYSTEM_UPDATE':
+        return <Bell className="w-5 h-5 text-gray-600" />;
       default:
-        return '🔔';
+        return <Bell className="w-5 h-5 text-gray-600" />;
     }
   };
 
   // Get notification type label
   const getTypeLabel = (type: string) => {
-    return type
-      .replace(/_/g, ' ')
-      .toLowerCase()
-      .replace(/\b\w/g, (l) => l.toUpperCase());
+    const labels: { [key: string]: string } = {
+      EVENT_SUBMITTED: 'Event Submitted',
+      EVENT_APPROVED: 'Event Approved',
+      EVENT_REJECTED: 'Event Rejected',
+      BLOG_SUBMITTED: 'Blog Submitted',
+      BLOG_APPROVED: 'Blog Approved',
+      BLOG_REJECTED: 'Blog Rejected',
+      TICKET_PURCHASED: 'Ticket Purchased',
+      PAYMENT_RECEIVED: 'Payment Received',
+      VENUE_SUBMITTED: 'Venue Submitted',
+      VENUE_APPROVED: 'Venue Approved',
+      VENUE_REJECTED: 'Venue Rejected',
+      USER_REGISTERED: 'User Registered',
+      USER_UPGRADED_TO_ORGANIZER: 'New Organizer',
+      EVENT_CANCELLED: 'Event Cancelled',
+      REFUND_PROCESSED: 'Refund Processed',
+      SYSTEM_UPDATE: 'System Update',
+    };
+
+    return (
+      labels[type] ||
+      type
+        .replace(/_/g, ' ')
+        .toLowerCase()
+        .replace(/\b\w/g, (l) => l.toUpperCase())
+    );
+  };
+
+  // Get notification color based on type
+  const getNotificationColor = (type: string) => {
+    switch (type) {
+      case 'EVENT_APPROVED':
+      case 'BLOG_APPROVED':
+      case 'VENUE_APPROVED':
+      case 'PAYMENT_RECEIVED':
+        return 'border-l-4 border-l-green-500';
+      case 'EVENT_REJECTED':
+      case 'BLOG_REJECTED':
+      case 'VENUE_REJECTED':
+      case 'EVENT_CANCELLED':
+        return 'border-l-4 border-l-red-500';
+      case 'EVENT_SUBMITTED':
+      case 'BLOG_SUBMITTED':
+      case 'VENUE_SUBMITTED':
+        return 'border-l-4 border-l-yellow-500';
+      case 'USER_UPGRADED_TO_ORGANIZER':
+        return 'border-l-4 border-l-purple-500';
+      case 'TICKET_PURCHASED':
+      case 'USER_REGISTERED':
+        return 'border-l-4 border-l-blue-500';
+      default:
+        return 'border-l-4 border-l-gray-300';
+    }
+  };
+
+  // Get available notification types for filter (role-based)
+  const getAvailableNotificationTypes = () => {
+    const uniqueTypes = [...new Set(notifications.map((n) => n.type))];
+    return uniqueTypes.map((type) => ({
+      value: type,
+      label: getTypeLabel(type),
+    }));
   };
 
   return (
@@ -243,14 +320,11 @@ export function NotificationsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="EVENT_SUBMITTED">Event Submitted</SelectItem>
-                <SelectItem value="EVENT_APPROVED">Event Approved</SelectItem>
-                <SelectItem value="EVENT_REJECTED">Event Rejected</SelectItem>
-                <SelectItem value="BLOG_SUBMITTED">Blog Submitted</SelectItem>
-                <SelectItem value="TICKET_PURCHASED">
-                  Ticket Purchased
-                </SelectItem>
-                <SelectItem value="VENUE_SUBMITTED">Venue Submitted</SelectItem>
+                {getAvailableNotificationTypes().map((type) => (
+                  <SelectItem key={type.value} value={type.value}>
+                    {type.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -281,7 +355,9 @@ export function NotificationsPage() {
           filteredNotifications.map((notification) => (
             <Card
               key={notification.id}
-              className={`transition-colors ${
+              className={`transition-colors ${getNotificationColor(
+                notification.type
+              )} ${
                 notification.status === 'UNREAD'
                   ? 'bg-blue-50 border-blue-200'
                   : 'hover:bg-muted/50'
@@ -289,7 +365,7 @@ export function NotificationsPage() {
             >
               <CardContent className="p-4">
                 <div className="flex items-start gap-4">
-                  <div className="text-2xl flex-shrink-0 mt-1">
+                  <div className="flex-shrink-0 mt-1">
                     {getNotificationIcon(notification.type)}
                   </div>
 
@@ -403,13 +479,12 @@ export function NotificationsPage() {
         )}
       </div>
 
-      {/* Load More Button (if you want to implement pagination) */}
+      {/* Load More Button */}
       {filteredNotifications.length >= 50 && (
         <div className="flex justify-center">
           <Button
             variant="outline"
             onClick={() => {
-              // Implement load more functionality here
               toast.info('Load more functionality to be implemented');
             }}
           >

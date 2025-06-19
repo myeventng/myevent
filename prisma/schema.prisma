@@ -31,9 +31,7 @@ enum NotificationType {
   SYSTEM_UPDATE
   PAYMENT_RECEIVED
   USER_REGISTERED
-  ORGANIZER_PROFILE_SUBMITTED
-  ORGANIZER_PROFILE_APPROVED
-  ORGANIZER_PROFILE_REJECTED
+  USER_UPGRADED_TO_ORGANIZER // Add this line
 }
 
 enum NotificationStatus {
@@ -53,6 +51,7 @@ model Notification {
   message   String
   actionUrl String?
   metadata  Json?
+  readAt    DateTime?
 
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -223,6 +222,18 @@ model Order {
   @@index([buyerId])
 }
 
+model UserNote {
+  id        String   @id @default(cuid())
+  userId    String
+  note      String
+  createdBy String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_notes")
+}
+
 model User {
   id        String   @id @default(uuid())
   createdAt DateTime
@@ -240,6 +251,17 @@ model User {
   gender        Gender?
   role          UserRole    @default(USER)
   subRole       UserSubRole @default(ORDINARY)
+
+  // For proper suspension support
+  suspended        Boolean?  @default(false)
+  suspensionReason String?
+  suspendedAt      DateTime?
+
+  // For admin notes
+  adminNotes UserNote[]
+
+  // For better activity tracking
+  lastSeen DateTime?
 
   sessions         Session[]
   accounts         Account[]

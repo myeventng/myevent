@@ -221,11 +221,6 @@ export function Sidebar({
           href: '/admin/dashboard/blog-categories',
           icon: <Blocks className="w-4 h-4" />,
         },
-        // {
-        //   title: 'Pending Review',
-        //   href: '/admin/dashboard/blogs/pending',
-        //   icon: <Eye className="w-4 h-4" />,
-        // },
       ],
     },
     {
@@ -247,25 +242,14 @@ export function Sidebar({
       icon: <Home className="w-5 h-5" />,
     },
     {
-      title: 'Events',
-      icon: <Calendar className="w-5 h-5" />,
-      children: [
-        {
-          title: 'My Events',
-          href: '/dashboard/events',
-          icon: <List className="w-4 h-4" />,
-        },
-        {
-          title: 'Create Event',
-          href: '/dashboard/create-event',
-          icon: <Plus className="w-4 h-4" />,
-        },
-        {
-          title: 'Drafts',
-          href: '/dashboard/events/drafts',
-          icon: <Edit className="w-4 h-4" />,
-        },
-      ],
+      title: 'Notifications',
+      href: '/dashboard/notifications',
+      icon: <Bell className="w-5 h-5" />,
+    },
+    {
+      title: 'My Events',
+      href: '/dashboard/events',
+      icon: <List className="w-4 h-4" />,
     },
     {
       title: 'My Tickets',
@@ -341,9 +325,15 @@ export function Sidebar({
   ];
 
   const userIsOrganizer = isOrganizer(user);
+  const isAdmin = user.role === 'ADMIN';
+
+  // FIXED: Admin users should NOT see organizer items
   const navItems = isAdminDashboard
     ? adminNavItems
-    : [...userNavItems, ...(userIsOrganizer ? organizerNavItems : [])];
+    : [
+        ...userNavItems,
+        ...(userIsOrganizer && !isAdmin ? organizerNavItems : []),
+      ];
 
   const getSectionId = (item: NavItem) => {
     if (isAdminDashboard) {
@@ -493,6 +483,10 @@ export function Sidebar({
                   {user.name}
                 </p>
                 <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                {/* Show user role for debugging */}
+                <p className="text-xs text-blue-500">
+                  {user.role} - {user.subRole}
+                </p>
               </div>
             </div>
           </div>
