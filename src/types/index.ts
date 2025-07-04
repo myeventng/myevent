@@ -105,3 +105,70 @@ export function extractBasicVenue(venue: VenueWithCityAndUser): PrismaVenue {
   const { city, user, ...basicVenue } = venue;
   return basicVenue;
 }
+
+//notification.types.ts
+export interface NotificationMetadata {
+  // Event related
+  eventId?: string;
+  eventTitle?: string;
+  eventDate?: string;
+  organizerName?: string;
+  organizerEmail?: string;
+
+  // Ticket related
+  orderId?: string;
+  ticketId?: string;
+  buyerName?: string;
+  buyerEmail?: string;
+  quantity?: number;
+  totalAmount?: number;
+
+  // Venue related
+  venueId?: string;
+  venueName?: string;
+
+  // User related
+  userId?: string;
+  userName?: string;
+  userEmail?: string;
+
+  // Payment related
+  payoutAmount?: number;
+  refundAmount?: number;
+
+  // Timing
+  submittedAt?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  cancelledAt?: string;
+  purchasedAt?: string;
+  processedAt?: string;
+  requestedAt?: string;
+
+  // Additional context
+  rejectionReason?: string;
+  cancellationReason?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  lowStockTickets?: Array<{
+    id: string;
+    name: string;
+    remaining: number;
+  }>;
+  offerExpiresAt?: string;
+  systemUpdate?: boolean;
+  sentAt?: string;
+  message?: string;
+}
+
+export interface NotificationTemplate {
+  type: string;
+  title: string;
+  message: string;
+  priority: 'low' | 'medium' | 'high';
+  category: 'events' | 'tickets' | 'venues' | 'users' | 'payments' | 'system';
+  requiresAction?: boolean;
+  emailEnabled?: boolean;
+}
+
+// utils/notification-templates.ts

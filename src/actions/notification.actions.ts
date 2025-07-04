@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
+import { emailService } from '@/lib/email-service';
 
 interface ActionResponse<T> {
   success: boolean;
@@ -18,36 +19,11 @@ interface CreateNotificationData {
   title: string;
   message: string;
   actionUrl?: string;
-  userId?: string; // Specific user to notify
-  isAdminNotification?: boolean; // Send to all admins
+  userId?: string;
+  isAdminNotification?: boolean;
   metadata?: Record<string, any>;
+  sendEmail?: boolean;
 }
-
-// Define which notification types are for admins vs users
-const ADMIN_NOTIFICATION_TYPES = [
-  'EVENT_SUBMITTED',
-  'BLOG_SUBMITTED',
-  'VENUE_SUBMITTED',
-  'USER_REGISTERED',
-  'USER_UPGRADED_TO_ORGANIZER',
-  'PAYMENT_RECEIVED',
-];
-
-const ORGANIZER_NOTIFICATION_TYPES = [
-  'EVENT_APPROVED',
-  'EVENT_REJECTED',
-  'VENUE_APPROVED',
-  'VENUE_REJECTED',
-  'TICKET_PURCHASED',
-  'PAYMENT_RECEIVED',
-];
-
-const USER_NOTIFICATION_TYPES = [
-  'TICKET_PURCHASED',
-  'EVENT_CANCELLED',
-  'REFUND_PROCESSED',
-  'SYSTEM_UPDATE',
-];
 
 // Core function to create notifications
 export async function createNotification(
@@ -60,7 +36,7 @@ export async function createNotification(
         where: {
           role: 'ADMIN',
         },
-        select: { id: true },
+        select: { id: true, email: true, name: true },
       });
 
       const notifications = await Promise.all(
@@ -94,7 +70,15 @@ export async function createNotification(
           metadata: data.metadata,
           user: { connect: { id: data.userId } },
         },
+        include: {
+          user: true,
+        },
       });
+
+      // Send email notification if requested
+      if (data.sendEmail && notification.user?.email) {
+        await sendEmailForNotification(notification);
+      }
 
       return {
         success: true,
@@ -112,6 +96,459 @@ export async function createNotification(
     return {
       success: false,
       message: 'Failed to create notification',
+    };
+  }
+}
+
+// Enhanced email notification function
+async function sendEmailForNotification(notification: any) {
+  try {
+    const { type, user } = notification;
+
+    switch (type) {
+      case 'EVENT_APPROVED':
+      case 'EVENT_REJECTED':
+      case 'EVENT_CANCELLED':
+        if (notification.metadata?.eventId) {
+          const event = await prisma.event.findUnique({
+            where: { id: notification.metadata.eventId },
+            include: {
+              venue: {
+                include: {
+                  city: true,
+                },
+              },
+            },
+          });
+
+          if (event) {
+            await emailService.sendEventNotification(user.email, event, type);
+          }
+        }
+        break;
+
+      case 'TICKET_AVAILABLE':
+        if (notification.metadata?.eventId) {
+          const event = await prisma.event.findUnique({
+            where: { id: notification.metadata.eventId },
+            include: {
+              venue: {
+                include: {
+                  city: true,
+                },
+              },
+            },
+          });
+
+          if (event) {
+            await emailService.sendWaitingListNotification(user.email, event);
+          }
+        }
+        break;
+
+      case 'REFUND_PROCESSED':
+        if (notification.metadata?.orderId) {
+          const order = await prisma.order.findUnique({
+            where: { id: notification.metadata.orderId },
+            include: {
+              event: true,
+              buyer: true,
+            },
+          });
+
+          if (order) {
+            await emailService.sendRefundNotification(user.email, order);
+          }
+        }
+        break;
+
+      // Add more cases as needed
+      default:
+        break;
+    }
+  } catch (error) {
+    console.error('Error sending email for notification:', error);
+  }
+}
+
+// MISSING FUNCTION: Create ticket notification
+export async function createTicketNotification(
+  orderId: string,
+  type: 'TICKET_PURCHASED' | 'REFUND_REQUESTED' | 'REFUND_PROCESSED',
+  specificUserId?: string
+): Promise<ActionResponse<any>> {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        event: {
+          include: {
+            user: true,
+            venue: {
+              include: {
+                city: true,
+              },
+            },
+          },
+        },
+        buyer: true,
+      },
+    });
+
+    if (!order) {
+      return {
+        success: false,
+        message: 'Order not found',
+      };
+    }
+
+    let notifications = [];
+
+    switch (type) {
+      case 'TICKET_PURCHASED':
+        // Notify the buyer
+        const buyerNotification = await createNotification({
+          type: 'TICKET_PURCHASED',
+          title: 'Tickets Purchased Successfully! 🎟️',
+          message: `Your ${order.quantity} ticket(s) for "${order.event.title}" have been confirmed. Check your email for your tickets.`,
+          actionUrl: `/dashboard/tickets`,
+          userId: order.buyerId,
+          metadata: {
+            orderId: order.id,
+            eventId: order.eventId,
+            eventTitle: order.event.title,
+            quantity: order.quantity,
+            totalAmount: order.totalAmount,
+            purchasedAt: new Date().toISOString(),
+          },
+          sendEmail: false, // Email will be sent separately with tickets
+        });
+        notifications.push(buyerNotification);
+
+        // Notify the organizer
+        if (order.event.userId) {
+          const organizerNotification = await createNotification({
+            type: 'TICKET_PURCHASED',
+            title: 'New Ticket Sale! 💰',
+            message: `${order.buyer.name || 'Someone'} purchased ${order.quantity} ticket(s) for "${order.event.title}" (₦${order.totalAmount.toLocaleString()})`,
+            actionUrl: `/dashboard/events/${order.eventId}/analytics`,
+            userId: order.event.userId,
+            metadata: {
+              orderId: order.id,
+              eventId: order.eventId,
+              eventTitle: order.event.title,
+              buyerName: order.buyer.name,
+              buyerEmail: order.buyer.email,
+              quantity: order.quantity,
+              totalAmount: order.totalAmount,
+              purchasedAt: new Date().toISOString(),
+            },
+            sendEmail: true,
+          });
+          notifications.push(organizerNotification);
+        }
+        break;
+
+      case 'REFUND_REQUESTED':
+        // Notify admins about refund request
+        const refundRequestNotification = await createNotification({
+          type: 'REFUND_REQUESTED',
+          title: 'Refund Request Submitted ⚠️',
+          message: `A refund has been requested for order #${order.id} (${order.event.title}) - ₦${order.totalAmount.toLocaleString()}`,
+          actionUrl: `/admin/dashboard/orders/${order.id}`,
+          isAdminNotification: true,
+          metadata: {
+            orderId: order.id,
+            eventId: order.eventId,
+            eventTitle: order.event.title,
+            buyerName: order.buyer.name,
+            buyerEmail: order.buyer.email,
+            refundAmount: order.totalAmount,
+            requestedAt: new Date().toISOString(),
+          },
+          sendEmail: true,
+        });
+        notifications.push(refundRequestNotification);
+
+        // Notify the buyer that request was submitted
+        const buyerRefundNotification = await createNotification({
+          type: 'REFUND_REQUESTED',
+          title: 'Refund Request Received 📝',
+          message: `Your refund request for "${order.event.title}" has been submitted and is under review.`,
+          actionUrl: `/dashboard/tickets`,
+          userId: order.buyerId,
+          metadata: {
+            orderId: order.id,
+            eventId: order.eventId,
+            eventTitle: order.event.title,
+            refundAmount: order.totalAmount,
+            requestedAt: new Date().toISOString(),
+          },
+          sendEmail: true,
+        });
+        notifications.push(buyerRefundNotification);
+        break;
+
+      case 'REFUND_PROCESSED':
+        // Notify the buyer that refund was processed
+        const processedNotification = await createNotification({
+          type: 'REFUND_PROCESSED',
+          title: 'Refund Processed Successfully ✅',
+          message: `Your refund of ₦${order.totalAmount.toLocaleString()} for "${order.event.title}" has been processed and will reflect in your account within 5-10 business days.`,
+          actionUrl: `/dashboard/tickets`,
+          userId: specificUserId || order.buyerId,
+          metadata: {
+            orderId: order.id,
+            eventId: order.eventId,
+            eventTitle: order.event.title,
+            refundAmount: order.totalAmount,
+            processedAt: new Date().toISOString(),
+          },
+          sendEmail: true,
+        });
+        notifications.push(processedNotification);
+
+        // Notify the organizer
+        if (order.event.userId) {
+          const organizerRefundNotification = await createNotification({
+            type: 'REFUND_PROCESSED',
+            title: 'Refund Processed 💸',
+            message: `A refund of ₦${order.totalAmount.toLocaleString()} has been processed for "${order.event.title}"`,
+            actionUrl: `/dashboard/events/${order.eventId}/analytics`,
+            userId: order.event.userId,
+            metadata: {
+              orderId: order.id,
+              eventId: order.eventId,
+              eventTitle: order.event.title,
+              buyerName: order.buyer.name,
+              refundAmount: order.totalAmount,
+              processedAt: new Date().toISOString(),
+            },
+            sendEmail: true,
+          });
+          notifications.push(organizerRefundNotification);
+        }
+        break;
+    }
+
+    return {
+      success: true,
+      message: `Ticket notifications sent successfully`,
+      data: notifications,
+    };
+  } catch (error) {
+    console.error('Error creating ticket notification:', error);
+    return {
+      success: false,
+      message: 'Failed to create ticket notification',
+    };
+  }
+}
+
+// Create waiting list notification
+export async function createWaitingListNotification(
+  eventId: string,
+  userId: string
+): Promise<ActionResponse<any>> {
+  try {
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        venue: {
+          include: {
+            city: true,
+          },
+        },
+      },
+    });
+
+    if (!event) {
+      return {
+        success: false,
+        message: 'Event not found',
+      };
+    }
+
+    return await createNotification({
+      type: 'TICKET_AVAILABLE',
+      title: 'Tickets Available! 🎫',
+      message: `Great news! Tickets are now available for "${event.title}". This offer expires in 24 hours.`,
+      actionUrl: `/events/${event.slug}`,
+      userId,
+      metadata: {
+        eventId: event.id,
+        eventTitle: event.title,
+        eventDate: event.startDateTime,
+        offerExpiresAt: new Date(
+          Date.now() + 24 * 60 * 60 * 1000
+        ).toISOString(),
+      },
+      sendEmail: true,
+    });
+  } catch (error) {
+    console.error('Error creating waiting list notification:', error);
+    return {
+      success: false,
+      message: 'Failed to create waiting list notification',
+    };
+  }
+}
+
+// Create event cancellation notification
+export async function createEventCancellationNotification(
+  eventId: string
+): Promise<ActionResponse<any>> {
+  try {
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        orders: {
+          where: {
+            paymentStatus: 'COMPLETED',
+          },
+          include: {
+            buyer: true,
+          },
+        },
+      },
+    });
+
+    if (!event) {
+      return {
+        success: false,
+        message: 'Event not found',
+      };
+    }
+
+    // Get unique buyers
+    const uniqueBuyers = event.orders.reduce((acc, order) => {
+      if (!acc.find((buyer) => buyer.id === order.buyer.id)) {
+        acc.push(order.buyer);
+      }
+      return acc;
+    }, [] as any[]);
+
+    // Notify all ticket holders
+    const notifications = await Promise.all(
+      uniqueBuyers.map((buyer) =>
+        createNotification({
+          type: 'EVENT_CANCELLED',
+          title: 'Event Cancelled - Refund Initiated ⚠️',
+          message: `Unfortunately, "${event.title}" has been cancelled. Your tickets will be automatically refunded within 5-10 business days.`,
+          actionUrl: `/dashboard/tickets`,
+          userId: buyer.id,
+          metadata: {
+            eventId: event.id,
+            eventTitle: event.title,
+            cancelledAt: new Date().toISOString(),
+          },
+          sendEmail: true,
+        })
+      )
+    );
+
+    return {
+      success: true,
+      message: `Event cancellation notifications sent to ${uniqueBuyers.length} ticket holders`,
+      data: notifications,
+    };
+  } catch (error) {
+    console.error('Error creating event cancellation notification:', error);
+    return {
+      success: false,
+      message: 'Failed to create event cancellation notification',
+    };
+  }
+}
+
+// Create payout notification for organizers
+export async function createPayoutNotification(
+  organizerId: string,
+  amount: number,
+  period: { start: Date; end: Date }
+): Promise<ActionResponse<any>> {
+  try {
+    return await createNotification({
+      type: 'PAYMENT_RECEIVED',
+      title: 'Payout Processed! 💰',
+      message: `Your payout of ₦${amount.toLocaleString()} for the period ${period.start.toLocaleDateString()} - ${period.end.toLocaleDateString()} has been processed.`,
+      actionUrl: `/dashboard/analytics`,
+      userId: organizerId,
+      metadata: {
+        payoutAmount: amount,
+        periodStart: period.start.toISOString(),
+        periodEnd: period.end.toISOString(),
+        processedAt: new Date().toISOString(),
+      },
+      sendEmail: true,
+    });
+  } catch (error) {
+    console.error('Error creating payout notification:', error);
+    return {
+      success: false,
+      message: 'Failed to create payout notification',
+    };
+  }
+}
+
+// Create low inventory alert for organizers
+export async function createLowInventoryNotification(
+  eventId: string
+): Promise<ActionResponse<any>> {
+  try {
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        user: true,
+        ticketTypes: true,
+      },
+    });
+
+    if (!event || !event.userId) {
+      return {
+        success: false,
+        message: 'Event or organizer not found',
+      };
+    }
+
+    const lowStockTickets = event.ticketTypes.filter(
+      (tt) => tt.quantity <= 5 && tt.quantity > 0
+    );
+
+    if (lowStockTickets.length === 0) {
+      return {
+        success: true,
+        message: 'No low inventory to report',
+      };
+    }
+
+    const ticketNames = lowStockTickets
+      .map((tt) => `${tt.name} (${tt.quantity} left)`)
+      .join(', ');
+
+    return await createNotification({
+      type: 'SYSTEM_UPDATE',
+      title: 'Low Ticket Inventory ⚠️',
+      message: `Your event "${event.title}" is running low on tickets: ${ticketNames}`,
+      actionUrl: `/dashboard/events/${event.id}/edit`,
+      userId: event.userId,
+      metadata: {
+        eventId: event.id,
+        eventTitle: event.title,
+        lowStockTickets: lowStockTickets.map((tt) => ({
+          id: tt.id,
+          name: tt.name,
+          remaining: tt.quantity,
+        })),
+        checkedAt: new Date().toISOString(),
+      },
+      sendEmail: false, // Don't spam with emails for this
+    });
+  } catch (error) {
+    console.error('Error creating low inventory notification:', error);
+    return {
+      success: false,
+      message: 'Failed to create low inventory notification',
     };
   }
 }
@@ -134,7 +571,6 @@ export async function getUserNotifications(
       };
     }
 
-    // Filter notifications based on user role
     const notifications = await prisma.notification.findMany({
       where: {
         userId: session.user.id,
@@ -216,10 +652,11 @@ export async function markNotificationAsRead(
     const notification = await prisma.notification.update({
       where: {
         id: notificationId,
-        userId: session.user.id, // Ensure user owns the notification
+        userId: session.user.id,
       },
       data: {
         status: 'READ',
+        readAt: new Date(),
       },
     });
 
@@ -261,6 +698,7 @@ export async function markAllNotificationsAsRead(): Promise<
       },
       data: {
         status: 'READ',
+        readAt: new Date(),
       },
     });
 
@@ -298,7 +736,7 @@ export async function deleteNotification(
     await prisma.notification.delete({
       where: {
         id: notificationId,
-        userId: session.user.id, // Ensure user owns the notification
+        userId: session.user.id,
       },
     });
 
@@ -315,248 +753,79 @@ export async function deleteNotification(
   }
 }
 
-// Helper function to create organizer upgrade notification
-export async function createOrganizerUpgradeNotification(
-  userId: string
-): Promise<ActionResponse<any>> {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        organizerProfile: true,
-      },
-    });
+// Existing helper functions (updated)
 
-    if (!user) {
-      return {
-        success: false,
-        message: 'User not found',
-      };
-    }
-
-    const title = 'New Organizer Registration';
-    const message = `${user.name} has upgraded to an organizer account and can now create events`;
-    const actionUrl = `/admin/dashboard/users/${user.id}`;
-
-    return await createNotification({
-      type: 'USER_UPGRADED_TO_ORGANIZER',
-      title,
-      message,
-      actionUrl,
-      isAdminNotification: true,
-      metadata: {
-        organizerName: user.name,
-        organizerEmail: user.email,
-        organizationName: user.organizerProfile?.organizationName,
-        upgradedAt: new Date().toISOString(),
-      },
-    });
-  } catch (error) {
-    console.error('Error creating organizer upgrade notification:', error);
-    return {
-      success: false,
-      message: 'Failed to create organizer upgrade notification',
-    };
-  }
-}
-
-// Helper function to create event submission notification
-export async function createEventSubmissionNotification(
-  eventId: string
-): Promise<ActionResponse<any>> {
-  try {
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
-      include: {
-        user: true,
-      },
-    });
-
-    if (!event) {
-      return {
-        success: false,
-        message: 'Event not found',
-      };
-    }
-
-    const title = 'New Event Submitted for Review';
-    const message = `${event.user?.name || 'Unknown user'} has submitted "${
-      event.title
-    }" for approval`;
-    const actionUrl = `/admin/dashboard/events/${eventId}`;
-
-    return await createNotification({
-      type: 'EVENT_SUBMITTED',
-      title,
-      message,
-      actionUrl,
-      isAdminNotification: true,
-      metadata: {
-        eventId: event.id,
-        eventTitle: event.title,
-        organizerName: event.user?.name,
-        submittedAt: new Date().toISOString(),
-      },
-    });
-  } catch (error) {
-    console.error('Error creating event submission notification:', error);
-    return {
-      success: false,
-      message: 'Failed to create event submission notification',
-    };
-  }
-}
-
-// Helper function to create event approval/rejection notification
-export async function createEventStatusNotification(
-  eventId: string,
-  status: 'approved' | 'rejected',
-  rejectionReason?: string
-): Promise<ActionResponse<any>> {
-  try {
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
-      include: {
-        user: true,
-      },
-    });
-
-    if (!event) {
-      return {
-        success: false,
-        message: 'Event not found',
-      };
-    }
-
-    const title =
-      status === 'approved' ? 'Event Approved!' : 'Event Requires Changes';
-
-    const message =
-      status === 'approved'
-        ? `Your event "${event.title}" has been approved and is now live!`
-        : `Your event "${
-            event.title
-          }" needs some changes before it can be published${
-            rejectionReason ? `: ${rejectionReason}` : '.'
-          }`;
-
-    const actionUrl = `/dashboard/events/${eventId}`;
-
-    return await createNotification({
-      type: status === 'approved' ? 'EVENT_APPROVED' : 'EVENT_REJECTED',
-      title,
-      message,
-      actionUrl,
-      userId: event.userId!,
-      metadata: {
-        eventId: event.id,
-        eventTitle: event.title,
-        status,
-        rejectionReason,
-        processedAt: new Date().toISOString(),
-      },
-    });
-  } catch (error) {
-    console.error('Error creating event status notification:', error);
-    return {
-      success: false,
-      message: 'Failed to create event status notification',
-    };
-  }
-}
-
-// Helper function to create ticket purchase notification
-export async function createTicketPurchaseNotification(
-  ticketId: string,
-  userId: string,
-  organizerId: string
-): Promise<ActionResponse<any>> {
-  try {
-    // First get the ticket with proper relations
-    const ticket = await prisma.ticket.findUnique({
-      where: { id: ticketId },
-      include: {
-        ticketType: {
-          include: {
-            event: true,
-          },
-        },
-        user: true,
-      },
-    });
-
-    if (!ticket) {
-      return {
-        success: false,
-        message: 'Ticket not found',
-      };
-    }
-
-    const event = ticket.ticketType.event;
-    const user = ticket.user;
-
-    // Notify the user who purchased the ticket
-    const userNotification = await createNotification({
-      type: 'TICKET_PURCHASED',
-      title: 'Ticket Purchase Confirmed',
-      message: `Your ticket for "${event.title}" has been confirmed!`,
-      actionUrl: `/dashboard/tickets/${ticketId}`,
-      userId: userId,
-      metadata: {
-        ticketId: ticket.id,
-        eventTitle: event.title,
-        eventDate: event.startDateTime,
-        purchasedAt: new Date().toISOString(),
-      },
-    });
-
-    // Notify the organizer about the purchase
-    const organizerNotification = await createNotification({
-      type: 'TICKET_PURCHASED',
-      title: 'New Ticket Sale',
-      message: `${user?.name || 'Someone'} purchased a ticket for "${
-        event.title
-      }"`,
-      actionUrl: `/dashboard/events/${event.id}/attendees`,
-      userId: organizerId,
-      metadata: {
-        ticketId: ticket.id,
-        eventTitle: event.title,
-        buyerName: user?.name,
-        purchasedAt: new Date().toISOString(),
-      },
-    });
-
-    return {
-      success: true,
-      message: 'Ticket purchase notifications sent',
-      data: { userNotification, organizerNotification },
-    };
-  } catch (error) {
-    console.error('Error creating ticket purchase notification:', error);
-    return {
-      success: false,
-      message: 'Failed to create ticket purchase notification',
-    };
-  }
-}
-
-// Main notification function used by event actions - THIS IS THE MISSING FUNCTION
 export async function createEventNotification(
   eventId: string,
   type: 'EVENT_SUBMITTED' | 'EVENT_APPROVED' | 'EVENT_REJECTED',
   specificUserId?: string
 ): Promise<ActionResponse<any>> {
   try {
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        user: true,
+        venue: {
+          include: {
+            city: true,
+          },
+        },
+      },
+    });
+
+    if (!event) {
+      return {
+        success: false,
+        message: 'Event not found',
+      };
+    }
+
     switch (type) {
       case 'EVENT_SUBMITTED':
-        return await createEventSubmissionNotification(eventId);
+        return await createNotification({
+          type: 'EVENT_SUBMITTED',
+          title: 'New Event Submitted for Review 📅',
+          message: `${event.user?.name || 'Unknown user'} has submitted "${event.title}" for approval`,
+          actionUrl: `/admin/dashboard/events/${eventId}`,
+          isAdminNotification: true,
+          metadata: {
+            eventId: event.id,
+            eventTitle: event.title,
+            organizerName: event.user?.name,
+            submittedAt: new Date().toISOString(),
+          },
+          sendEmail: true,
+        });
 
       case 'EVENT_APPROVED':
-        return await createEventStatusNotification(eventId, 'approved');
+        return await createNotification({
+          type: 'EVENT_APPROVED',
+          title: 'Event Approved! 🎉',
+          message: `Your event "${event.title}" has been approved and is now live!`,
+          actionUrl: `/dashboard/events/${eventId}`,
+          userId: specificUserId || event.userId!,
+          metadata: {
+            eventId: event.id,
+            eventTitle: event.title,
+            approvedAt: new Date().toISOString(),
+          },
+          sendEmail: true,
+        });
 
       case 'EVENT_REJECTED':
-        return await createEventStatusNotification(eventId, 'rejected');
+        return await createNotification({
+          type: 'EVENT_REJECTED',
+          title: 'Event Requires Changes ⚠️',
+          message: `Your event "${event.title}" needs some changes before it can be published`,
+          actionUrl: `/dashboard/events/${eventId}/edit`,
+          userId: specificUserId || event.userId!,
+          metadata: {
+            eventId: event.id,
+            eventTitle: event.title,
+            rejectedAt: new Date().toISOString(),
+          },
+          sendEmail: true,
+        });
 
       default:
         return {
@@ -573,153 +842,62 @@ export async function createEventNotification(
   }
 }
 
-// Additional helper functions for different notification types
-
-// Helper function to create venue submission notification
-export async function createVenueSubmissionNotification(
-  venueId: string
-): Promise<ActionResponse<any>> {
+// Utility function to check for low inventory and send alerts
+export async function checkAndAlertLowInventory(): Promise<
+  ActionResponse<any>
+> {
   try {
-    const venue = await prisma.venue.findUnique({
-      where: { id: venueId },
-      include: {
-        user: true,
-      },
-    });
-
-    if (!venue) {
-      return {
-        success: false,
-        message: 'Venue not found',
-      };
-    }
-
-    const title = 'New Venue Submitted for Review';
-    const message = `${venue.user?.name || 'Unknown user'} has submitted "${
-      venue.name
-    }" for approval`;
-    const actionUrl = `/admin/dashboard/venues/${venueId}`;
-
-    return await createNotification({
-      type: 'VENUE_SUBMITTED',
-      title,
-      message,
-      actionUrl,
-      isAdminNotification: true,
-      metadata: {
-        venueId: venue.id,
-        venueName: venue.name,
-        organizerName: venue.user?.name,
-        submittedAt: new Date().toISOString(),
-      },
-    });
-  } catch (error) {
-    console.error('Error creating venue submission notification:', error);
-    return {
-      success: false,
-      message: 'Failed to create venue submission notification',
-    };
-  }
-}
-
-// Helper function to create venue status notification
-export async function createVenueStatusNotification(
-  venueId: string,
-  status: 'approved' | 'rejected',
-  rejectionReason?: string
-): Promise<ActionResponse<any>> {
-  try {
-    const venue = await prisma.venue.findUnique({
-      where: { id: venueId },
-      include: {
-        user: true,
-      },
-    });
-
-    if (!venue) {
-      return {
-        success: false,
-        message: 'Venue not found',
-      };
-    }
-
-    const title =
-      status === 'approved' ? 'Venue Approved!' : 'Venue Requires Changes';
-
-    const message =
-      status === 'approved'
-        ? `Your venue "${venue.name}" has been approved and is now available for events!`
-        : `Your venue "${
-            venue.name
-          }" needs some changes before it can be published${
-            rejectionReason ? `: ${rejectionReason}` : '.'
-          }`;
-
-    const actionUrl = `/dashboard/venues/${venueId}`;
-
-    return await createNotification({
-      type: status === 'approved' ? 'VENUE_APPROVED' : 'VENUE_REJECTED',
-      title,
-      message,
-      actionUrl,
-      userId: venue.userId!,
-      metadata: {
-        venueId: venue.id,
-        venueName: venue.name,
-        status,
-        rejectionReason,
-        processedAt: new Date().toISOString(),
-      },
-    });
-  } catch (error) {
-    console.error('Error creating venue status notification:', error);
-    return {
-      success: false,
-      message: 'Failed to create venue status notification',
-    };
-  }
-}
-
-// Helper function to create system update notification
-export async function createSystemUpdateNotification(
-  title: string,
-  message: string,
-  actionUrl?: string
-): Promise<ActionResponse<any>> {
-  try {
-    // Get all users to send system update to everyone
-    const users = await prisma.user.findMany({
-      select: { id: true },
-    });
-
-    const notifications = await Promise.all(
-      users.map((user) =>
-        prisma.notification.create({
-          data: {
-            type: 'SYSTEM_UPDATE',
-            title,
-            message,
-            actionUrl,
-            user: { connect: { id: user.id } },
-            metadata: {
-              systemUpdate: true,
-              sentAt: new Date().toISOString(),
+    // Find events with low ticket inventory (5 or fewer tickets remaining)
+    const eventsWithLowInventory = await prisma.event.findMany({
+      where: {
+        publishedStatus: 'PUBLISHED',
+        isCancelled: false,
+        startDateTime: {
+          gte: new Date(), // Only future events
+        },
+        ticketTypes: {
+          some: {
+            quantity: {
+              lte: 5,
+              gt: 0,
             },
           },
-        })
-      )
-    );
+        },
+      },
+      include: {
+        user: true,
+        ticketTypes: {
+          where: {
+            quantity: {
+              lte: 5,
+              gt: 0,
+            },
+          },
+        },
+      },
+    });
+
+    const alertsCreated = [];
+
+    for (const event of eventsWithLowInventory) {
+      if (event.userId) {
+        const alert = await createLowInventoryNotification(event.id);
+        if (alert.success) {
+          alertsCreated.push(alert.data);
+        }
+      }
+    }
 
     return {
       success: true,
-      message: `System notification sent to ${users.length} users`,
-      data: notifications,
+      message: `Created ${alertsCreated.length} low inventory alerts`,
+      data: alertsCreated,
     };
   } catch (error) {
-    console.error('Error creating system update notification:', error);
+    console.error('Error checking low inventory:', error);
     return {
       success: false,
-      message: 'Failed to create system update notification',
+      message: 'Failed to check low inventory',
     };
   }
 }

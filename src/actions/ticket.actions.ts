@@ -21,6 +21,571 @@ interface ActionResponse<T> {
   success: boolean;
   message?: string;
   data?: T;
+  error?: string;
+  alreadyUsed?: boolean;
+}
+
+// Validate ticket for event entry
+export async function validateTicket(
+  ticketId: string,
+  eventId: string
+): Promise<ActionResponse<any>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session) {
+    return {
+      success: false,
+      message: 'Not authenticated',
+    };
+  }
+
+  try {
+    // Check if user has permission to validate tickets for this event
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!event) {
+      return {
+        success: false,
+        message: 'Event not found',
+      };
+    }
+
+    // Only event organizer or admin can validate tickets
+    const isOwner = event.userId === session.user.id;
+    const isAdmin = session.user.role === 'ADMIN';
+
+    if (!isOwner && !isAdmin) {
+      return {
+        success: false,
+        message:
+          'You do not have permission to validate tickets for this event',
+      };
+    }
+
+    // Find the ticket
+    const ticket = await prisma.ticket.findFirst({
+      where: {
+        ticketId: ticketId,
+        ticketType: {
+          eventId: eventId,
+        },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+        ticketType: {
+          include: {
+            event: {
+              select: {
+                id: true,
+                title: true,
+                startDateTime: true,
+                endDateTime: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!ticket) {
+      return {
+        success: false,
+        message: 'Ticket not found or does not belong to this event',
+      };
+    }
+
+    // Check if ticket is valid status
+    if (ticket.status === 'CANCELLED' || ticket.status === 'REFUNDED') {
+      return {
+        success: false,
+        message: `Ticket is ${ticket.status.toLowerCase()} and cannot be used`,
+      };
+    }
+
+    // Check if event has started (allow entry from 1 hour before start time)
+    const eventStart = new Date(ticket.ticketType.event.startDateTime);
+    const oneHourBefore = new Date(eventStart.getTime() - 60 * 60 * 1000);
+    const now = new Date();
+
+    if (now < oneHourBefore) {
+      return {
+        success: false,
+        message:
+          'Event has not started yet. Entry allowed 1 hour before start time.',
+      };
+    }
+
+    // Check if event has ended (allow entry until 2 hours after end time)
+    const eventEnd = new Date(ticket.ticketType.event.endDateTime);
+    const twoHoursAfter = new Date(eventEnd.getTime() + 2 * 60 * 60 * 1000);
+
+    if (now > twoHoursAfter) {
+      return {
+        success: false,
+        message: 'Event has ended and entry is no longer allowed.',
+      };
+    }
+
+    const wasAlreadyUsed = ticket.status === 'USED';
+
+    // Mark ticket as used if not already used
+    if (!wasAlreadyUsed) {
+      await prisma.ticket.update({
+        where: { id: ticket.id },
+        data: { status: 'USED' },
+      });
+
+      // Log the validation
+      await prisma.ticketValidation.create({
+        data: {
+          ticketId: ticket.id,
+          validatedBy: session.user.id,
+          validatedAt: new Date(),
+          eventId: eventId,
+        },
+      });
+    }
+
+    revalidatePath('/dashboard/scanner');
+    revalidatePath('/admin/dashboard/events');
+
+    return {
+      success: true,
+      message: wasAlreadyUsed
+        ? 'Ticket was already used but entry is allowed'
+        : 'Ticket validated successfully',
+      alreadyUsed: wasAlreadyUsed,
+      data: {
+        id: ticket.id,
+        ticketId: ticket.ticketId,
+        status: wasAlreadyUsed ? 'USED' : 'USED',
+        user: ticket.user,
+        ticketType: {
+          name: ticket.ticketType.name,
+          price: ticket.ticketType.price,
+        },
+        purchasedAt: ticket.purchasedAt.toISOString(),
+        validatedAt: new Date().toISOString(),
+        validatedBy: session.user.name,
+      },
+    };
+  } catch (error) {
+    console.error('Error validating ticket:', error);
+    return {
+      success: false,
+      message: 'Failed to validate ticket',
+    };
+  }
+}
+
+// Get validation history for an event
+export async function getTicketValidations(
+  eventId: string,
+  page: number = 1,
+  limit: number = 50
+): Promise<ActionResponse<any>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session) {
+    return {
+      success: false,
+      message: 'Not authenticated',
+    };
+  }
+
+  try {
+    // Check permissions
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event) {
+      return {
+        success: false,
+        message: 'Event not found',
+      };
+    }
+
+    const isOwner = event.userId === session.user.id;
+    const isAdmin = session.user.role === 'ADMIN';
+
+    if (!isOwner && !isAdmin) {
+      return {
+        success: false,
+        message:
+          'You do not have permission to view validations for this event',
+      };
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [validations, totalCount] = await Promise.all([
+      prisma.ticketValidation.findMany({
+        where: { eventId },
+        include: {
+          ticket: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+              ticketType: {
+                select: {
+                  name: true,
+                  price: true,
+                },
+              },
+            },
+          },
+          validator: {
+            select: {
+              id: true,
+              name: true,
+              role: true,
+            },
+          },
+        },
+        orderBy: { validatedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.ticketValidation.count({
+        where: { eventId },
+      }),
+    ]);
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    return {
+      success: true,
+      data: {
+        validations,
+        totalCount,
+        currentPage: page,
+        totalPages,
+        hasMore: page < totalPages,
+      },
+    };
+  } catch (error) {
+    console.error('Error fetching ticket validations:', error);
+    return {
+      success: false,
+      message: 'Failed to fetch validations',
+    };
+  }
+}
+
+// Get ticket statistics for an event
+export async function getEventTicketStats(
+  eventId: string
+): Promise<ActionResponse<any>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session) {
+    return {
+      success: false,
+      message: 'Not authenticated',
+    };
+  }
+
+  try {
+    // Check permissions
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: {
+        ticketTypes: true,
+      },
+    });
+
+    if (!event) {
+      return {
+        success: false,
+        message: 'Event not found',
+      };
+    }
+
+    const isOwner = event.userId === session.user.id;
+    const isAdmin = session.user.role === 'ADMIN';
+
+    if (!isOwner && !isAdmin) {
+      return {
+        success: false,
+        message: 'You do not have permission to view stats for this event',
+      };
+    }
+
+    // Get ticket statistics
+    const ticketStats = await prisma.ticket.groupBy({
+      by: ['status'],
+      where: {
+        ticketType: {
+          eventId,
+        },
+      },
+      _count: true,
+    });
+
+    // Get orders statistics
+    const orderStats = await prisma.order.groupBy({
+      by: ['paymentStatus'],
+      where: { eventId },
+      _count: true,
+      _sum: {
+        totalAmount: true,
+      },
+    });
+
+    // Get refund statistics
+    const refundStats = await prisma.order.groupBy({
+      by: ['refundStatus'],
+      where: {
+        eventId,
+        refundStatus: { not: null },
+      },
+      _count: true,
+      _sum: {
+        totalAmount: true,
+      },
+    });
+
+    // Calculate totals
+    const totalTickets = ticketStats.reduce(
+      (sum, stat) => sum + stat._count,
+      0
+    );
+    const usedTickets =
+      ticketStats.find((s) => s.status === 'USED')?._count || 0;
+    const unusedTickets =
+      ticketStats.find((s) => s.status === 'UNUSED')?._count || 0;
+    const refundedTickets =
+      ticketStats.find((s) => s.status === 'REFUNDED')?._count || 0;
+
+    const totalRevenue = orderStats
+      .filter((s) => s.paymentStatus === 'COMPLETED')
+      .reduce((sum, stat) => sum + (stat._sum.totalAmount || 0), 0);
+
+    const totalRefunded = refundStats
+      .filter((s) => s.refundStatus === 'PROCESSED')
+      .reduce((sum, stat) => sum + (stat._sum.totalAmount || 0), 0);
+
+    const netRevenue = totalRevenue - totalRefunded;
+
+    // Calculate platform fee (5% default)
+    const platformFee = Math.round(netRevenue * 0.05);
+    const organizerRevenue = netRevenue - platformFee;
+
+    // Get ticket type breakdown
+    const ticketTypeStats = await Promise.all(
+      event.ticketTypes.map(async (ticketType) => {
+        const sold = await prisma.ticket.count({
+          where: {
+            ticketTypeId: ticketType.id,
+            status: { in: ['UNUSED', 'USED'] },
+          },
+        });
+
+        const used = await prisma.ticket.count({
+          where: {
+            ticketTypeId: ticketType.id,
+            status: 'USED',
+          },
+        });
+
+        const revenue =
+          (await prisma.ticket.count({
+            where: {
+              ticketTypeId: ticketType.id,
+              status: { in: ['UNUSED', 'USED'] },
+            },
+          })) * ticketType.price;
+
+        return {
+          id: ticketType.id,
+          name: ticketType.name,
+          price: ticketType.price,
+          totalQuantity: ticketType.quantity + sold, // Original quantity + sold
+          sold,
+          used,
+          remaining: ticketType.quantity,
+          revenue,
+        };
+      })
+    );
+
+    return {
+      success: true,
+      data: {
+        overview: {
+          totalTickets,
+          usedTickets,
+          unusedTickets,
+          refundedTickets,
+          attendanceRate:
+            totalTickets > 0
+              ? Math.round((usedTickets / totalTickets) * 100)
+              : 0,
+        },
+        revenue: {
+          totalRevenue,
+          totalRefunded,
+          netRevenue,
+          platformFee,
+          organizerRevenue,
+        },
+        ticketTypes: ticketTypeStats,
+        recentValidations: await prisma.ticketValidation.count({
+          where: {
+            eventId,
+            validatedAt: {
+              gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
+            },
+          },
+        }),
+      },
+    };
+  } catch (error) {
+    console.error('Error fetching event ticket stats:', error);
+    return {
+      success: false,
+      message: 'Failed to fetch ticket statistics',
+    };
+  }
+}
+
+// Get organizer's overall statistics
+export async function getOrganizerStats(): Promise<ActionResponse<any>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session) {
+    return {
+      success: false,
+      message: 'Not authenticated',
+    };
+  }
+
+  try {
+    // Get organizer's events
+    const events = await prisma.event.findMany({
+      where: { userId: session.user.id },
+      include: {
+        orders: {
+          where: { paymentStatus: 'COMPLETED' },
+        },
+        ticketTypes: {
+          include: {
+            tickets: true,
+          },
+        },
+      },
+    });
+
+    // Calculate overall statistics
+    let totalRevenue = 0;
+    let totalTicketsSold = 0;
+    let totalRefunded = 0;
+    let totalEvents = events.length;
+    let activeEvents = 0;
+
+    const eventStats = events.map((event) => {
+      const eventRevenue = event.orders.reduce(
+        (sum, order) => sum + order.totalAmount,
+        0
+      );
+      const ticketsSold = event.ticketTypes.reduce(
+        (sum, tt) => sum + tt.tickets.length,
+        0
+      );
+
+      totalRevenue += eventRevenue;
+      totalTicketsSold += ticketsSold;
+
+      if (new Date(event.endDateTime) > new Date()) {
+        activeEvents++;
+      }
+
+      return {
+        id: event.id,
+        title: event.title,
+        revenue: eventRevenue,
+        ticketsSold,
+        startDateTime: event.startDateTime,
+        status: event.publishedStatus,
+      };
+    });
+
+    // Get refunded amounts
+    const refunds = await prisma.order.findMany({
+      where: {
+        event: { userId: session.user.id },
+        refundStatus: 'PROCESSED',
+      },
+      select: { totalAmount: true },
+    });
+
+    totalRefunded = refunds.reduce(
+      (sum, refund) => sum + refund.totalAmount,
+      0
+    );
+
+    const netRevenue = totalRevenue - totalRefunded;
+    const platformFee = Math.round(netRevenue * 0.05); // 5% platform fee
+    const organizerEarnings = netRevenue - platformFee;
+
+    return {
+      success: true,
+      data: {
+        overview: {
+          totalEvents,
+          activeEvents,
+          totalTicketsSold,
+          totalRevenue,
+          totalRefunded,
+          netRevenue,
+          platformFee,
+          organizerEarnings,
+        },
+        events: eventStats.sort(
+          (a, b) =>
+            new Date(b.startDateTime).getTime() -
+            new Date(a.startDateTime).getTime()
+        ),
+        monthlyRevenue: [], // TODO: Calculate monthly breakdown
+      },
+    };
+  } catch (error) {
+    console.error('Error fetching organizer stats:', error);
+    return {
+      success: false,
+      message: 'Failed to fetch organizer statistics',
+    };
+  }
 }
 
 // Validate if user has permission to manage ticket types for an event

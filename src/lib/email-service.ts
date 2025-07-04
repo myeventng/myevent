@@ -1,0 +1,237 @@
+import { Resend } from 'resend';
+import QRCode from 'qrcode';
+import { TicketEmailTemplate } from '@/components/email/ticket-template';
+import { EventNotificationTemplate } from '@/components/email/event-notification-template';
+import { render } from '@react-email/render';
+
+interface EmailService {
+  sendTicketEmail: (order: any, tickets: any[]) => Promise<void>;
+  sendEventNotification: (
+    recipient: string,
+    event: any,
+    type: string
+  ) => Promise<void>;
+  sendWaitingListNotification: (recipient: string, event: any) => Promise<void>;
+  sendRefundNotification: (recipient: string, order: any) => Promise<void>;
+}
+
+class ResendEmailService implements EmailService {
+  private resend: Resend;
+
+  constructor() {
+    this.resend = new Resend(process.env.RESEND_API_KEY);
+  }
+
+  async sendTicketEmail(order: any, tickets: any[]): Promise<void> {
+    try {
+      const event = tickets[0].ticketType.event;
+      const venue = event.venue;
+
+      // Generate QR codes for each ticket
+      const ticketsWithQR = await Promise.all(
+        tickets.map(async (ticket) => {
+          const qrCodeData = JSON.stringify({
+            ticketId: ticket.ticketId,
+            eventId: ticket.ticketType.event.id,
+            userId: ticket.userId,
+            type: 'TICKET_VALIDATION',
+            timestamp: Date.now(),
+          });
+
+          const qrCodeDataURL = await QRCode.toDataURL(qrCodeData, {
+            width: 200,
+            margin: 2,
+            color: {
+              dark: '#000000',
+              light: '#FFFFFF',
+            },
+          });
+
+          return {
+            ...ticket,
+            qrCodeDataURL,
+          };
+        })
+      );
+
+      // Render the email template
+      const emailHtml = await render(
+        TicketEmailTemplate({
+          order,
+          event,
+          venue,
+          tickets: ticketsWithQR,
+          supportEmail: process.env.SUPPORT_EMAIL || 'support@myevent.com.ng',
+          platformName: process.env.PLATFORM_NAME || 'MyEvent.com.ng',
+          appUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://myevent.com.ng',
+        })
+      );
+
+      await this.resend.emails.send({
+        from: `${process.env.PLATFORM_NAME} <${process.env.RESEND_FROM_EMAIL}>`,
+        to: [order.buyer.email],
+        subject: `Your tickets for ${event.title}`,
+        html: emailHtml,
+        headers: {
+          'X-Entity-Ref-ID': order.id,
+        },
+      });
+
+      console.log(
+        `Ticket email sent to ${order.buyer.email} for order ${order.id}`
+      );
+    } catch (error) {
+      console.error('Error sending ticket email:', error);
+      throw error;
+    }
+  }
+
+  async sendEventNotification(
+    recipient: string,
+    event: any,
+    type: string
+  ): Promise<void> {
+    try {
+      let subject = '';
+      let notificationType:
+        | 'approved'
+        | 'rejected'
+        | 'cancelled'
+        | 'tickets_available';
+
+      switch (type) {
+        case 'EVENT_APPROVED':
+          subject = `🎉 Event Approved: ${event.title}`;
+          notificationType = 'approved';
+          break;
+        case 'EVENT_REJECTED':
+          subject = `❌ Event Rejected: ${event.title}`;
+          notificationType = 'rejected';
+          break;
+        case 'EVENT_CANCELLED':
+          subject = `⚠️ Event Cancelled: ${event.title}`;
+          notificationType = 'cancelled';
+          break;
+        default:
+          return;
+      }
+
+      const emailHtml = await render(
+        EventNotificationTemplate({
+          event,
+          type: notificationType,
+          appUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://myevent.com.ng',
+          platformName: process.env.PLATFORM_NAME || 'MyEvent.com.ng',
+        })
+      );
+
+      await this.resend.emails.send({
+        from: `${process.env.PLATFORM_NAME} <${process.env.RESEND_FROM_EMAIL}>`,
+        to: [recipient],
+        subject,
+        html: emailHtml,
+        headers: {
+          'X-Entity-Ref-ID': event.id,
+        },
+      });
+
+      console.log(
+        `Event notification sent to ${recipient} for event ${event.id}`
+      );
+    } catch (error) {
+      console.error('Error sending event notification:', error);
+      throw error;
+    }
+  }
+
+  async sendWaitingListNotification(
+    recipient: string,
+    event: any
+  ): Promise<void> {
+    try {
+      const subject = `Tickets Available: ${event.title}`;
+
+      const emailHtml = await render(
+        EventNotificationTemplate({
+          event,
+          type: 'tickets_available',
+          appUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://myevent.com.ng',
+          platformName: process.env.PLATFORM_NAME || 'MyEvent.com.ng',
+        })
+      );
+
+      await this.resend.emails.send({
+        from: `${process.env.PLATFORM_NAME} <${process.env.RESEND_FROM_EMAIL}>`,
+        to: [recipient],
+        subject,
+        html: emailHtml,
+        headers: {
+          'X-Entity-Ref-ID': event.id,
+        },
+      });
+
+      console.log(
+        `Waiting list notification sent to ${recipient} for event ${event.id}`
+      );
+    } catch (error) {
+      console.error('Error sending waiting list notification:', error);
+      throw error;
+    }
+  }
+
+  async sendRefundNotification(recipient: string, order: any): Promise<void> {
+    try {
+      const subject = `💰 Refund Processed for ${order.event.title}`;
+
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: #10b981; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1>Refund Processed</h1>
+          </div>
+          
+          <div style="background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
+            <p>Your refund has been successfully processed for the following order:</p>
+            
+            <div style="background: white; padding: 15px; margin: 15px 0; border-radius: 5px; border: 1px solid #e5e7eb;">
+              <h3>${order.event.title}</h3>
+              <p><strong>Order ID:</strong> ${order.id}</p>
+              <p><strong>Refund Amount:</strong> ₦${order.totalAmount.toLocaleString()}</p>
+              <p><strong>Original Purchase Date:</strong> ${new Date(
+                order.createdAt
+              ).toLocaleDateString()}</p>
+            </div>
+            
+            <p>The refund amount will be credited back to your original payment method within 5-10 business days.</p>
+            
+            <p>If you have any questions, please contact our support team at ${
+              process.env.SUPPORT_EMAIL
+            }.</p>
+            
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;">
+              <p>Best regards,<br>The ${process.env.PLATFORM_NAME} Team</p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      await this.resend.emails.send({
+        from: `${process.env.PLATFORM_NAME} <${process.env.RESEND_FROM_EMAIL}>`,
+        to: [recipient],
+        subject,
+        html: emailHtml,
+        headers: {
+          'X-Entity-Ref-ID': order.id,
+        },
+      });
+
+      console.log(
+        `Refund notification sent to ${recipient} for order ${order.id}`
+      );
+    } catch (error) {
+      console.error('Error sending refund notification:', error);
+      throw error;
+    }
+  }
+}
+
+export const emailService = new ResendEmailService();

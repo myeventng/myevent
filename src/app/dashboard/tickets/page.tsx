@@ -1,21 +1,21 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { NotificationsPage } from '@/components/notification/notification-page';
+import { UserTicketsPage } from '@/components/tickets/user-ticket-page';
 import { getServerSideAuth } from '@/lib/auth-server';
 import { redirect } from 'next/navigation';
 
-export default async function UserNotifications() {
+export default async function UserTickets() {
   const session = await getServerSideAuth({
-    roles: ['USER', 'ADMIN'],
+    roles: ['USER', 'ADMIN'], // Allow both regular users and admins
   });
 
   if (!session) {
     console.log('No session found, redirecting to unauthorized');
-    redirect('/unauthorized');
+    redirect('/unauthorized'); // Redirect to unauthorized page if no session
   }
 
   return (
     <DashboardLayout session={session}>
-      <NotificationsPage isAdmin={false} />
+      <UserTicketsPage />
     </DashboardLayout>
   );
 }

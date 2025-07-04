@@ -1,4 +1,3 @@
-// app/admin/dashboard/notifications/page.tsx
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { NotificationsPage } from '@/components/notification/notification-page';
 import { getServerSideAuth } from '@/lib/auth-server';
@@ -12,12 +11,12 @@ export default async function AdminNotifications() {
 
   if (!session) {
     console.log('No session found, redirecting to unauthorized');
-    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+    redirect('/unauthorized');
   }
 
   return (
     <DashboardLayout session={session}>
-      <NotificationsPage />
+      <NotificationsPage isAdmin={true} />
     </DashboardLayout>
   );
 }

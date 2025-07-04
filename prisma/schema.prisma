@@ -1,8 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// Updated Prisma schema with additional models for the ticketing system
 
 generator client {
   provider = "prisma-client-js"
@@ -14,7 +10,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-//notifications
+// Enums
 enum NotificationType {
   EVENT_SUBMITTED
   EVENT_APPROVED
@@ -23,7 +19,9 @@ enum NotificationType {
   BLOG_APPROVED
   BLOG_REJECTED
   TICKET_PURCHASED
+  TICKET_AVAILABLE
   EVENT_CANCELLED
+  REFUND_REQUESTED
   REFUND_PROCESSED
   VENUE_SUBMITTED
   VENUE_APPROVED
@@ -31,7 +29,9 @@ enum NotificationType {
   SYSTEM_UPDATE
   PAYMENT_RECEIVED
   USER_REGISTERED
-  USER_UPGRADED_TO_ORGANIZER // Add this line
+  USER_UPGRADED_TO_ORGANIZER
+  ORDER_CONFIRMATION
+  PAYOUT_PROCESSED
 }
 
 enum NotificationStatus {
@@ -40,6 +40,108 @@ enum NotificationStatus {
   ARCHIVED
 }
 
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum UserSubRole {
+  ORDINARY
+  ORGANIZER
+  STAFF
+  SUPER_ADMIN
+}
+
+enum AgeRestriction {
+  ALL_AGES
+  AGE_14_PLUS
+  AGE_18_PLUS
+  AGE_21_PLUS
+  AGE_25_PLUS
+  KIDS_ONLY
+  SENIORS_ONLY
+}
+
+enum DressCode {
+  CASUAL
+  BUSINESS_CASUAL
+  FORMAL
+  BLACK_TIE
+  THEMED_COSTUME
+  SMART_CASUAL
+  ALL_WHITE
+  NO_DRESS_CODE
+}
+
+enum PublishedStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  REJECTED
+}
+
+enum WaitingStatus {
+  WAITING
+  OFFERED
+  PURCHASED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum RefundStatus {
+  INITIATED
+  PROCESSED
+  FAILED
+  REJECTED
+}
+
+enum TicketStatus {
+  UNUSED
+  USED
+  REFUNDED
+  CANCELLED
+}
+
+enum BlogStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  REJECTED
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum OrganizationType {
+  COMPANY
+  INDIVIDUAL
+  NGO
+  GOVERNMENT
+  OTHER
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+// Models
 model Notification {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
@@ -75,22 +177,16 @@ model Notification {
   @@index([createdAt])
 }
 
-// user
-enum Gender {
-  MALE
-  FEMALE
-}
+model PushSubscription {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  subscription Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-enum UserRole {
-  ADMIN
-  USER
-}
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-enum UserSubRole {
-  ORDINARY
-  ORGANIZER
-  STAFF
-  SUPER_ADMIN
+  @@map("push_subscriptions")
 }
 
 model OrganizerProfile {
@@ -98,8 +194,19 @@ model OrganizerProfile {
   organizationName String
   bio              String?
   website          String?
-  userId           String  @unique
-  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Enhanced organizer fields
+  businessRegistrationNumber String?
+  taxIdentificationNumber    String?
+  organizationType           OrganizationType?
+  verificationStatus         VerificationStatus @default(PENDING)
+  customPlatformFee          Float? // Custom fee percentage for this organizer
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Verification {
@@ -167,15 +274,9 @@ model TwoFactor {
   @@map("twoFactor")
 }
 
-enum WaitingStatus {
-  WAITING
-  OFFERED
-  PURCHASED
-  EXPIRED
-}
-
 model WaitingList {
   id             String    @id @default(cuid())
+  createdAt      DateTime  @default(now())
   offerExpiresAt DateTime?
 
   eventId String
@@ -190,22 +291,10 @@ model WaitingList {
   @@index([userId])
 }
 
-enum PaymentStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  REFUNDED
-}
-
-enum RefundStatus {
-  INITIATED
-  PROCESSED
-  FAILED
-}
-
 model Order {
   id            String        @id @default(cuid())
   createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
   paystackId    String        @unique
   totalAmount   Float
   quantity      Int
@@ -213,13 +302,22 @@ model Order {
   refundStatus  RefundStatus?
 
   eventId       String
-  event         Event          @relation(fields: [eventId], references: [id])
+  event         Event   @relation(fields: [eventId], references: [id])
   buyerId       String
-  buyer         User           @relation(fields: [buyerId], references: [id])
+  buyer         User    @relation(fields: [buyerId], references: [id])
   purchaseNotes String?
-  Notification  Notification[]
+
+  // Enhanced order fields
+  platformFee   Float   @default(0) // Platform fee amount
+  paymentMethod String? // card, bank_transfer, etc.
+  currency      String  @default("NGN")
+
+  Notification Notification[]
+  tickets      Ticket[] // Direct relation to tickets
 
   @@index([buyerId])
+  @@index([eventId])
+  @@index([paymentStatus])
 }
 
 model UserNote {
@@ -275,37 +373,12 @@ model User {
   organizerProfile OrganizerProfile?
   twoFactor        TwoFactor?
   Notification     Notification[]
+  validatedTickets TicketValidation[] @relation("ValidatedBy")
+  payouts          Payout[]           @relation("UserPayouts")
+  auditLogs        AuditLog[] // Relation to AuditLog
+  PushSubscription PushSubscription?
 
   @@map("users")
-}
-
-// events
-enum AgeRestriction {
-  ALL_AGES
-  AGE_14_PLUS
-  AGE_18_PLUS
-  AGE_21_PLUS
-  AGE_25_PLUS
-  KIDS_ONLY
-  SENIORS_ONLY
-}
-
-enum DressCode {
-  CASUAL
-  BUSINESS_CASUAL
-  FORMAL
-  BLACK_TIE
-  THEMED_COSTUME
-  SMART_CASUAL
-  ALL_WHITE
-  NO_DRESS_CODE
-}
-
-enum PublishedStatus {
-  DRAFT
-  PENDING_REVIEW
-  PUBLISHED
-  REJECTED
 }
 
 model Tag {
@@ -329,16 +402,9 @@ model Rating {
   rating    Decimal
   comment   String?
 
-  @@unique([userId, eventId]) // Ensure one review per user per event
+  @@unique([userId, eventId])
   @@index([eventId])
   @@index([userId])
-}
-
-enum TicketStatus {
-  UNUSED
-  USED
-  REFUNDED
-  CANCELLED
 }
 
 model Ticket {
@@ -348,23 +414,61 @@ model Ticket {
   user            User?        @relation(fields: [userId], references: [id])
   ticketTypeId    String
   ticketType      TicketType   @relation(fields: [ticketTypeId], references: [id])
+  orderId         String?
+  order           Order?       @relation(fields: [orderId], references: [id])
   status          TicketStatus @default(UNUSED)
   purchasedAt     DateTime     @default(now())
   paymentIntentId String?      @unique
 
+  // Enhanced ticket fields
+  qrCodeData    String? // JSON string with QR code data
+  transferredTo String? // User ID if ticket was transferred
+  transferredAt DateTime?
+  usedAt        DateTime? // When ticket was scanned/used
+
+  validations TicketValidation[]
+
   @@index([userId])
+  @@index([ticketTypeId])
+  @@index([status])
 }
 
 model TicketType {
-  id       String   @id @default(cuid())
+  id       String @id @default(cuid())
   name     String
-  price    Float    @default(0.0)
+  price    Float  @default(0.0)
   quantity Int
-  eventId  String
-  event    Event    @relation(fields: [eventId], references: [id])
-  tickets  Ticket[]
+
+  // Enhanced ticket type fields
+  description   String?
+  maxPerUser    Int?      @default(10) // Max tickets per user for this type
+  saleStartDate DateTime?
+  saleEndDate   DateTime?
+  isRefundable  Boolean   @default(true)
+
+  eventId String
+  event   Event    @relation(fields: [eventId], references: [id])
+  tickets Ticket[]
 
   @@index([eventId])
+}
+
+model TicketValidation {
+  id          String   @id @default(cuid())
+  ticketId    String
+  ticket      Ticket   @relation(fields: [ticketId], references: [id])
+  validatedBy String
+  validator   User     @relation("ValidatedBy", fields: [validatedBy], references: [id])
+  validatedAt DateTime @default(now())
+  eventId     String
+
+  // Additional validation data
+  location   String? // GPS coordinates or location name
+  deviceInfo String? // Scanner device information
+
+  @@index([ticketId])
+  @@index([eventId])
+  @@index([validatedAt])
 }
 
 model Category {
@@ -413,6 +517,7 @@ model Event {
   description      String?
   location         String?
   createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
   coverImageUrl    String?
   startDateTime    DateTime        @default(now())
   endDateTime      DateTime        @default(now())
@@ -447,13 +552,9 @@ model Event {
   Notification    Notification[]
 
   @@index([title])
-}
-
-enum BlogStatus {
-  DRAFT
-  PENDING_REVIEW
-  PUBLISHED
-  REJECTED
+  @@index([publishedStatus])
+  @@index([startDateTime])
+  @@index([featured])
 }
 
 model BlogCategory {
@@ -461,14 +562,14 @@ model BlogCategory {
   name        String   @unique
   slug        String   @unique
   description String?
-  color       String   @default("#3B82F6") // Default blue color
+  color       String   @default("#3B82F6")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   blogs       Blog[]
 
   @@index([name])
   @@index([slug])
-  @@map("blog_categories") // Different table name from event categories
+  @@map("blog_categories")
 }
 
 model Blog {
@@ -481,7 +582,7 @@ model Blog {
   metaTitle       String?
   metaDescription String?
   tags            String[]
-  readingTime     Int? // in minutes
+  readingTime     Int?
   views           Int        @default(0)
   featured        Boolean    @default(false)
   status          BlogStatus @default(DRAFT)
@@ -489,7 +590,6 @@ model Blog {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  // Relations
   authorId   String
   author     User         @relation(fields: [authorId], references: [id])
   categoryId String
@@ -500,4 +600,66 @@ model Blog {
   @@index([categoryId])
   @@index([slug])
   @@index([featured])
+}
+
+// New models for enhanced functionality
+model PlatformSettings {
+  id    String @id @default(cuid())
+  key   String @unique
+  value Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+}
+
+model Payout {
+  id          String       @id @default(cuid())
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  organizerId String
+  organizer   User         @relation("UserPayouts", fields: [organizerId], references: [id])
+  amount      Float
+  platformFee Float
+  netAmount   Float
+  status      PayoutStatus @default(PENDING)
+
+  // Paystack transfer details
+  transferCode String?
+  transferId   String?
+  bankAccount  String?
+  bankCode     String?
+  accountName  String?
+
+  // Date range for this payout
+  periodStart DateTime
+  periodEnd   DateTime
+
+  processedAt   DateTime?
+  failureReason String?
+
+  @@index([organizerId])
+  @@index([status])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id])
+  action   String // CREATE, UPDATE, DELETE, etc.
+  entity   String // USER, EVENT, ORDER, etc.
+  entityId String?
+
+  oldValues Json?
+  newValues Json?
+  ipAddress String?
+  userAgent String?
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
 }
