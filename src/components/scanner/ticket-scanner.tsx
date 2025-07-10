@@ -395,7 +395,9 @@ export function TicketScanner({
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>• Use the camera to scan QR codes on tickets</p>
             <p>• Alternatively, manually enter the ticket ID</p>
-            <p>• Valid tickets will be marked as "USED" after scanning</p>
+            <p>
+              • Valid tickets will be marked as &quot;USED&quot; after scanning
+            </p>
             <p>• Previously used tickets will show a warning but allow entry</p>
             <p>• Invalid or cancelled tickets will be rejected</p>
           </div>

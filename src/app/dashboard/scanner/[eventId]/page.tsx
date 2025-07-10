@@ -45,7 +45,7 @@ export default async function ScannerPage({ params }: ScannerPageProps) {
             <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
             <h2 className="text-xl font-bold mb-2">Access Denied</h2>
             <p className="text-muted-foreground">
-              You don't have permission to scan tickets for this event.
+              You don&apos;t have permission to scan tickets for this event.
             </p>
           </CardContent>
         </Card>

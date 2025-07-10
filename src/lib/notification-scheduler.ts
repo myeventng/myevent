@@ -1,9 +1,10 @@
 import {
   createLowInventoryNotification,
   checkAndAlertLowInventory,
+  createNotification,
 } from '@/actions/notification.actions';
 import { prisma } from '@/lib/prisma';
-import { emailService } from '@/lib/email-service';
+import { notificationEmailService as emailService } from '@/lib/email-service';
 
 export class NotificationScheduler {
   // Check inventory every hour

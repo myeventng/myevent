@@ -1,3 +1,6 @@
+// Service Worker for Push Notifications
+// public/sw.js
+
 self.addEventListener('push', function (event) {
   if (event.data) {
     const data = event.data.json();
@@ -30,11 +33,12 @@ self.addEventListener('push', function (event) {
   }
 });
 
+// Notification Click Handler
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 
   if (event.action === 'view' || !event.action) {
-    event.waitUntil(clients.openWindow(event.notification.data.url));
+    event.waitUntil(self.clients.openWindow(event.notification.data.url));
   }
 
   // Mark notification as read
@@ -49,4 +53,16 @@ self.addEventListener('notificationclick', function (event) {
       }),
     });
   }
+});
+
+// Service Worker Installation
+self.addEventListener('install', function (event) {
+  console.log('Service Worker installing...');
+  self.skipWaiting();
+});
+
+// Service Worker Activation
+self.addEventListener('activate', function (event) {
+  console.log('Service Worker activating...');
+  event.waitUntil(self.clients.claim());
 });

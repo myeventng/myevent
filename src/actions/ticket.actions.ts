@@ -510,7 +510,7 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
     let totalRevenue = 0;
     let totalTicketsSold = 0;
     let totalRefunded = 0;
-    let totalEvents = events.length;
+    const totalEvents = events.length;
     let activeEvents = 0;
 
     const eventStats = events.map((event) => {

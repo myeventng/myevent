@@ -27,6 +27,7 @@ import {
   List,
   Tags,
   Star,
+  ScanQrCode,
   Bell, // Added Bell icon
 } from 'lucide-react';
 import Link from 'next/link';
@@ -300,6 +301,11 @@ export function Sidebar({
           icon: <Edit className="w-4 h-4" />,
         },
       ],
+    },
+    {
+      title: 'Scanner',
+      href: '/dashboard/scanner',
+      icon: <ScanQrCode className="w-5 h-5" />,
     },
     {
       title: 'Venues',

@@ -141,7 +141,7 @@ export const EventNotificationTemplate = ({
               <Section style={urgencySection}>
                 <Text style={urgencyText}>
                   ⏰ <strong>Limited Time:</strong> This offer expires in 24
-                  hours. Don't miss out on your chance to attend!
+                  hours. Don&apos;t miss out on your chance to attend!
                 </Text>
               </Section>
             )}

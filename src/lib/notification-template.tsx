@@ -25,6 +25,8 @@ interface BaseEmailProps {
   actionText?: string;
 }
 
+declare const self: ServiceWorkerGlobalScope;
+
 function BaseEmailTemplate({
   previewText,
   title,
@@ -74,9 +76,10 @@ function BaseEmailTemplate({
               © 2024 YourPlatform. All rights reserved.
             </Text>
             <Text style={footerText}>
-              You're receiving this email because you have an account with us.
+              You&apos;re receiving this email because you have an account with
+              us.
               <br />
-              If you don't want to receive these emails, you can{' '}
+              If you don&apos;t want to receive these emails, you can{' '}
               <a href="https://yourplatform.com/unsubscribe" style={link}>
                 unsubscribe
               </a>
@@ -112,8 +115,8 @@ export function EventApprovalEmail({
     >
       <Text style={text}>Hi {organizerName},</Text>
       <Text style={text}>
-        Great news! Your event <strong>"{eventTitle}"</strong> has been reviewed
-        and approved by our team.
+        Great news! Your event <strong>&apos;{eventTitle}&apos;</strong> has
+        been reviewed and approved by our team.
       </Text>
       <Text style={text}>
         Your event is now live and attendees can start purchasing tickets. Here
@@ -163,9 +166,10 @@ export function EventRejectionEmail({
     >
       <Text style={text}>Hi {organizerName},</Text>
       <Text style={text}>
-        Thank you for submitting your event <strong>"{eventTitle}"</strong>.
-        After reviewing your submission, we need you to make some adjustments
-        before we can approve it.
+        Thank you for submitting your event{' '}
+        <strong>&apos;{eventTitle}&apos;</strong>. After reviewing your
+        submission, we need you to make some adjustments before we can approve
+        it.
       </Text>
 
       <Section style={alertBox}>
@@ -215,7 +219,7 @@ export function TicketPurchaseEmail({
       <Text style={text}>Hi {buyerName},</Text>
       <Text style={text}>
         Thank you for your purchase! Your tickets for{' '}
-        <strong>"{eventTitle}"</strong> have been confirmed.
+        <strong>&apos;{eventTitle}&apos;</strong> have been confirmed.
       </Text>
 
       <Section style={ticketDetails}>
@@ -274,8 +278,8 @@ export function RefundProcessedEmail({
     >
       <Text style={text}>Hi {buyerName},</Text>
       <Text style={text}>
-        Your refund for <strong>"{eventTitle}"</strong> has been processed
-        successfully.
+        Your refund for <strong>&apos;{eventTitle}&apos;</strong> has been
+        processed successfully.
       </Text>
 
       <Section style={refundDetails}>
@@ -299,8 +303,8 @@ export function RefundProcessedEmail({
       </Text>
 
       <Text style={text}>
-        If you have any questions about this refund, please don't hesitate to
-        contact our support team.
+        If you have any questions about this refund, please don&apos;t hesitate
+        to contact our support team.
       </Text>
     </BaseEmailTemplate>
   );
@@ -333,8 +337,9 @@ export function EventCancellationEmail({
     >
       <Text style={text}>Hi {attendeeName},</Text>
       <Text style={text}>
-        We regret to inform you that <strong>"{eventTitle}"</strong> scheduled
-        for {new Date(eventDate).toLocaleDateString()} has been cancelled.
+        We regret to inform you that <strong>&apos;{eventTitle}&apos;</strong>{' '}
+        scheduled for {new Date(eventDate).toLocaleDateString()} has been
+        cancelled.
       </Text>
 
       {cancellationReason && (
@@ -354,8 +359,8 @@ export function EventCancellationEmail({
       </Text>
 
       <Text style={text}>
-        If you have any questions or concerns, please don't hesitate to reach
-        out to our support team.
+        If you have any questions or concerns, please don&apos;t hesitate to
+        reach out to our support team.
       </Text>
     </BaseEmailTemplate>
   );
@@ -387,7 +392,7 @@ export function WaitingListEmail({
       <Text style={text}>Hi {userName},</Text>
       <Text style={text}>
         Great news! Tickets are now available for{' '}
-        <strong>"{eventTitle}"</strong> that you were waiting for.
+        <strong>&apos;{eventTitle}&apos;</strong> that you were waiting for.
       </Text>
 
       <Section style={urgentBox}>
@@ -409,8 +414,8 @@ export function WaitingListEmail({
       </Section>
 
       <Text style={text}>
-        Don't miss out! Click the button below to secure your tickets before
-        they're gone.
+        Don&apos;t miss out! Click the button below to secure your tickets
+        before they&apos;re gone.
       </Text>
     </BaseEmailTemplate>
   );
@@ -630,347 +635,3 @@ const link = {
   color: '#3b82f6',
   textDecoration: 'underline',
 };
-
-// Email Service Implementation
-// lib/email-service.ts
-
-import { Resend } from 'resend';
-import { render } from '@react-email/render';
-import {
-  EventApprovalEmail,
-  EventRejectionEmail,
-  TicketPurchaseEmail,
-  RefundProcessedEmail,
-  EventCancellationEmail,
-  WaitingListEmail,
-  PayoutEmail,
-} from './email-templates/notification-templates';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-interface EmailOptions {
-  to: string;
-  subject: string;
-  html: string;
-}
-
-class EmailService {
-  private async sendEmail({ to, subject, html }: EmailOptions) {
-    try {
-      const result = await resend.emails.send({
-        from: 'notifications@yourplatform.com',
-        to,
-        subject,
-        html,
-      });
-
-      console.log('✅ Email sent successfully:', result);
-      return { success: true, messageId: result.data?.id };
-    } catch (error) {
-      console.error('❌ Failed to send email:', error);
-      return { success: false, error };
-    }
-  }
-
-  async sendEventApproval(email: string, event: any) {
-    const html = render(
-      EventApprovalEmail({
-        eventTitle: event.title,
-        eventDate: event.startDateTime,
-        eventUrl: `${process.env.NEXT_PUBLIC_APP_URL}/events/${event.slug}`,
-        organizerName: event.user.name,
-      })
-    );
-
-    return this.sendEmail({
-      to: email,
-      subject: `🎉 Your event "${event.title}" has been approved!`,
-      html,
-    });
-  }
-
-  async sendEventRejection(email: string, event: any, rejectionReason: string) {
-    const html = render(
-      EventRejectionEmail({
-        eventTitle: event.title,
-        organizerName: event.user.name,
-        rejectionReason,
-        editUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/events/${event.id}/edit`,
-      })
-    );
-
-    return this.sendEmail({
-      to: email,
-      subject: `📝 Action required: Your event "${event.title}" needs updates`,
-      html,
-    });
-  }
-
-  async sendTicketPurchase(email: string, order: any) {
-    const html = render(
-      TicketPurchaseEmail({
-        buyerName: order.buyer.name,
-        eventTitle: order.event.title,
-        eventDate: order.event.startDateTime,
-        eventLocation: `${order.event.venue.name}, ${order.event.venue.city.name}`,
-        quantity: order.quantity,
-        totalAmount: order.totalAmount,
-        orderId: order.id,
-        ticketsUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/tickets`,
-      })
-    );
-
-    return this.sendEmail({
-      to: email,
-      subject: `🎟️ Your tickets for "${order.event.title}" are confirmed!`,
-      html,
-    });
-  }
-
-  async sendRefundProcessed(email: string, order: any) {
-    const html = render(
-      RefundProcessedEmail({
-        buyerName: order.buyer.name,
-        eventTitle: order.event.title,
-        refundAmount: order.totalAmount,
-        orderId: order.id,
-        accountUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/tickets`,
-      })
-    );
-
-    return this.sendEmail({
-      to: email,
-      subject: `💰 Your refund of ₦${order.totalAmount.toLocaleString()} has been processed`,
-      html,
-    });
-  }
-
-  async sendEventCancellation(
-    email: string,
-    event: any,
-    order: any,
-    reason?: string
-  ) {
-    const html = render(
-      EventCancellationEmail({
-        attendeeName: order.buyer.name,
-        eventTitle: event.title,
-        eventDate: event.startDateTime,
-        cancellationReason: reason,
-        refundAmount: order.totalAmount,
-        supportUrl: `${process.env.NEXT_PUBLIC_APP_URL}/support`,
-      })
-    );
-
-    return this.sendEmail({
-      to: email,
-      subject: `⚠️ Important: "${event.title}" has been cancelled`,
-      html,
-    });
-  }
-
-  async sendWaitingListNotification(email: string, event: any) {
-    const html = render(
-      WaitingListEmail({
-        userName: 'Valued Customer', // You might want to pass the actual name
-        eventTitle: event.title,
-        eventDate: event.startDateTime,
-        eventUrl: `${process.env.NEXT_PUBLIC_APP_URL}/events/${event.slug}`,
-        expiresIn: '24 hours',
-      })
-    );
-
-    return this.sendEmail({
-      to: email,
-      subject: `🎫 Tickets now available for "${event.title}"!`,
-      html,
-    });
-  }
-
-  async sendPayoutNotification(email: string, organizer: any, payoutData: any) {
-    const html = render(
-      PayoutEmail({
-        organizerName: organizer.name,
-        payoutAmount: payoutData.amount,
-        periodStart: payoutData.periodStart,
-        periodEnd: payoutData.periodEnd,
-        dashboardUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/analytics`,
-        eventsSold: payoutData.eventsSold,
-        ticketsSold: payoutData.ticketsSold,
-      })
-    );
-
-    return this.sendEmail({
-      to: email,
-      subject: `💰 Your payout of ₦${payoutData.amount.toLocaleString()} has been processed`,
-      html,
-    });
-  }
-}
-
-export const emailService = new EmailService();
-
-// Service Worker for Push Notifications
-// public/sw.js
-
-self.addEventListener('push', function (event) {
-  if (event.data) {
-    const data = event.data.json();
-    const options = {
-      body: data.body,
-      icon: '/icon-192x192.png',
-      badge: '/icon-72x72.png',
-      actions: [
-        {
-          action: 'view',
-          title: 'View',
-          icon: '/icons/view.png',
-        },
-        {
-          action: 'dismiss',
-          title: 'Dismiss',
-          icon: '/icons/dismiss.png',
-        },
-      ],
-      data: {
-        url: data.url || '/',
-        notificationId: data.notificationId,
-      },
-      requireInteraction: data.requireInteraction || false,
-      silent: data.silent || false,
-      vibrate: data.vibrate || [200, 100, 200],
-    };
-
-    event.waitUntil(self.registration.showNotification(data.title, options));
-  }
-});
-
-self.addEventListener('notificationclick', function (event) {
-  event.notification.close();
-
-  if (event.action === 'view' || !event.action) {
-    event.waitUntil(clients.openWindow(event.notification.data.url));
-  }
-
-  // Mark notification as read
-  if (event.notification.data.notificationId) {
-    fetch('/api/notifications/mark-read', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        notificationId: event.notification.data.notificationId,
-      }),
-    });
-  }
-});
-
-// Push Notification Utils
-// lib/push-notifications.ts
-
-interface PushNotificationData {
-  title: string;
-  body: string;
-  url?: string;
-  notificationId?: string;
-  requireInteraction?: boolean;
-  silent?: boolean;
-  vibrate?: number[];
-}
-
-export class PushNotificationService {
-  private static instance: PushNotificationService;
-  private publicKey: string;
-
-  private constructor() {
-    this.publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
-  }
-
-  static getInstance(): PushNotificationService {
-    if (!PushNotificationService.instance) {
-      PushNotificationService.instance = new PushNotificationService();
-    }
-    return PushNotificationService.instance;
-  }
-
-  async requestPermission(): Promise<NotificationPermission> {
-    if (!('Notification' in window)) {
-      throw new Error('This browser does not support notifications');
-    }
-
-    if (Notification.permission === 'granted') {
-      return 'granted';
-    }
-
-    const permission = await Notification.requestPermission();
-    return permission;
-  }
-
-  async subscribe(): Promise<PushSubscription | null> {
-    try {
-      const registration = await navigator.serviceWorker.ready;
-
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: this.urlBase64ToUint8Array(this.publicKey),
-      });
-
-      // Send subscription to server
-      await fetch('/api/notifications/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(subscription),
-      });
-
-      return subscription;
-    } catch (error) {
-      console.error('Failed to subscribe to push notifications:', error);
-      return null;
-    }
-  }
-
-  async unsubscribe(): Promise<boolean> {
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-
-      if (subscription) {
-        await subscription.unsubscribe();
-
-        // Remove subscription from server
-        await fetch('/api/notifications/unsubscribe', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(subscription),
-        });
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Failed to unsubscribe from push notifications:', error);
-      return false;
-    }
-  }
-
-  private urlBase64ToUint8Array(base64String: string): Uint8Array {
-    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-    const base64 = (base64String + padding)
-      .replace(/-/g, '+')
-      .replace(/_/g, '/');
-
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-
-    for (let i = 0; i < rawData.length; ++i) {
-      outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
-  }
-}
-
-export const pushNotificationService = PushNotificationService.getInstance();

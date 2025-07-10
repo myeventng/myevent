@@ -511,8 +511,8 @@ export function UserTicketsPage({ userId }: UserTicketsPageProps) {
                       </span>
                     </div>
                     <p className="text-xs text-orange-700 mt-1">
-                      Your refund request is being processed. You'll be notified
-                      once it's approved.
+                      Your refund request is being processed. You&apos;ll be
+                      notified once it&apos;s approved.
                     </p>
                   </div>
                 )}

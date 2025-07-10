@@ -37,7 +37,7 @@ class EmailService {
   }
 
   async sendEventApproval(email: string, event: any) {
-    const html = render(
+    const html = await render(
       EventApprovalEmail({
         eventTitle: event.title,
         eventDate: event.startDateTime,
@@ -54,7 +54,7 @@ class EmailService {
   }
 
   async sendEventRejection(email: string, event: any, rejectionReason: string) {
-    const html = render(
+    const html = await render(
       EventRejectionEmail({
         eventTitle: event.title,
         organizerName: event.user.name,
@@ -71,7 +71,7 @@ class EmailService {
   }
 
   async sendTicketPurchase(email: string, order: any) {
-    const html = render(
+    const html = await render(
       TicketPurchaseEmail({
         buyerName: order.buyer.name,
         eventTitle: order.event.title,
@@ -92,7 +92,7 @@ class EmailService {
   }
 
   async sendRefundProcessed(email: string, order: any) {
-    const html = render(
+    const html = await render(
       RefundProcessedEmail({
         buyerName: order.buyer.name,
         eventTitle: order.event.title,
@@ -115,7 +115,7 @@ class EmailService {
     order: any,
     reason?: string
   ) {
-    const html = render(
+    const html = await render(
       EventCancellationEmail({
         attendeeName: order.buyer.name,
         eventTitle: event.title,
@@ -134,7 +134,7 @@ class EmailService {
   }
 
   async sendWaitingListNotification(email: string, event: any) {
-    const html = render(
+    const html = await render(
       WaitingListEmail({
         userName: 'Valued Customer', // You might want to pass the actual name
         eventTitle: event.title,
@@ -152,7 +152,7 @@ class EmailService {
   }
 
   async sendPayoutNotification(email: string, organizer: any, payoutData: any) {
-    const html = render(
+    const html = await render(
       PayoutEmail({
         organizerName: organizer.name,
         payoutAmount: payoutData.amount,

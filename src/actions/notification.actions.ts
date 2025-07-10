@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
-import { emailService } from '@/lib/email-service';
+import { ticketEmailService as emailService } from '@/lib/email-service';
 
 interface ActionResponse<T> {
   success: boolean;
@@ -202,7 +202,7 @@ export async function createTicketNotification(
       };
     }
 
-    let notifications = [];
+    const notifications = [];
 
     switch (type) {
       case 'TICKET_PURCHASED':
@@ -341,6 +341,49 @@ export async function createTicketNotification(
     return {
       success: false,
       message: 'Failed to create ticket notification',
+    };
+  }
+}
+
+// Create organizer upgrade notification for admins
+export async function createOrganizerUpgradeNotification(
+  userId: string
+): Promise<ActionResponse<any>> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        organizerProfile: true,
+      },
+    });
+
+    if (!user) {
+      return {
+        success: false,
+        message: 'User not found',
+      };
+    }
+
+    return await createNotification({
+      type: 'SYSTEM_UPDATE',
+      title: 'New Organizer Registration 🎉',
+      message: `${user.name || 'A user'} has created an organizer profile for "${user.organizerProfile?.organizationName}" and been upgraded to organizer status.`,
+      actionUrl: `/admin/dashboard/organizers`,
+      isAdminNotification: true,
+      metadata: {
+        userId: user.id,
+        userName: user.name,
+        userEmail: user.email,
+        organizationName: user.organizerProfile?.organizationName,
+        upgradedAt: new Date().toISOString(),
+      },
+      sendEmail: true,
+    });
+  } catch (error) {
+    console.error('Error creating organizer upgrade notification:', error);
+    return {
+      success: false,
+      message: 'Failed to create organizer upgrade notification',
     };
   }
 }
