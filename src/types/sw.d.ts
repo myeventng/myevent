@@ -47,11 +47,4 @@ interface ServiceWorkerGlobalScope extends WorkerGlobalScope {
   addEventListener(type: 'sync', listener: (event: SyncEvent) => void): void;
 }
 
-// For JSDoc typing in plain JavaScript files
-declare global {
-  interface Window {
-    // This prevents conflicts with DOM Window type
-  }
-}
-
 export {};
