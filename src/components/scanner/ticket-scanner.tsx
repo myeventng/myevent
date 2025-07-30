@@ -621,12 +621,12 @@ export function TicketScanner({
         <CardContent>
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>
-              • <strong>Camera Scanning:</strong> Click "Start Camera" and
-              position QR codes in the viewfinder
+              • <strong>Camera Scanning:</strong> Click &quot;Start Camera&quot;
+              and position QR codes in the viewfinder
             </p>
             <p>
               • <strong>Manual Entry:</strong> Type ticket ID and press Enter or
-              click "Validate"
+              click &quot;Validate&quot;
             </p>
             <p>
               • <strong>Audio Feedback:</strong> Listen for success (two beeps)
