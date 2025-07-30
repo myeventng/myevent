@@ -290,8 +290,8 @@ export async function createEvent(
       publishedStatus === 'PUBLISHED'
         ? 'Event created and published successfully'
         : publishedStatus === 'PENDING_REVIEW'
-        ? 'Event created and submitted for review'
-        : 'Event saved as draft';
+          ? 'Event created and submitted for review'
+          : 'Event saved as draft';
 
     return {
       success: true,
@@ -500,8 +500,8 @@ export async function updateEvent(
       publishedStatus === 'PUBLISHED'
         ? 'Event updated and published successfully'
         : publishedStatus === 'PENDING_REVIEW'
-        ? 'Event updated and submitted for review'
-        : 'Event updated and saved as draft';
+          ? 'Event updated and submitted for review'
+          : 'Event updated and saved as draft';
 
     return {
       success: true,

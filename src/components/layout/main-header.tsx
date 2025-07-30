@@ -43,14 +43,14 @@ const getCreateEventUrl = (authUser: AuthUser | undefined): string => {
 
 // Helper function to get dynamic Create Event text based on user role
 const getCreateEventText = (authUser: AuthUser | undefined): string => {
-  if (!authUser) return '🚀 Host Your Event';
+  if (!authUser) return ' Host Your Event';
 
   if (isAdmin(authUser) || isSuperAdmin(authUser)) {
-    return '⚡ Create Event';
+    return ' Create Event';
   } else if (isOrganizer(authUser)) {
-    return '✨ New Event';
+    return ' New Event';
   } else {
-    return '🌟 Become Host';
+    return ' Become Host';
   }
 };
 

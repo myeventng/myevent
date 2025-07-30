@@ -1,9 +1,12 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { UserTicketsPage } from '@/components/tickets/user-ticket-page';
+import { OrganizerAnalytics } from '@/components/organizer/organizer-analytics';
 import { getServerSideAuth } from '@/lib/auth-server';
+import { getOrganizerStats } from '@/actions/ticket.actions';
+import { Badge } from '@/components/ui/badge';
 import { redirect } from 'next/navigation';
 
-export default async function UserTickets() {
+export default async function Dashboard() {
   const session = await getServerSideAuth({
     roles: ['USER', 'ADMIN'], // Allow both regular users and admins
   });
@@ -13,6 +16,56 @@ export default async function UserTickets() {
     redirect('/unauthorized'); // Redirect to unauthorized page if no session
   }
 
+  // Check user subrole
+  const isOrganizer = session.user.subRole === 'ORGANIZER';
+  const isAdmin = session.user.role === 'ADMIN';
+
+  // If user is an organizer, render the organizer dashboard
+  if (isOrganizer || isAdmin) {
+    // Get initial stats server-side for organizers
+    let initialStats = null;
+    try {
+      const statsResponse = await getOrganizerStats();
+      if (statsResponse.success) {
+        initialStats = statsResponse.data;
+      }
+    } catch (error) {
+      console.error('Error loading initial stats:', error);
+    }
+
+    const initials = session.user.name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase();
+
+    return (
+      <DashboardLayout session={session}>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold">Organizer Dashboard</h1>
+              <p className="text-muted-foreground">
+                Track your event performance and revenue
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600">
+                {initials}
+              </div>
+              <Badge variant={isOrganizer ? 'default' : 'destructive'}>
+                {isAdmin ? 'ADMIN' : 'ORGANIZER'}
+              </Badge>
+            </div>
+          </div>
+
+          <OrganizerAnalytics initialStats={initialStats} />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Default: render user tickets page for ordinary users
   return (
     <DashboardLayout session={session}>
       <UserTicketsPage />

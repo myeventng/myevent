@@ -188,6 +188,11 @@ export function Sidebar({
       ],
     },
     {
+      title: 'Scanner',
+      href: '/admin/dashboard/scanner',
+      icon: <ScanQrCode className="w-5 h-5" />,
+    },
+    {
       title: 'Tickets',
       icon: <Ticket className="w-5 h-5" />,
       children: [
@@ -241,6 +246,11 @@ export function Sidebar({
       title: 'Dashboard',
       href: '/dashboard',
       icon: <Home className="w-5 h-5" />,
+    },
+    {
+      title: 'Create Event',
+      href: '/dashboard/create-event',
+      icon: <Plus className="w-4 h-4" />,
     },
     {
       title: 'Notifications',
@@ -322,11 +332,6 @@ export function Sidebar({
           icon: <Plus className="w-4 h-4" />,
         },
       ],
-    },
-    {
-      title: 'Analytics',
-      href: '/dashboard/analytics',
-      icon: <BarChart3 className="w-5 h-5" />,
     },
   ];
 

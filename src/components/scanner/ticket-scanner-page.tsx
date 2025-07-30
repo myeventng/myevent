@@ -61,30 +61,54 @@ export function TicketScannerPage({ eventId, eventTitle }: ScannerPageProps) {
     loadData();
   }, [eventId]);
 
-  const handleScanComplete = (result: any) => {
-    if (result.success) {
-      // Refresh data after successful scan
-      loadData();
+  // Listen for custom scan events from TicketScanner
+  useEffect(() => {
+    const handleScanComplete = (event: CustomEvent) => {
+      const result = event.detail;
 
-      // Add to validations list for immediate feedback
-      setValidations((prev) => [
-        {
-          id: Date.now().toString(),
-          ticketId: result.data.id,
-          validatedAt: new Date().toISOString(),
-          ticket: {
-            ticketId: result.data.ticketId,
-            user: result.data.user,
-            ticketType: result.data.ticketType,
+      if (result.success) {
+        // Refresh data after successful scan
+        loadData();
+
+        // Add to validations list for immediate feedback
+        setValidations((prev) => [
+          {
+            id: Date.now().toString(),
+            ticketId: result.data?.id || result.ticket?.id,
+            validatedAt: new Date().toISOString(),
+            ticket: {
+              ticketId: result.data?.ticketId || result.ticket?.ticketId,
+              user: result.data?.user || result.ticket?.user,
+              ticketType: result.data?.ticketType || result.ticket?.ticketType,
+            },
+            validator: {
+              name: 'You',
+            },
           },
-          validator: {
-            name: 'You',
-          },
-        },
-        ...prev,
-      ]);
-    }
-  };
+          ...prev,
+        ]);
+
+        // Show success notification in this component
+        toast.success(
+          `✓ Ticket validated for ${result.ticket?.user?.name || 'attendee'}`
+        );
+      }
+    };
+
+    // Listen for the custom event
+    window.addEventListener(
+      'ticketScanned',
+      handleScanComplete as EventListener
+    );
+
+    // Cleanup
+    return () => {
+      window.removeEventListener(
+        'ticketScanned',
+        handleScanComplete as EventListener
+      );
+    };
+  }, []);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-NG', {
@@ -182,11 +206,8 @@ export function TicketScannerPage({ eventId, eventTitle }: ScannerPageProps) {
         </TabsList>
 
         <TabsContent value="scanner">
-          <TicketScanner
-            eventId={eventId}
-            eventTitle={eventTitle}
-            onScanComplete={handleScanComplete}
-          />
+          {/* No onScanComplete prop needed - using custom events instead */}
+          <TicketScanner eventId={eventId} eventTitle={eventTitle} />
         </TabsContent>
 
         <TabsContent value="validations">
