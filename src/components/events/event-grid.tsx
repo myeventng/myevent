@@ -219,7 +219,9 @@ export function EventsGrid() {
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Categories</SelectItem>
+                <SelectItem disabled value="placeholder">
+                  All Categories
+                </SelectItem>
                 {categories.map((category) => (
                   <SelectItem key={category.id} value={category.id}>
                     {category.name}
