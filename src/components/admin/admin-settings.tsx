@@ -1,6 +1,5 @@
 'use client';
-
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,8 +20,9 @@ import {
   Info,
   AlertTriangle,
   CheckCircle,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
-import { toast } from 'sonner';
 
 interface AdminSettingsProps {
   session: any;
@@ -44,20 +44,6 @@ interface PlatformSettings {
     autoApproveRefunds: boolean;
     paystackPublicKey: string;
     paystackSecretKey: string;
-  };
-  features: {
-    enableWaitingList: boolean;
-    enableEventRatings: boolean;
-    enableTicketTransfers: boolean;
-    maxTicketsPerUser: number;
-    enableEmailNotifications: boolean;
-    enableSMSNotifications: boolean;
-  };
-  organizer: {
-    requireApproval: boolean;
-    maxEventsPerOrganizer: number;
-    enableOrganizerVerification: boolean;
-    defaultEventApproval: boolean;
   };
 }
 
@@ -81,41 +67,32 @@ export function AdminSettings({
       paystackPublicKey: '',
       paystackSecretKey: '',
     },
-    features: {
-      enableWaitingList: true,
-      enableEventRatings: true,
-      enableTicketTransfers: false,
-      maxTicketsPerUser: 10,
-      enableEmailNotifications: true,
-      enableSMSNotifications: false,
-    },
-    organizer: {
-      requireApproval: true,
-      maxEventsPerOrganizer: 50,
-      enableOrganizerVerification: true,
-      defaultEventApproval: false,
-    },
   });
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('general');
+  const [showSecrets, setShowSecrets] = useState({
+    paystackPublic: false,
+    paystackSecret: false,
+  });
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>(
+    'idle'
+  );
 
   // Load settings from API
   const loadSettings = async () => {
     setIsLoading(true);
     try {
-      // In a real implementation, this would fetch from your API
-      // const response = await getAdminSettings();
-      // setSettings(response.data);
-
-      // For now, using localStorage as mock storage
-      const savedSettings = localStorage.getItem('adminSettings');
-      if (savedSettings) {
-        setSettings(JSON.parse(savedSettings));
+      const response = await fetch('/api/admin/settings');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setSettings(data.data);
+        }
       }
     } catch (error) {
-      toast.error('Failed to load settings');
+      console.error('Failed to load settings:', error);
     } finally {
       setIsLoading(false);
     }
@@ -124,16 +101,30 @@ export function AdminSettings({
   // Save settings to API
   const saveSettings = async () => {
     setIsSaving(true);
+    setSaveStatus('idle');
+
     try {
-      // In a real implementation, this would save to your API
-      // const response = await updateAdminSettings(settings);
+      const response = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings),
+      });
 
-      // For now, using localStorage as mock storage
-      localStorage.setItem('adminSettings', JSON.stringify(settings));
+      const data = await response.json();
 
-      toast.success('Settings saved successfully');
+      if (data.success) {
+        setSaveStatus('success');
+        setTimeout(() => setSaveStatus('idle'), 3000);
+      } else {
+        setSaveStatus('error');
+        setTimeout(() => setSaveStatus('idle'), 5000);
+      }
     } catch (error) {
-      toast.error('Failed to save settings');
+      console.error('Failed to save settings:', error);
+      setSaveStatus('error');
+      setTimeout(() => setSaveStatus('idle'), 5000);
     } finally {
       setIsSaving(false);
     }
@@ -157,6 +148,15 @@ export function AdminSettings({
   useEffect(() => {
     loadSettings();
   }, []);
+
+  const toggleSecretVisibility = (
+    field: 'paystackPublic' | 'paystackSecret'
+  ) => {
+    setShowSecrets((prev) => ({
+      ...prev,
+      [field]: !prev[field],
+    }));
+  };
 
   if (isLoading) {
     return (
@@ -186,16 +186,34 @@ export function AdminSettings({
           <Badge variant={isUserSuperAdmin ? 'destructive' : 'secondary'}>
             {session.user.subRole}
           </Badge>
-          <Button onClick={saveSettings} disabled={isSaving}>
+          <Button
+            onClick={saveSettings}
+            disabled={isSaving}
+            className={
+              saveStatus === 'success' ? 'bg-green-600 hover:bg-green-700' : ''
+            }
+          >
             {isSaving ? (
               <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : saveStatus === 'success' ? (
+              <CheckCircle className="h-4 w-4 mr-2" />
             ) : (
               <Save className="h-4 w-4 mr-2" />
             )}
-            Save Changes
+            {saveStatus === 'success' ? 'Saved!' : 'Save Changes'}
           </Button>
         </div>
       </div>
+
+      {/* Save Status Alert */}
+      {saveStatus === 'error' && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            Failed to save settings. Please try again.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Permissions Alert */}
       {!isUserSuperAdmin && (
@@ -210,11 +228,9 @@ export function AdminSettings({
 
       {/* Settings Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="financial">Financial</TabsTrigger>
-          <TabsTrigger value="features">Features</TabsTrigger>
-          <TabsTrigger value="organizer">Organizers</TabsTrigger>
         </TabsList>
 
         {/* General Settings */}
@@ -287,6 +303,15 @@ export function AdminSettings({
                   <p className="text-sm text-muted-foreground">
                     Temporarily disable the platform for maintenance
                   </p>
+                  {settings.general.maintenanceMode && (
+                    <Alert className="mt-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription>
+                        Platform is currently in maintenance mode. Users will
+                        see a maintenance page.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
                 <Switch
                   checked={settings.general.maintenanceMode}
@@ -423,257 +448,88 @@ export function AdminSettings({
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="paystackPublic">Paystack Public Key</Label>
-                  <Input
-                    id="paystackPublic"
-                    type="password"
-                    value={settings.financial.paystackPublicKey}
-                    onChange={(e) =>
-                      updateSetting(
-                        'financial',
-                        'paystackPublicKey',
-                        e.target.value
-                      )
-                    }
-                    placeholder="pk_..."
-                    disabled={!isUserSuperAdmin}
-                  />
+                  <div className="relative">
+                    <Input
+                      id="paystackPublic"
+                      type={showSecrets.paystackPublic ? 'text' : 'password'}
+                      value={settings.financial.paystackPublicKey}
+                      onChange={(e) =>
+                        updateSetting(
+                          'financial',
+                          'paystackPublicKey',
+                          e.target.value
+                        )
+                      }
+                      placeholder="pk_..."
+                      disabled={!isUserSuperAdmin}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => toggleSecretVisibility('paystackPublic')}
+                      disabled={!isUserSuperAdmin}
+                    >
+                      {showSecrets.paystackPublic ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="paystackSecret">Paystack Secret Key</Label>
-                  <Input
-                    id="paystackSecret"
-                    type="password"
-                    value={settings.financial.paystackSecretKey}
-                    onChange={(e) =>
-                      updateSetting(
-                        'financial',
-                        'paystackSecretKey',
-                        e.target.value
-                      )
-                    }
-                    placeholder="sk_..."
-                    disabled={!isUserSuperAdmin}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Features Settings */}
-        <TabsContent value="features" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Platform Features</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Enable Waiting Lists</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Allow users to join waiting lists for sold-out events
-                      </p>
-                    </div>
-                    <Switch
-                      checked={settings.features.enableTicketTransfers}
-                      onCheckedChange={(checked) =>
-                        updateSetting(
-                          'features',
-                          'enableTicketTransfers',
-                          checked
-                        )
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="maxTickets">Max Tickets per User</Label>
+                  <div className="relative">
                     <Input
-                      id="maxTickets"
-                      type="number"
-                      min="1"
-                      max="100"
-                      value={settings.features.maxTicketsPerUser}
+                      id="paystackSecret"
+                      type={showSecrets.paystackSecret ? 'text' : 'password'}
+                      value={settings.financial.paystackSecretKey}
                       onChange={(e) =>
                         updateSetting(
-                          'features',
-                          'maxTicketsPerUser',
-                          parseInt(e.target.value) || 1
+                          'financial',
+                          'paystackSecretKey',
+                          e.target.value
                         )
                       }
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Maximum tickets a user can purchase per event
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mail className="h-5 w-5" />
-                Notifications
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Email Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Send email notifications for important events
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.features.enableEmailNotifications}
-                  onCheckedChange={(checked) =>
-                    updateSetting(
-                      'features',
-                      'enableEmailNotifications',
-                      checked
-                    )
-                  }
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>SMS Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Send SMS notifications (requires SMS provider setup)
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.features.enableSMSNotifications}
-                  onCheckedChange={(checked) =>
-                    updateSetting('features', 'enableSMSNotifications', checked)
-                  }
-                  disabled={!isUserSuperAdmin}
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Organizer Settings */}
-        <TabsContent value="organizer" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Organizer Management</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Require Organizer Approval</Label>
-                      <p className="text-sm text-muted-foreground">
-                        New organizers must be approved by admin
-                      </p>
-                    </div>
-                    <Switch
-                      checked={settings.organizer.requireApproval}
-                      onCheckedChange={(checked) =>
-                        updateSetting('organizer', 'requireApproval', checked)
-                      }
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Enable Organizer Verification</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Require verification documents from organizers
-                      </p>
-                    </div>
-                    <Switch
-                      checked={settings.organizer.enableOrganizerVerification}
-                      onCheckedChange={(checked) =>
-                        updateSetting(
-                          'organizer',
-                          'enableOrganizerVerification',
-                          checked
-                        )
-                      }
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Auto-approve Events</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Automatically approve events from verified organizers
-                      </p>
-                    </div>
-                    <Switch
-                      checked={settings.organizer.defaultEventApproval}
-                      onCheckedChange={(checked) =>
-                        updateSetting(
-                          'organizer',
-                          'defaultEventApproval',
-                          checked
-                        )
-                      }
+                      placeholder="sk_..."
                       disabled={!isUserSuperAdmin}
                     />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="maxEvents">Max Events per Organizer</Label>
-                    <Input
-                      id="maxEvents"
-                      type="number"
-                      min="1"
-                      max="1000"
-                      value={settings.organizer.maxEventsPerOrganizer}
-                      onChange={(e) =>
-                        updateSetting(
-                          'organizer',
-                          'maxEventsPerOrganizer',
-                          parseInt(e.target.value) || 1
-                        )
-                      }
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Maximum events an organizer can create
-                    </p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => toggleSecretVisibility('paystackSecret')}
+                      disabled={!isUserSuperAdmin}
+                    >
+                      {showSecrets.paystackSecret ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
                   </div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          {/* Revenue Calculator */}
+          <Card className="border-dashed">
             <CardHeader>
-              <CardTitle>Revenue Sharing</CardTitle>
+              <CardTitle>Revenue Calculator</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Configure custom fee structures for specific organizers
+                See how the current fee structure affects earnings
               </p>
             </CardHeader>
             <CardContent>
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  Custom organizer fees can be set individually in the organizer
-                  management section. The default platform fee of{' '}
-                  {settings.financial.defaultPlatformFeePercentage}% applies to
-                  all new organizers.
-                </AlertDescription>
-              </Alert>
-
-              <div className="mt-4 p-4 border rounded-lg bg-gray-50">
+              <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="font-medium mb-2">Current Fee Structure</h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span>Default Platform Fee:</span>
+                    <span>Platform Fee:</span>
                     <span className="font-medium">
                       {settings.financial.defaultPlatformFeePercentage}%
                     </span>
@@ -682,7 +538,7 @@ export function AdminSettings({
                     <span>Payment Processing Fee:</span>
                     <span className="font-medium">1.5% + ₦100 (Paystack)</span>
                   </div>
-                  <div className="flex justify-between text-green-600">
+                  <div className="border-t pt-2 flex justify-between text-green-600">
                     <span>Organizer Revenue:</span>
                     <span className="font-medium">
                       {(
@@ -692,6 +548,34 @@ export function AdminSettings({
                       ).toFixed(1)}
                       % - ₦100
                     </span>
+                  </div>
+                </div>
+
+                <div className="mt-4 p-3 bg-blue-50 rounded border">
+                  <p className="text-sm text-blue-800">
+                    <strong>Example:</strong> For a ₦10,000 ticket sale:
+                  </p>
+                  <div className="text-xs text-blue-700 mt-1 space-y-1">
+                    <div>
+                      • Platform fee: ₦
+                      {(
+                        10000 *
+                        (settings.financial.defaultPlatformFeePercentage / 100)
+                      ).toLocaleString()}
+                    </div>
+                    <div>
+                      • Payment fee: ₦{(10000 * 0.015 + 100).toLocaleString()}
+                    </div>
+                    <div>
+                      • Organizer gets: ₦
+                      {(
+                        10000 -
+                        10000 *
+                          (settings.financial.defaultPlatformFeePercentage /
+                            100) -
+                        (10000 * 0.015 + 100)
+                      ).toLocaleString()}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -725,13 +609,23 @@ export function AdminSettings({
           />
           Reset Changes
         </Button>
-        <Button onClick={saveSettings} disabled={isSaving}>
+        <Button
+          onClick={saveSettings}
+          disabled={isSaving}
+          className={
+            saveStatus === 'success' ? 'bg-green-600 hover:bg-green-700' : ''
+          }
+        >
           {isSaving ? (
             <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+          ) : saveStatus === 'success' ? (
+            <CheckCircle className="h-4 w-4 mr-2" />
           ) : (
             <CheckCircle className="h-4 w-4 mr-2" />
           )}
-          Save All Settings
+          {saveStatus === 'success'
+            ? 'All Settings Saved!'
+            : 'Save All Settings'}
         </Button>
       </div>
     </div>

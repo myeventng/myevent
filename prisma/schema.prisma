@@ -602,7 +602,6 @@ model Blog {
   @@index([featured])
 }
 
-// New models for enhanced functionality
 model PlatformSettings {
   id    String @id @default(cuid())
   key   String @unique

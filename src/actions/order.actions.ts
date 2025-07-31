@@ -11,6 +11,10 @@ import {
   WaitingStatus,
 } from '@/generated/prisma';
 import { createTicketNotification } from '@/actions/notification.actions';
+import {
+  getSetting,
+  getPlatformFeePercentage,
+} from '@/actions/platform-settings.actions';
 import crypto from 'crypto';
 
 interface ActionResponse<T> {
@@ -29,6 +33,14 @@ interface InitiateOrderInput {
   purchaseNotes?: string;
 }
 
+interface TicketToCreate {
+  ticketId: string;
+  userId: string;
+  ticketTypeId: string;
+  status: TicketStatus;
+  purchasedAt: Date;
+}
+
 interface PaystackConfig {
   secretKey: string;
   publicKey: string;
@@ -44,11 +56,11 @@ interface TicketToCreate {
 }
 
 // Paystack configuration
-const paystackConfig: PaystackConfig = {
-  secretKey: process.env.PAYSTACK_SECRET_KEY!,
-  publicKey: process.env.PAYSTACK_PUBLIC_KEY!,
-  baseUrl: 'https://api.paystack.co',
-};
+// const paystackConfig: PaystackConfig = {
+//   secretKey: process.env.PAYSTACK_SECRET_KEY!,
+//   publicKey: process.env.PAYSTACK_PUBLIC_KEY!,
+//   baseUrl: 'https://api.paystack.co',
+// };
 
 // Generate unique ticket ID
 const generateTicketId = (): string => {
@@ -57,10 +69,23 @@ const generateTicketId = (): string => {
   return `TKT-${timestamp}-${randomBytes}`;
 };
 
+// Get Paystack configuration from platform settings
+const getPaystackConfig = async () => {
+  const [secretKey, publicKey] = await Promise.all([
+    getSetting('financial.paystackSecretKey'),
+    getSetting('financial.paystackPublicKey'),
+  ]);
+
+  return {
+    secretKey: secretKey || process.env.PAYSTACK_SECRET_KEY,
+    publicKey: publicKey || process.env.PAYSTACK_PUBLIC_KEY,
+    baseUrl: 'https://api.paystack.co',
+  };
+};
+
 // Calculate platform fee (configurable by admin)
 const calculatePlatformFee = async (amount: number): Promise<number> => {
-  // Default 5% platform fee - this should be configurable in settings
-  const feePercentage = 5; // This would come from admin settings
+  const feePercentage = await getPlatformFeePercentage();
   return Math.round((amount * feePercentage) / 100);
 };
 
@@ -72,7 +97,6 @@ export async function initiateOrder(
   const session = await auth.api.getSession({
     headers: headersList,
   });
-  console.log('session', session);
 
   if (!session) {
     return {
@@ -82,6 +106,15 @@ export async function initiateOrder(
   }
 
   try {
+    // Check if registrations are allowed
+    const allowRegistrations = await getSetting('general.allowRegistrations');
+    if (allowRegistrations === false) {
+      return {
+        success: false,
+        message: 'New ticket purchases are currently disabled',
+      };
+    }
+
     // Validate event exists and is published
     const event = await prisma.event.findUnique({
       where: { id: data.eventId },
@@ -167,6 +200,9 @@ export async function initiateOrder(
       }
     }
 
+    // Calculate platform fee
+    const platformFee = await calculatePlatformFee(totalAmount);
+
     // Generate unique Paystack reference
     const paystackReference = `order_${Date.now()}_${Math.random()
       .toString(36)
@@ -178,6 +214,7 @@ export async function initiateOrder(
         paystackId: paystackReference,
         totalAmount,
         quantity: totalQuantity,
+        platformFee,
         paymentStatus: 'PENDING',
         eventId: data.eventId,
         buyerId: session.user.id,
@@ -188,6 +225,19 @@ export async function initiateOrder(
     // If it's a free event, complete the order immediately
     if (event.isFree || totalAmount === 0) {
       return await completeOrder(order.id, null);
+    }
+
+    // Get Paystack configuration
+    const paystackConfig = await getPaystackConfig();
+
+    if (!paystackConfig.secretKey) {
+      // Delete the created order if Paystack is not configured
+      await prisma.order.delete({ where: { id: order.id } });
+
+      return {
+        success: false,
+        message: 'Payment system not configured',
+      };
     }
 
     // Initialize Paystack payment
@@ -209,6 +259,7 @@ export async function initiateOrder(
             eventId: data.eventId,
             userId: session.user.id,
             eventTitle: event.title,
+            platformFee,
           },
         }),
       }
@@ -222,7 +273,7 @@ export async function initiateOrder(
 
       return {
         success: false,
-        message: 'Failed to initialize payment',
+        message: paystackData.message || 'Failed to initialize payment',
       };
     }
 
@@ -237,6 +288,7 @@ export async function initiateOrder(
         paymentUrl: paystackData.data.authorization_url,
         reference: paystackReference,
         amount: totalAmount,
+        platformFee,
       },
     };
   } catch (error) {
@@ -287,6 +339,15 @@ export async function completeOrder(
 
     // Verify payment with Paystack (if not free event)
     if (!order.event.isFree && order.totalAmount > 0 && paystackReference) {
+      const paystackConfig = await getPaystackConfig();
+
+      if (!paystackConfig.secretKey) {
+        return {
+          success: false,
+          message: 'Payment system not configured',
+        };
+      }
+
       const verifyResponse = await fetch(
         `${paystackConfig.baseUrl}/transaction/verify/${paystackReference}`,
         {
@@ -315,14 +376,11 @@ export async function completeOrder(
       }
     }
 
-    // Get ticket selections from order metadata or calculate from total
-    // For simplicity, we'll assume equal distribution across available ticket types
+    // Generate tickets based on order quantity
     const ticketTypes = order.event.ticketTypes.filter((tt) => tt.quantity > 0);
-
     const ticketsToCreate: TicketToCreate[] = [];
 
-    // This is a simplified approach - in a real app, you'd store the ticket selections
-    // For now, we'll create tickets based on the total quantity
+    // This is simplified - in production, you'd store the exact ticket selections
     const remainingQuantity = order.quantity;
     let createdQuantity = 0;
 
@@ -348,10 +406,17 @@ export async function completeOrder(
 
     // Create tickets and update order in a transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Create tickets
-      const tickets = await tx.ticket.createMany({
-        data: ticketsToCreate,
-      });
+      // Create tickets with order reference
+      const createdTickets = await Promise.all(
+        ticketsToCreate.map(async (ticketData) => {
+          return await tx.ticket.create({
+            data: {
+              ...ticketData,
+              orderId: order.id, // Link tickets to order
+            },
+          });
+        })
+      );
 
       // Update ticket type quantities
       for (const ticketType of ticketTypes) {
@@ -375,7 +440,7 @@ export async function completeOrder(
         },
       });
 
-      return { tickets, order: updatedOrder };
+      return { tickets: createdTickets, order: updatedOrder };
     });
 
     // Create notification for ticket purchase
@@ -682,6 +747,15 @@ export async function processRefund(
     let paystackRefundSuccess = true;
 
     if (!order.event.isFree && order.totalAmount > 0) {
+      const paystackConfig = await getPaystackConfig();
+
+      if (!paystackConfig.secretKey) {
+        return {
+          success: false,
+          message: 'Payment system not configured',
+        };
+      }
+
       const refundResponse = await fetch(`${paystackConfig.baseUrl}/refund`, {
         method: 'POST',
         headers: {
@@ -810,6 +884,7 @@ export async function getUserOrders(): Promise<ActionResponse<any[]>> {
             },
           },
         },
+        tickets: true, // Include tickets for better order details
       },
       orderBy: { createdAt: 'desc' },
     });

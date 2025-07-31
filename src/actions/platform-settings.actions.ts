@@ -212,17 +212,6 @@ export async function isMaintenanceModeEnabled(): Promise<boolean> {
   }
 }
 
-// Check if registrations are allowed
-export async function areRegistrationsAllowed(): Promise<boolean> {
-  try {
-    const allowRegistrations = await getSetting('general.allowRegistrations');
-    return allowRegistrations !== false; // Default to true if not set
-  } catch (error) {
-    console.error('Error checking registration settings:', error);
-    return true;
-  }
-}
-
 // Get platform fee percentage
 export async function getPlatformFeePercentage(): Promise<number> {
   try {
@@ -233,106 +222,6 @@ export async function getPlatformFeePercentage(): Promise<number> {
   } catch (error) {
     console.error('Error fetching platform fee percentage:', error);
     return 5;
-  }
-}
-
-// Initiate refund process
-export async function initiateRefund(
-  orderId: string,
-  reason: string,
-  refundAmount?: number
-): Promise<ActionResponse<any>> {
-  try {
-    const session = await validateAdminPermission();
-
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        event: true,
-        buyer: true,
-      },
-    });
-
-    if (!order) {
-      return {
-        success: false,
-        message: 'Order not found',
-      };
-    }
-
-    if (order.paymentStatus !== 'COMPLETED') {
-      return {
-        success: false,
-        message: 'Can only refund completed orders',
-      };
-    }
-
-    if (order.refundStatus) {
-      return {
-        success: false,
-        message: 'Refund already initiated for this order',
-      };
-    }
-
-    // Check refund policy
-    const maxRefundDays =
-      (await getSetting('financial.maximumRefundDays')) || 30;
-    const orderDate = new Date(order.createdAt);
-    const daysSinceOrder = Math.floor(
-      (Date.now() - orderDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    if (daysSinceOrder > maxRefundDays) {
-      return {
-        success: false,
-        message: `Refund period has expired. Maximum refund period is ${maxRefundDays} days.`,
-      };
-    }
-
-    const finalRefundAmount = refundAmount || order.totalAmount;
-
-    // Check if auto-approve is enabled
-    const autoApprove =
-      (await getSetting('financial.autoApproveRefunds')) || false;
-
-    if (autoApprove) {
-      // Process refund immediately
-      const result = await processRefund(orderId, true, reason);
-      return result;
-    } else {
-      // Mark as initiated, pending admin approval
-      await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          refundStatus: 'INITIATED',
-        },
-      });
-
-      // Create audit log
-      await prisma.auditLog.create({
-        data: {
-          userId: session.user.id,
-          action: 'INITIATE_REFUND',
-          entity: 'ORDER',
-          entityId: orderId,
-          newValues: {
-            reason,
-            refundAmount: finalRefundAmount,
-          },
-        },
-      });
-
-      return {
-        success: true,
-        message: 'Refund initiated successfully. Awaiting approval.',
-      };
-    }
-  } catch (error) {
-    console.error('Error initiating refund:', error);
-    return {
-      success: false,
-      message: 'Failed to initiate refund',
-    };
   }
 }
 
@@ -449,7 +338,7 @@ export async function processRefund(
       },
     });
 
-    revalidatePath('/admin/orders');
+    revalidatePath('/admin/dashboard/refunds');
     revalidatePath('/dashboard/tickets');
 
     return {

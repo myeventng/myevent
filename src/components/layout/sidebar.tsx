@@ -249,7 +249,7 @@ export function Sidebar({
     },
     {
       title: 'Create Event',
-      href: '/dashboard/create-event',
+      href: '/dashboard/events/create',
       icon: <Plus className="w-4 h-4" />,
     },
     {
@@ -302,7 +302,7 @@ export function Sidebar({
         },
         {
           title: 'Create Event',
-          href: '/dashboard/create-event',
+          href: '/dashboard/events/create',
           icon: <Plus className="w-4 h-4" />,
         },
         {
