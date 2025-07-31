@@ -1,3 +1,4 @@
+'use client';
 import React, { useState, useEffect } from 'react';
 import { Wrench, Mail, Calendar, ArrowRight, CheckCircle } from 'lucide-react';
 

@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma';
 export default async function AdminTickets() {
   const session = await getServerSideAuth({
     roles: ['ADMIN'], // Only allow admins
-    subRoles: ['STAFF', 'SUPER_ADMIN'], // Allow only STAFF and SUPER_ADMIN subroles
+    subRoles: ['STAFF', 'SUPER_ADMIN'],
   });
 
   if (!session) {
