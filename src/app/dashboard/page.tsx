@@ -4,9 +4,31 @@ import { OrganizerAnalytics } from '@/components/organizer/organizer-analytics';
 import { getServerSideAuth } from '@/lib/auth-server';
 import { getOrganizerStats } from '@/actions/ticket.actions';
 import { Badge } from '@/components/ui/badge';
+import { getPlatformFeePercentage } from '@/actions/platform-settings.actions';
 import { redirect } from 'next/navigation';
 
+async function getInitialData() {
+  try {
+    const [statsResponse, platformFee] = await Promise.all([
+      getOrganizerStats(),
+      getPlatformFeePercentage(),
+    ]);
+
+    return {
+      initialStats: statsResponse.success ? statsResponse.data : null,
+      platformFee,
+    };
+  } catch (error) {
+    console.error('Error fetching initial analytics data:', error);
+    return {
+      initialStats: null,
+      platformFee: 5, // Default fallback
+    };
+  }
+}
+
 export default async function Dashboard() {
+  const { initialStats, platformFee } = await getInitialData();
   const session = await getServerSideAuth({
     roles: ['USER', 'ADMIN'], // Allow both regular users and admins
   });
@@ -59,7 +81,10 @@ export default async function Dashboard() {
             </div>
           </div>
 
-          <OrganizerAnalytics initialStats={initialStats} />
+          <OrganizerAnalytics
+            initialStats={initialStats}
+            initialPlatformFee={platformFee}
+          />
         </div>
       </DashboardLayout>
     );

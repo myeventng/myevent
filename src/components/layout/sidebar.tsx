@@ -155,6 +155,11 @@ export function Sidebar({
           icon: <Eye className="w-4 h-4" />,
         },
         {
+          title: 'Rejected Events',
+          href: '/admin/dashboard/events/rejected',
+          icon: <Star className="w-4 h-4" />,
+        },
+        {
           title: 'Featured Events',
           href: '/admin/dashboard/events/featured',
           icon: <Star className="w-4 h-4" />,

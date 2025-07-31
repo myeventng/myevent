@@ -1240,6 +1240,248 @@ export async function getUserEvents(): Promise<ActionResponse<any[]>> {
   }
 }
 
+// Add these functions to your existing event.actions.ts file
+
+// Get pending events specifically
+export async function getPendingEvents(): Promise<ActionResponse<any[]>> {
+  try {
+    const events = await prisma.event.findMany({
+      where: {
+        publishedStatus: 'PENDING_REVIEW',
+        isCancelled: false,
+      },
+      include: {
+        tags: true,
+        category: true,
+        venue: {
+          include: {
+            city: true,
+          },
+        },
+        ticketTypes: {
+          where: {
+            quantity: {
+              gt: 0,
+            },
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            organizerProfile: {
+              select: {
+                organizationName: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    return {
+      success: true,
+      data: events,
+    };
+  } catch (error) {
+    console.error('Error fetching pending events:', error);
+    return {
+      success: false,
+      message: 'Failed to fetch pending events',
+    };
+  }
+}
+
+// Get featured events specifically
+export async function getFeaturedEventsAdmin(): Promise<ActionResponse<any[]>> {
+  try {
+    const events = await prisma.event.findMany({
+      where: {
+        featured: true,
+        isCancelled: false,
+      },
+      include: {
+        tags: true,
+        category: true,
+        venue: {
+          include: {
+            city: true,
+          },
+        },
+        ticketTypes: {
+          where: {
+            quantity: {
+              gt: 0,
+            },
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            organizerProfile: {
+              select: {
+                organizationName: true,
+              },
+            },
+          },
+        },
+        _count: {
+          select: {
+            orders: true,
+            ratings: true,
+          },
+        },
+      },
+      orderBy: { startDateTime: 'asc' },
+    });
+
+    return {
+      success: true,
+      data: events,
+    };
+  } catch (error) {
+    console.error('Error fetching featured events:', error);
+    return {
+      success: false,
+      message: 'Failed to fetch featured events',
+    };
+  }
+}
+
+// Bulk approve events
+export async function bulkApproveEvents(
+  eventIds: string[]
+): Promise<ActionResponse<{ successful: number; failed: number }>> {
+  // Validate user permission - only admins can do this
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session || session.user.role !== 'ADMIN') {
+    return {
+      success: false,
+      message: 'Only administrators can bulk approve events',
+    };
+  }
+
+  try {
+    let successful = 0;
+    let failed = 0;
+
+    for (const eventId of eventIds) {
+      try {
+        const event = await prisma.event.findUnique({
+          where: { id: eventId },
+          include: { user: true },
+        });
+
+        if (!event) {
+          failed++;
+          continue;
+        }
+
+        await prisma.event.update({
+          where: { id: eventId },
+          data: {
+            publishedStatus: 'PUBLISHED',
+          },
+        });
+
+        // Create notification for the event organizer
+        await createEventNotification(
+          eventId,
+          'EVENT_APPROVED',
+          event.userId ?? undefined
+        );
+
+        successful++;
+      } catch (error) {
+        console.error(`Failed to approve event ${eventId}:`, error);
+        failed++;
+      }
+    }
+
+    // Revalidate paths
+    revalidatePath('/admin/dashboard/events');
+    revalidatePath('/admin/dashboard/events/pending');
+    revalidatePath('/dashboard/events');
+    revalidatePath('/events');
+
+    return {
+      success: true,
+      message: `Successfully approved ${successful} events${failed > 0 ? `, ${failed} failed` : ''}`,
+      data: { successful, failed },
+    };
+  } catch (error) {
+    console.error('Error in bulk approval:', error);
+    return {
+      success: false,
+      message: 'Failed to bulk approve events',
+    };
+  }
+}
+
+// Bulk unfeature events
+export async function bulkUnfeatureEvents(
+  eventIds: string[]
+): Promise<ActionResponse<{ successful: number; failed: number }>> {
+  // Validate user permission - only admins can do this
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session || session.user.role !== 'ADMIN') {
+    return {
+      success: false,
+      message: 'Only administrators can bulk unfeature events',
+    };
+  }
+
+  try {
+    let successful = 0;
+    let failed = 0;
+
+    for (const eventId of eventIds) {
+      try {
+        await prisma.event.update({
+          where: { id: eventId },
+          data: {
+            featured: false,
+          },
+        });
+
+        successful++;
+      } catch (error) {
+        console.error(`Failed to unfeature event ${eventId}:`, error);
+        failed++;
+      }
+    }
+
+    // Revalidate paths
+    revalidatePath('/admin/dashboard/events');
+    revalidatePath('/admin/dashboard/events/featured');
+    revalidatePath('/events');
+
+    return {
+      success: true,
+      message: `Successfully unfeatured ${successful} events${failed > 0 ? `, ${failed} failed` : ''}`,
+      data: { successful, failed },
+    };
+  } catch (error) {
+    console.error('Error in bulk unfeature:', error);
+    return {
+      success: false,
+      message: 'Failed to bulk unfeature events',
+    };
+  }
+}
+
 export async function getEventById(id: string): Promise<ActionResponse<any>> {
   try {
     const event = await prisma.event.findUnique({

@@ -23,18 +23,24 @@ import {
   getOrganizerStats,
   getEventTicketStats,
 } from '@/actions/ticket.actions';
+import { getPlatformFeePercentage } from '@/actions/platform-settings.actions';
 import { toast } from 'sonner';
 
 interface OrganizerAnalyticsProps {
   initialStats?: any;
+  initialPlatformFee?: number;
 }
 
-export function OrganizerAnalytics({ initialStats }: OrganizerAnalyticsProps) {
+export function OrganizerAnalytics({
+  initialStats,
+  initialPlatformFee,
+}: OrganizerAnalyticsProps) {
   const [stats, setStats] = useState(initialStats);
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [eventStats, setEventStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingEvent, setIsLoadingEvent] = useState(false);
+  const [currentPlatformFee, setPlatformFee] = useState(initialPlatformFee);
 
   // Load organizer stats
   const loadStats = async () => {
@@ -190,7 +196,10 @@ export function OrganizerAnalytics({ initialStats }: OrganizerAnalyticsProps) {
               {formatCurrency(stats.overview.platformFee)}
             </div>
             <div className="flex items-center text-xs text-muted-foreground">
-              <span>5% of net revenue</span>
+              {/* edit this part to reflect the platform fee */}
+              <span>
+                {formatPercentage(currentPlatformFee ?? 0)} of net revenue
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -222,7 +231,9 @@ export function OrganizerAnalytics({ initialStats }: OrganizerAnalyticsProps) {
               </span>
             </div>
             <div className="flex justify-between items-center text-orange-600">
-              <span className="text-sm">Platform Fee (5%)</span>
+              <span className="text-sm">
+                Platform Fee ({formatPercentage(currentPlatformFee ?? 0)})
+              </span>
               <span className="font-medium">
                 -{formatCurrency(stats.overview.platformFee)}
               </span>
@@ -538,7 +549,10 @@ export function OrganizerAnalytics({ initialStats }: OrganizerAnalyticsProps) {
                       </span>
                     </div>
                     <div className="flex justify-between text-orange-600">
-                      <span>Platform Fee (5%)</span>
+                      <span>
+                        Platform Fee (
+                        {formatPercentage(currentPlatformFee ?? 0)})
+                      </span>
                       <span className="font-medium">
                         -{formatCurrency(eventStats.revenue.platformFee)}
                       </span>
