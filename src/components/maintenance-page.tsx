@@ -43,9 +43,9 @@ export default function MaintenancePage({
               Under Maintenance
             </h2>
             <p className="text-xl text-blue-100 leading-relaxed">
-              We're currently performing scheduled maintenance to improve your
-              experience. We'll be back online shortly with exciting new
-              features!
+              We&apos;re currently performing scheduled maintenance to improve
+              your experience. We&apos;ll be back online shortly with exciting
+              new features!
             </p>
           </div>
 
@@ -60,7 +60,7 @@ export default function MaintenancePage({
           {/* What We're Working On */}
           <div className="text-left mb-8">
             <h3 className="text-xl font-semibold text-white mb-4 text-center">
-              What we're improving:
+              What we&apos;re improving:
             </h3>
             <div className="grid gap-3">
               {[
@@ -130,7 +130,7 @@ export default function MaintenancePage({
         {/* Auto-refresh notice */}
         <div className="mt-6 text-center">
           <p className="text-xs text-blue-300">
-            This page will automatically refresh when we're back online
+            This page will automatically refresh when we&apos;re back online
           </p>
         </div>
       </div>
