@@ -664,9 +664,9 @@ export async function fixEventsWithNullSlugs(): Promise<
         });
 
         fixedCount++;
-        console.log(
-          `Fixed slug for event ${event.id}: "${event.title}" -> "${newSlug}"`
-        );
+        // console.log(
+        //   `Fixed slug for event ${event.id}: "${event.title}" -> "${newSlug}"`
+        // );
       } catch (error) {
         console.error(`Failed to fix slug for event ${event.id}:`, error);
       }

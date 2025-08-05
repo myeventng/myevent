@@ -169,8 +169,8 @@ export function BankDetailsForm({ onClose, onSuccess }: BankDetailsFormProps) {
         <DialogHeader>
           <DialogTitle>Update Bank Details</DialogTitle>
           <DialogDescription>
-            Add or update your bank account details for payout processing. We'll
-            verify your account details with your bank.
+            Add or update your bank account details for payout processing.
+            We&apos;ll verify your account details with your bank.
           </DialogDescription>
         </DialogHeader>
 

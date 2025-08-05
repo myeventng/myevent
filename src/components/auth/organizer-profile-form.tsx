@@ -294,7 +294,7 @@ export function OrganizerProfileForm({ profile }: OrganizerProfileFormProps) {
               </p>
               <p className="text-sm text-blue-700">
                 Add your bank details to receive payouts from ticket sales.
-                We'll verify your account details with your bank.
+                We&apos;ll verify your account details with your bank.
               </p>
             </div>
           </div>

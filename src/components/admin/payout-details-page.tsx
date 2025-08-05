@@ -498,7 +498,7 @@ export function PayoutDetailsPage({ payoutId }: PayoutDetailsPageProps) {
                           Successfully Processed
                         </p>
                         <p className="text-sm text-green-700">
-                          Payout has been transferred to the organizer's
+                          Payout has been transferred to the organizer&apos;s
                           account.
                         </p>
                       </div>
