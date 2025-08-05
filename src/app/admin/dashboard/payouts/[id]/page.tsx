@@ -5,9 +5,9 @@ import { getServerSideAuth } from '@/lib/auth-server';
 import { redirect } from 'next/navigation';
 
 interface PayoutDetailsProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export default async function PayoutDetails({ params }: PayoutDetailsProps) {
@@ -21,9 +21,11 @@ export default async function PayoutDetails({ params }: PayoutDetailsProps) {
     redirect('/unauthorized');
   }
 
+  const { id } = await params;
+
   return (
     <DashboardLayout session={session}>
-      <PayoutDetailsPage payoutId={params.id} />
+      <PayoutDetailsPage payoutId={id} />
     </DashboardLayout>
   );
 }
