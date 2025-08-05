@@ -1,3 +1,4 @@
+// src/actions/organizer.actions.ts - Updated version
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -18,7 +19,7 @@ interface ActionResponse<T> {
   data?: T;
 }
 
-// Get current user's organizer profile
+// Get current user's organizer profile - NOW INCLUDES BANK DETAILS
 export async function getUserOrganizerProfile(): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
@@ -35,6 +36,24 @@ export async function getUserOrganizerProfile(): Promise<ActionResponse<any>> {
   try {
     const organizerProfile = await prisma.organizerProfile.findUnique({
       where: { userId: session.user.id },
+      // Include all fields including bank details
+      select: {
+        id: true,
+        organizationName: true,
+        bio: true,
+        website: true,
+        businessRegistrationNumber: true,
+        taxIdentificationNumber: true,
+        organizationType: true,
+        verificationStatus: true,
+        customPlatformFee: true,
+        bankAccount: true,
+        bankCode: true,
+        accountName: true,
+        userId: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     // If profile doesn't exist, return empty data but success true
@@ -84,13 +103,14 @@ export async function saveOrganizerProfile(
     let profile;
 
     if (existingProfile) {
-      // Update existing profile
+      // Update existing profile - preserve bank details
       profile = await prisma.organizerProfile.update({
         where: { userId: session.user.id },
         data: {
           organizationName: data.organizationName,
           bio: data.bio,
           website: data.website,
+          // Don't update bank details here - they're handled separately
         },
       });
     } else {
@@ -160,6 +180,81 @@ export async function saveOrganizerProfile(
     return {
       success: false,
       message: 'Failed to save organizer profile',
+    };
+  }
+}
+
+// New function to update bank details separately
+export async function updateOrganizerBankDetails(
+  bankAccount: string,
+  bankCode: string,
+  accountName: string
+): Promise<ActionResponse<any>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session) {
+    return {
+      success: false,
+      message: 'Not authenticated',
+    };
+  }
+
+  try {
+    // console.log('🔍 Debug: updateOrganizerBankDetails called with:', {
+    //   bankAccount,
+    //   bankCode,
+    //   accountName,
+    //   userId: session.user.id,
+    // });
+
+    // Check if organizer profile exists
+    const existingProfile = await prisma.organizerProfile.findUnique({
+      where: { userId: session.user.id },
+    });
+
+    // console.log('🔍 Debug: Existing profile found:', !!existingProfile);
+
+    if (!existingProfile) {
+      return {
+        success: false,
+        message:
+          'Organizer profile not found. Please create your profile first.',
+      };
+    }
+
+    // Update bank details
+    const updatedProfile = await prisma.organizerProfile.update({
+      where: { userId: session.user.id },
+      data: {
+        bankAccount,
+        bankCode,
+        accountName,
+      },
+    });
+
+    // console.log('✅ Debug: Bank details updated successfully:', {
+    //   id: updatedProfile.id,
+    //   bankAccount: updatedProfile.bankAccount,
+    //   bankCode: updatedProfile.bankCode,
+    //   accountName: updatedProfile.accountName,
+    // });
+
+    revalidatePath('/dashboard/profile');
+    revalidatePath('/dashboard/analytics');
+
+    return {
+      success: true,
+      message: 'Bank details updated successfully',
+      data: updatedProfile,
+    };
+  } catch (error) {
+    console.error('❌ Debug: Error updating bank details:', error);
+    return {
+      success: false,
+      message: 'Failed to update bank details',
     };
   }
 }

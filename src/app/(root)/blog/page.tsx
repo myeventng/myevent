@@ -27,25 +27,36 @@ export default async function BlogPage() {
       : [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 ">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
       {/* Hero Section */}
-      <section className="relative py-20 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-600/10 to-purple-600/10" />
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mt-10">
+      <section className="relative py-20 bg-black text-white overflow-hidden p-20">
+        {/* Background Image */}
+        <div
+          className="absolute inset-0 bg-cover bg-center z-0"
+          style={{
+            backgroundImage:
+              "url('https://images.unsplash.com/photo-1518972559570-0f042c55c98b?auto=format&fit=crop&w=1920&q=80')",
+          }}
+        >
+          <div className="absolute inset-0 bg-black/60" /> {/* Dark overlay */}
+        </div>
+
+        {/* Content */}
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mt-10 z-10">
           <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-full text-sm font-semibold mb-6">
             <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
             Event Industry Insights
           </div>
 
-          <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
+          <h1 className="text-5xl md:text-6xl font-bold mb-6">
             Event{' '}
-            <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
               Insights
             </span>{' '}
             & Tips
           </h1>
 
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
+          <p className="text-xl text-white/90 max-w-3xl mx-auto mb-8">
             Discover expert tips, industry trends, and actionable insights to
             make your events unforgettable. From planning to execution,
             we&apos;ve got you covered.
@@ -56,7 +67,7 @@ export default async function BlogPage() {
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <Input
               placeholder="Search blog posts..."
-              className="pl-12 h-12 text-lg border-2 border-white/50 bg-white/80 backdrop-blur-sm"
+              className="pl-12 h-12 text-lg border-2 border-white/50 bg-white/80 backdrop-blur-sm text-black"
             />
           </div>
         </div>

@@ -15,6 +15,7 @@ import {
   LayoutDashboard,
   MapPin,
   Plus,
+  XCircleIcon,
   Settings,
   Ticket,
   UserCog,
@@ -28,7 +29,10 @@ import {
   Tags,
   Star,
   ScanQrCode,
-  Bell, // Added Bell icon
+  Bell,
+  XCircle, // Added Bell icon
+  DollarSign,
+  CreditCard,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -157,7 +161,7 @@ export function Sidebar({
         {
           title: 'Rejected Events',
           href: '/admin/dashboard/events/rejected',
-          icon: <Star className="w-4 h-4" />,
+          icon: <XCircleIcon className="w-4 h-4" />,
         },
         {
           title: 'Featured Events',
@@ -210,6 +214,22 @@ export function Sidebar({
           title: 'Refunds',
           href: '/admin/dashboard/tickets/refunds',
           icon: <Edit className="w-4 h-4" />,
+        },
+      ],
+    },
+    {
+      title: 'Finances', // NEW SECTION
+      icon: <DollarSign className="w-5 h-5" />,
+      children: [
+        {
+          title: 'Revenue Analytics',
+          href: '/admin/dashboard/revenue',
+          icon: <BarChart3 className="w-4 h-4" />,
+        },
+        {
+          title: 'Payout Requests',
+          href: '/admin/dashboard/payouts',
+          icon: <CreditCard className="w-4 h-4" />,
         },
       ],
     },
@@ -318,6 +338,11 @@ export function Sidebar({
       ],
     },
     {
+      title: 'Analytics & Payouts', // NEW SECTION
+      href: '/dashboard/analytics',
+      icon: <BarChart3 className="w-5 h-5" />,
+    },
+    {
       title: 'Scanner',
       href: '/dashboard/scanner',
       icon: <ScanQrCode className="w-5 h-5" />,
@@ -337,6 +362,11 @@ export function Sidebar({
           icon: <Plus className="w-4 h-4" />,
         },
       ],
+    },
+    {
+      title: 'Scanner',
+      href: '/dashboard/scanner',
+      icon: <ScanQrCode className="w-5 h-5" />,
     },
   ];
 

@@ -68,7 +68,7 @@ export default async function Dashboard() {
             <div>
               <h1 className="text-2xl font-bold">Organizer Dashboard</h1>
               <p className="text-muted-foreground">
-                Track your event performance and revenue
+                Track your events, revenue, and payout management
               </p>
             </div>
             <div className="flex items-center gap-2">

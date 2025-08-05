@@ -1,10 +1,30 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import {
   BarChart3,
   TrendingUp,
@@ -18,13 +38,23 @@ import {
   RefreshCw,
   ArrowUpRight,
   ArrowDownRight,
+  Clock,
+  CreditCard,
+  AlertCircle,
+  CheckCircle,
 } from 'lucide-react';
 import {
   getOrganizerStats,
   getEventTicketStats,
 } from '@/actions/ticket.actions';
 import { getPlatformFeePercentage } from '@/actions/platform-settings.actions';
+import {
+  getOrganizerRevenueAnalytics,
+  requestPayout,
+  getOrganizerPayouts,
+} from '@/actions/payout.actions';
 import { toast } from 'sonner';
+import { BankDetailsForm } from './bank-details-form';
 
 interface OrganizerAnalyticsProps {
   initialStats?: any;
@@ -41,6 +71,13 @@ export function OrganizerAnalytics({
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingEvent, setIsLoadingEvent] = useState(false);
   const [currentPlatformFee, setPlatformFee] = useState(initialPlatformFee);
+
+  // Payout-related state
+  const [revenueAnalytics, setRevenueAnalytics] = useState<any>(null);
+  const [payouts, setPayouts] = useState<any[]>([]);
+  const [isLoadingPayouts, setIsLoadingPayouts] = useState(false);
+  const [isRequestingPayout, setIsRequestingPayout] = useState(false);
+  const [showBankForm, setShowBankForm] = useState(false);
 
   // Load organizer stats
   const loadStats = async () => {
@@ -77,11 +114,91 @@ export function OrganizerAnalytics({
     }
   };
 
+  // Fetch payout analytics data
+  const fetchPayoutAnalytics = async () => {
+    setIsLoadingPayouts(true);
+    try {
+      const [analyticsRes, payoutsRes] = await Promise.all([
+        getOrganizerRevenueAnalytics(),
+        getOrganizerPayouts(),
+      ]);
+
+      if (analyticsRes.success && analyticsRes.data) {
+        setRevenueAnalytics(analyticsRes.data);
+      }
+
+      if (payoutsRes.success && payoutsRes.data) {
+        setPayouts(payoutsRes.data);
+      }
+    } catch (error) {
+      console.error('Error fetching payout analytics:', error);
+      toast.error('Failed to fetch payout data');
+    } finally {
+      setIsLoadingPayouts(false);
+    }
+  };
+
+  // Handle payout request
+  const handleRequestPayout = async () => {
+    setIsRequestingPayout(true);
+    try {
+      const response = await requestPayout();
+      if (response.success) {
+        toast.success(response.message);
+        fetchPayoutAnalytics(); // Refresh payout data
+      } else {
+        if (response.message?.includes('bank details')) {
+          setShowBankForm(true);
+        }
+        toast.error(response.message);
+      }
+    } catch (error) {
+      console.error('Error requesting payout:', error);
+      toast.error('Failed to request payout');
+    } finally {
+      setIsRequestingPayout(false);
+    }
+  };
+
+  // Get status badge for payouts
+  const getPayoutStatusBadge = (status: string) => {
+    const variants = {
+      PENDING: { variant: 'secondary' as const, text: 'Pending', icon: Clock },
+      PROCESSING: {
+        variant: 'default' as const,
+        text: 'Processing',
+        icon: RefreshCw,
+      },
+      COMPLETED: {
+        variant: 'default' as const,
+        text: 'Completed',
+        icon: CheckCircle,
+      },
+      FAILED: {
+        variant: 'destructive' as const,
+        text: 'Failed',
+        icon: AlertCircle,
+      },
+    };
+
+    const config =
+      variants[status as keyof typeof variants] || variants.PENDING;
+    const Icon = config.icon;
+
+    return (
+      <Badge variant={config.variant} className="flex items-center gap-1">
+        <Icon className="w-3 h-3" />
+        {config.text}
+      </Badge>
+    );
+  };
+
   // Load initial data
   useEffect(() => {
     if (!initialStats) {
       loadStats();
     }
+    fetchPayoutAnalytics();
   }, [initialStats]);
 
   const formatCurrency = (amount: number) => {
@@ -93,6 +210,10 @@ export function OrganizerAnalytics({
 
   const formatPercentage = (value: number) => {
     return `${value.toFixed(1)}%`;
+  };
+
+  const refreshAllData = async () => {
+    await Promise.all([loadStats(), fetchPayoutAnalytics()]);
   };
 
   if (isLoading && !stats) {
@@ -112,7 +233,7 @@ export function OrganizerAnalytics({
         <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
         <h3 className="text-lg font-medium">No Analytics Data</h3>
         <p className="text-muted-foreground">
-          Start creating events to see your analytics
+          Track your events, revenue, and payout management
         </p>
       </div>
     );
@@ -121,11 +242,15 @@ export function OrganizerAnalytics({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between">
         <div className="flex gap-2">
-          <Button variant="outline" onClick={loadStats} disabled={isLoading}>
+          <Button
+            variant="outline"
+            onClick={refreshAllData}
+            disabled={isLoading || isLoadingPayouts}
+          >
             <RefreshCw
-              className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`}
+              className={`h-4 w-4 mr-2 ${isLoading || isLoadingPayouts ? 'animate-spin' : ''}`}
             />
             Refresh
           </Button>
@@ -136,174 +261,186 @@ export function OrganizerAnalytics({
         </div>
       </div>
 
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(stats.overview.totalRevenue)}
-            </div>
-            <div className="flex items-center text-xs text-muted-foreground">
-              <span>
-                Net: {formatCurrency(stats.overview.organizerEarnings)}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Tickets Sold</CardTitle>
-            <Ticket className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats.overview.totalTicketsSold}
-            </div>
-            <div className="flex items-center text-xs text-muted-foreground">
-              <TrendingUp className="h-3 w-3 mr-1" />
-              <span>Across {stats.overview.totalEvents} events</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Events</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats.overview.activeEvents}
-            </div>
-            <div className="flex items-center text-xs text-muted-foreground">
-              <span>of {stats.overview.totalEvents} total</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Platform Fees</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(stats.overview.platformFee)}
-            </div>
-            <div className="flex items-center text-xs text-muted-foreground">
-              {/* edit this part to reflect the platform fee */}
-              <span>
-                {formatPercentage(currentPlatformFee ?? 0)} of net revenue
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Revenue Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Revenue Breakdown</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-sm">Gross Revenue</span>
-              <span className="font-medium">
-                {formatCurrency(stats.overview.totalRevenue)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-red-600">
-              <span className="text-sm">Refunds</span>
-              <span className="font-medium">
-                -{formatCurrency(stats.overview.totalRefunded)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm">Net Revenue</span>
-              <span className="font-medium">
-                {formatCurrency(stats.overview.netRevenue)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-orange-600">
-              <span className="text-sm">
-                Platform Fee ({formatPercentage(currentPlatformFee ?? 0)})
-              </span>
-              <span className="font-medium">
-                -{formatCurrency(stats.overview.platformFee)}
-              </span>
-            </div>
-            <div className="border-t pt-2">
-              <div className="flex justify-between items-center text-green-600 font-bold">
-                <span>Your Earnings</span>
-                <span>{formatCurrency(stats.overview.organizerEarnings)}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Performance Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Average Revenue per Event</span>
-                <span className="font-medium">
-                  {formatCurrency(
-                    stats.overview.totalEvents > 0
-                      ? stats.overview.totalRevenue / stats.overview.totalEvents
-                      : 0
-                  )}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Average Tickets per Event</span>
-                <span className="font-medium">
-                  {stats.overview.totalEvents > 0
-                    ? Math.round(
-                        stats.overview.totalTicketsSold /
-                          stats.overview.totalEvents
-                      )
-                    : 0}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Success Rate</span>
-                <span className="font-medium text-green-600">
-                  {stats.overview.totalEvents > 0
-                    ? formatPercentage(
-                        (stats.overview.activeEvents /
-                          stats.overview.totalEvents) *
-                          100
-                      )
-                    : '0%'}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Events Analysis */}
-      <Tabs defaultValue="events" className="w-full">
-        <TabsList>
-          <TabsTrigger value="events">Events Overview</TabsTrigger>
-          <TabsTrigger value="detailed">Detailed Analysis</TabsTrigger>
+      {/* Main Analytics Tabs */}
+      <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="events">Events</TabsTrigger>
+          <TabsTrigger value="revenue">Revenue & Payouts</TabsTrigger>
+          <TabsTrigger value="detailed">Event Details</TabsTrigger>
         </TabsList>
 
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-4">
+          {/* Overview Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Total Revenue
+                </CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(stats.overview.totalRevenue)}
+                </div>
+                <div className="flex items-center text-xs text-muted-foreground">
+                  <span>
+                    Net: {formatCurrency(stats.overview.organizerEarnings)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Tickets Sold
+                </CardTitle>
+                <Ticket className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {stats.overview.totalTicketsSold}
+                </div>
+                <div className="flex items-center text-xs text-muted-foreground">
+                  <TrendingUp className="h-3 w-3 mr-1" />
+                  <span>Across {stats.overview.totalEvents} events</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Available Payout
+                </CardTitle>
+                <CreditCard className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">
+                  {formatCurrency(revenueAnalytics?.pendingPayout?.amount || 0)}
+                </div>
+                <div className="flex items-center text-xs text-muted-foreground">
+                  <span>
+                    From {revenueAnalytics?.pendingPayout?.orderCount || 0}{' '}
+                    orders
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Active Events
+                </CardTitle>
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {stats.overview.activeEvents}
+                </div>
+                <div className="flex items-center text-xs text-muted-foreground">
+                  <span>of {stats.overview.totalEvents} total</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Revenue Breakdown */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Revenue Breakdown</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">Gross Revenue</span>
+                  <span className="font-medium">
+                    {formatCurrency(stats.overview.totalRevenue)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-red-600">
+                  <span className="text-sm">Refunds</span>
+                  <span className="font-medium">
+                    -{formatCurrency(stats.overview.totalRefunded)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm">Net Revenue</span>
+                  <span className="font-medium">
+                    {formatCurrency(stats.overview.netRevenue)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-orange-600">
+                  <span className="text-sm">
+                    Platform Fee ({formatPercentage(currentPlatformFee ?? 0)})
+                  </span>
+                  <span className="font-medium">
+                    -{formatCurrency(stats.overview.platformFee)}
+                  </span>
+                </div>
+                <div className="border-t pt-2">
+                  <div className="flex justify-between items-center text-green-600 font-bold">
+                    <span>Your Earnings</span>
+                    <span>
+                      {formatCurrency(stats.overview.organizerEarnings)}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Performance Summary</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Average Revenue per Event</span>
+                    <span className="font-medium">
+                      {formatCurrency(
+                        stats.overview.totalEvents > 0
+                          ? stats.overview.totalRevenue /
+                              stats.overview.totalEvents
+                          : 0
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Average Tickets per Event</span>
+                    <span className="font-medium">
+                      {stats.overview.totalEvents > 0
+                        ? Math.round(
+                            stats.overview.totalTicketsSold /
+                              stats.overview.totalEvents
+                          )
+                        : 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Total Completed Payouts</span>
+                    <span className="font-medium text-green-600">
+                      {payouts.filter((p) => p.status === 'COMPLETED').length}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Events Tab */}
         <TabsContent value="events" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Events Performance</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Click on an event to view detailed analytics
+                Click on an event to view detailed analytics in the Event
+                Details tab
               </p>
             </CardHeader>
             <CardContent>
@@ -354,6 +491,363 @@ export function OrganizerAnalytics({
           </Card>
         </TabsContent>
 
+        {/* Revenue & Payouts Tab */}
+        <TabsContent value="revenue" className="space-y-6">
+          {/* Payout Overview Cards */}
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-green-100 rounded-full">
+                    <DollarSign className="w-4 h-4 text-green-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Available for Payout
+                    </p>
+                    <p className="text-2xl font-bold">
+                      {formatCurrency(
+                        revenueAnalytics?.pendingPayout?.amount || 0
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      From {revenueAnalytics?.pendingPayout?.orderCount || 0}{' '}
+                      orders
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-blue-100 rounded-full">
+                    <TrendingUp className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Total Earnings
+                    </p>
+                    <p className="text-2xl font-bold">
+                      {formatCurrency(revenueAnalytics?.totalEarnings || 0)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      All-time net earnings
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-purple-100 rounded-full">
+                    <Calendar className="w-4 h-4 text-purple-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Completed Payouts
+                    </p>
+                    <p className="text-2xl font-bold">
+                      {payouts.filter((p) => p.status === 'COMPLETED').length}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Historical payouts
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-yellow-100 rounded-full">
+                    <Clock className="w-4 h-4 text-yellow-600" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Pending Payouts
+                    </p>
+                    <p className="text-2xl font-bold">
+                      {
+                        payouts.filter((p) =>
+                          ['PENDING', 'PROCESSING'].includes(p.status)
+                        ).length
+                      }
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Awaiting processing
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Payout Request Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5" />
+                Request Payout
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Request a payout of your available earnings. Payouts are
+                processed every 14 days.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <p className="font-medium">Available Amount</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {formatCurrency(
+                      revenueAnalytics?.pendingPayout?.amount || 0
+                    )}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Net amount after platform fees
+                  </p>
+                </div>
+                <div className="text-right">
+                  {revenueAnalytics?.pendingPayout?.canRequest ? (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button disabled={isRequestingPayout}>
+                          {isRequestingPayout ? (
+                            <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                          ) : (
+                            <DollarSign className="w-4 h-4 mr-1" />
+                          )}
+                          Request Payout
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Request Payout</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to request a payout of{' '}
+                            {formatCurrency(
+                              revenueAnalytics?.pendingPayout?.amount || 0
+                            )}
+                            ? The payout will be processed within 24 hours and
+                            transferred to your registered bank account.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleRequestPayout}>
+                            Request Payout
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  ) : (
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground mb-2">
+                        {(revenueAnalytics?.pendingPayout?.amount || 0) > 0
+                          ? 'You can request payouts every 14 days'
+                          : 'No funds available for payout'}
+                      </p>
+                      <Button disabled variant="outline">
+                        <Clock className="w-4 h-4 mr-1" />
+                        Not Available
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Bank Details Note */}
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-blue-800">
+                      Bank Account Required
+                    </p>
+                    <p className="text-sm text-blue-700">
+                      Make sure your bank details are updated in your profile
+                      before requesting a payout.
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-1 text-blue-600 hover:text-blue-700 p-0 h-auto"
+                      onClick={() => setShowBankForm(true)}
+                    >
+                      Update Bank Details →
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Recent Orders */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Orders</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Latest ticket sales contributing to your earnings
+              </p>
+            </CardHeader>
+            <CardContent>
+              {revenueAnalytics?.recentOrders?.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Event</TableHead>
+                        <TableHead>Customer</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Platform Fee</TableHead>
+                        <TableHead>Net Earnings</TableHead>
+                        <TableHead>Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {revenueAnalytics.recentOrders.map((order: any) => (
+                        <TableRow key={order.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{order.event.title}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {order.quantity} ticket(s)
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{order.buyer.name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {order.buyer.email}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {formatCurrency(order.totalAmount)}
+                          </TableCell>
+                          <TableCell>
+                            {formatCurrency(
+                              order.platformFee || order.totalAmount * 0.05
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-medium text-green-600">
+                              {formatCurrency(
+                                order.totalAmount -
+                                  (order.platformFee ||
+                                    order.totalAmount * 0.05)
+                              )}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            {format(new Date(order.createdAt), 'MMM d, yyyy')}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-lg font-medium">No recent orders</p>
+                  <p className="text-muted-foreground">
+                    Orders will appear here as customers purchase tickets
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Payout History */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Payout History</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Track your payout requests and their status
+              </p>
+            </CardHeader>
+            <CardContent>
+              {payouts.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Net Amount</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Requested</TableHead>
+                        <TableHead>Processed</TableHead>
+                        <TableHead>Period</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {payouts.map((payout) => (
+                        <TableRow key={payout.id}>
+                          <TableCell>{formatCurrency(payout.amount)}</TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">
+                                {formatCurrency(payout.netAmount)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Fee: {formatCurrency(payout.platformFee)}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {getPayoutStatusBadge(payout.status)}
+                          </TableCell>
+                          <TableCell>
+                            {format(new Date(payout.createdAt), 'MMM d, yyyy')}
+                          </TableCell>
+                          <TableCell>
+                            {payout.processedAt
+                              ? format(
+                                  new Date(payout.processedAt),
+                                  'MMM d, yyyy'
+                                )
+                              : '-'}
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              <p>
+                                {format(new Date(payout.periodStart), 'MMM d')}
+                              </p>
+                              <p className="text-muted-foreground">
+                                to{' '}
+                                {format(
+                                  new Date(payout.periodEnd),
+                                  'MMM d, yyyy'
+                                )}
+                              </p>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <DollarSign className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-lg font-medium">No payout history</p>
+                  <p className="text-muted-foreground">
+                    Your payout requests will appear here
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Event Details Tab */}
         <TabsContent value="detailed" className="space-y-4">
           {selectedEvent && eventStats ? (
             <div className="space-y-6">
@@ -575,14 +1069,25 @@ export function OrganizerAnalytics({
                 <Eye className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-medium mb-2">Select an Event</h3>
                 <p className="text-muted-foreground">
-                  Choose an event from the Events Overview tab to see detailed
-                  analytics
+                  Choose an event from the Events tab to see detailed analytics
                 </p>
               </CardContent>
             </Card>
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Bank Details Form Modal */}
+      {showBankForm && (
+        <BankDetailsForm
+          onClose={() => setShowBankForm(false)}
+          onSuccess={() => {
+            setShowBankForm(false);
+            fetchPayoutAnalytics();
+            toast.success('Bank details updated successfully');
+          }}
+        />
+      )}
     </div>
   );
 }

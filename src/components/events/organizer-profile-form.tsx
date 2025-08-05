@@ -1,3 +1,4 @@
+// src/components/events/organizer-profile-form.tsx
 'use client';
 
 import { useEffect, useState } from 'react';

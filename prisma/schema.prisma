@@ -202,6 +202,11 @@ model OrganizerProfile {
   verificationStatus         VerificationStatus @default(PENDING)
   customPlatformFee          Float? // Custom fee percentage for this organizer
 
+  // Bank account details for payouts
+  bankAccount String? // Bank account number
+  bankCode    String? // Bank code for identification
+  accountName String? // Verified account name from bank
+
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 

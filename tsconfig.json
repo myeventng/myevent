@@ -30,7 +30,8 @@
     ".next/types/**/*.ts",
     "src/components/venue/user-client-side-venues-wrappertsx",
     "src/hook/useb",
-    "public/sw.ts"
+    "public/sw.ts",
+    "src/actions/payout.actions.ts;"
   ],
   "exclude": ["node_modules", "public/sw.js"]
 }

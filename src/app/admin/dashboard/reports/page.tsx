@@ -1,3 +1,4 @@
+// src/app/admin/dashboard/reports/page.tsx
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { getServerSideAuth } from '@/lib/auth-server';
 import { redirect } from 'next/navigation';

@@ -226,6 +226,11 @@ export default async function UserProfilePage() {
                             ...organizerProfile,
                             website: organizerProfile.website ?? undefined,
                             bio: organizerProfile.bio ?? undefined,
+                            bankAccount:
+                              organizerProfile.bankAccount ?? undefined,
+                            bankCode: organizerProfile.bankCode ?? undefined,
+                            accountName:
+                              organizerProfile.accountName ?? undefined,
                           }
                         : undefined
                     }
