@@ -69,6 +69,11 @@ export function EventBasicInfo({
   const [newTagColor, setNewTagColor] = useState('#3b82f6');
   const [isCreatingTag, setIsCreatingTag] = useState(false);
 
+  // Add selected tags state to trigger re-render
+  const [selectedTags, setSelectedTags] = useState<string[]>(
+    formData.tagIds || []
+  );
+
   // Type assertion to fix the compatibility issue
   const form = useForm<FormValues & FieldValues>({
     resolver: zodResolver(formSchema) as any,
@@ -129,7 +134,7 @@ export function EventBasicInfo({
     onNext();
   };
 
-  // Toggle tag selection
+  // Toggle tag selection - FIXED
   const toggleTag = (tagId: string) => {
     const currentTags = form.getValues('tagIds') as string[];
     let newTags: string[];
@@ -140,7 +145,9 @@ export function EventBasicInfo({
       newTags = [...currentTags, tagId];
     }
 
+    // Update both form state and local state to trigger re-render
     form.setValue('tagIds', newTags, { shouldValidate: true });
+    setSelectedTags(newTags);
   };
 
   // Handle creating new tag
@@ -161,9 +168,11 @@ export function EventBasicInfo({
 
         // Auto-select the newly created tag
         const currentTags = form.getValues('tagIds') as string[];
-        form.setValue('tagIds', [...currentTags, response.data.id], {
+        const newTagIds = [...currentTags, response.data.id];
+        form.setValue('tagIds', newTagIds, {
           shouldValidate: true,
         });
+        setSelectedTags(newTagIds);
 
         // Reset form
         setNewTagName('');
@@ -387,9 +396,8 @@ export function EventBasicInfo({
               ) : (
                 <>
                   {tags.map((tag) => {
-                    const isSelected = (
-                      form.getValues('tagIds') as string[]
-                    ).includes(tag.id);
+                    // Use selectedTags state instead of form.getValues for immediate feedback
+                    const isSelected = selectedTags.includes(tag.id);
                     return (
                       <Badge
                         key={tag.id}
@@ -408,7 +416,7 @@ export function EventBasicInfo({
                       </Badge>
                     );
                   })}
-                  {(form.getValues('tagIds') as string[]).length === 0 &&
+                  {selectedTags.length === 0 &&
                     !isLoading &&
                     tags.length > 0 && (
                       <div className="text-sm text-muted-foreground italic">
