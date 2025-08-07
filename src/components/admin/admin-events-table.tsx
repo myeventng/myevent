@@ -443,8 +443,8 @@ export function AdminEventsTable({
                   <AlertDialogHeader>
                     <AlertDialogTitle>Delete Event</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Are you sure you want to delete "{event.title}"? This
-                      action cannot be undone. If the event has orders or
+                      Are you sure you want to delete &quot;{event.title}&quot;?
+                      This action cannot be undone. If the event has orders or
                       tickets, it will be cancelled instead of deleted.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
