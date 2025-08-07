@@ -54,7 +54,7 @@ import {
 } from '@/components/ui/tooltip';
 import { updateEventStatus } from '@/actions/event.actions';
 import { toast } from 'sonner';
-import { EventPreviewModal } from './event-preview-modal';
+import { EventPreviewModal } from '../events/event-preview-modal';
 
 interface RejectedEventsTableProps {
   initialData: any[];

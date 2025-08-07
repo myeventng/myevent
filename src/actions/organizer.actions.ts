@@ -165,7 +165,7 @@ export async function saveOrganizerProfile(
 
     revalidatePath('/dashboard/profile');
     revalidatePath('/dashboard/organizer');
-    revalidatePath('/dashboard/create-event');
+    revalidatePath('/dashboar/events/create');
     revalidatePath('/dashboard/events');
 
     return {

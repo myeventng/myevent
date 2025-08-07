@@ -71,11 +71,10 @@ export function EventSchedule({
   onNext,
   onPrevious,
 }: EventScheduleProps) {
-  // Set default dates if not provided
   const today = new Date();
   const tomorrow = addDays(today, 1);
-  const defaultStart = startOfDay(addHours(tomorrow, 18)); // 6 PM tomorrow
-  const defaultEnd = addHours(defaultStart, 3); // 3 hours later
+  const defaultStart = startOfDay(addHours(tomorrow, 18));
+  const defaultEnd = addHours(defaultStart, 3);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -92,7 +91,7 @@ export function EventSchedule({
     onNext();
   };
 
-  // FIXED: Handle date and time changes with proper form integration
+  // Handle date and time changes with proper form integration
   const handleStartDateChange = (date: Date | undefined) => {
     if (date) {
       const currentStart = form.getValues('startDateTime');
@@ -141,6 +140,35 @@ export function EventSchedule({
     }
   };
 
+  //Calculate duration correctly
+  const calculateDuration = (startDate: Date, endDate: Date) => {
+    const diffInMs = endDate.getTime() - startDate.getTime();
+    const diffInHours = diffInMs / (1000 * 60 * 60);
+
+    if (diffInHours < 1) {
+      const minutes = Math.round(diffInHours * 60);
+      return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
+    } else if (diffInHours < 24) {
+      const hours = Math.floor(diffInHours);
+      const minutes = Math.round((diffInHours - hours) * 60);
+
+      if (minutes === 0) {
+        return `${hours} hour${hours !== 1 ? 's' : ''}`;
+      } else {
+        return `${hours} hour${hours !== 1 ? 's' : ''} ${minutes} minute${minutes !== 1 ? 's' : ''}`;
+      }
+    } else {
+      const days = Math.floor(diffInHours / 24);
+      const remainingHours = Math.floor(diffInHours % 24);
+
+      if (remainingHours === 0) {
+        return `${days} day${days !== 1 ? 's' : ''}`;
+      } else {
+        return `${days} day${days !== 1 ? 's' : ''} ${remainingHours} hour${remainingHours !== 1 ? 's' : ''}`;
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -173,7 +201,6 @@ export function EventSchedule({
                 )}
               />
 
-              {/* FIXED: Use FormField for start time */}
               <FormField
                 control={form.control}
                 name="startDateTime"
@@ -232,7 +259,6 @@ export function EventSchedule({
                 )}
               />
 
-              {/* FIXED: Use FormField for end time */}
               <FormField
                 control={form.control}
                 name="endDateTime"
@@ -285,7 +311,6 @@ export function EventSchedule({
               )}
             />
 
-            {/* FIXED: Use FormField for late entry time */}
             {form.watch('lateEntry') && (
               <FormField
                 control={form.control}
@@ -319,7 +344,6 @@ export function EventSchedule({
             )}
           </div>
 
-          {/* Event Duration Display */}
           <div className="p-4 bg-muted/50 rounded-lg">
             <h3 className="font-medium mb-2">Event Summary</h3>
             <div className="space-y-1 text-sm">
@@ -339,12 +363,10 @@ export function EventSchedule({
               )}
               <p>
                 <strong>Duration:</strong>{' '}
-                {Math.round(
-                  (form.watch('endDateTime').getTime() -
-                    form.watch('startDateTime').getTime()) /
-                    (1000 * 60 * 60 * 100)
-                ) / 100}{' '}
-                hours
+                {calculateDuration(
+                  form.watch('startDateTime'),
+                  form.watch('endDateTime')
+                )}
               </p>
             </div>
           </div>

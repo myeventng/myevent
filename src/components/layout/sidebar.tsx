@@ -86,7 +86,7 @@ export function Sidebar({
       if (pathname.includes('/notifications'))
         newExpanded.push('admin-notifications');
     } else {
-      if (pathname.includes('/events') || pathname.includes('/create-event')) {
+      if (pathname.includes('/events') || pathname.includes('/events/create')) {
         newExpanded.push('organizer-events');
       }
       if (pathname.includes('/venues') || pathname.includes('/my-venues')) {

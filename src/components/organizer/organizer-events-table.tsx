@@ -13,6 +13,7 @@ import {
   ChevronsRight,
   Plus,
   Calendar,
+  TrendingUp,
 } from 'lucide-react';
 import {
   useReactTable,
@@ -44,6 +45,8 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { PublishedStatus } from '@/generated/prisma';
+import { EventPreviewModal } from '@/components/events/event-preview-modal';
+import { EventAnalyticsModal } from '@/components/events/event-analystics-modal';
 
 interface OrganizerEventsTableProps {
   initialData: any[];
@@ -62,6 +65,9 @@ export function OrganizerEventsTable({
   ]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
 
   // Format date and time
   const formatDateTime = (dateString: string) => {
@@ -127,6 +133,18 @@ export function OrganizerEventsTable({
     }, 0);
 
     return { totalAvailable, totalSold };
+  };
+
+  // Handle event preview
+  const handlePreviewEvent = (event: any) => {
+    setSelectedEvent(event);
+    setShowPreviewModal(true);
+  };
+
+  // Handle event analytics
+  const handleAnalyticsEvent = (event: any) => {
+    setSelectedEvent(event);
+    setShowAnalyticsModal(true);
   };
 
   // Table columns definition
@@ -215,13 +233,21 @@ export function OrganizerEventsTable({
           }, 0) || 0;
 
         return (
-          <div className="font-medium">
-            {event.isFree
-              ? 'Free Event'
-              : new Intl.NumberFormat('en-NG', {
-                  style: 'currency',
-                  currency: 'NGN',
-                }).format(revenue)}
+          <div>
+            <div className="font-medium">
+              {event.isFree
+                ? 'Free Event'
+                : new Intl.NumberFormat('en-NG', {
+                    style: 'currency',
+                    currency: 'NGN',
+                  }).format(revenue)}
+            </div>
+            {!event.isFree && revenue > 0 && (
+              <div className="text-sm text-muted-foreground flex items-center">
+                <TrendingUp className="h-3 w-3 mr-1" />
+                <span>Net earnings</span>
+              </div>
+            )}
           </div>
         );
       },
@@ -241,21 +267,25 @@ export function OrganizerEventsTable({
 
         return (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/events/${event.id}`}>
-                <Eye className="h-4 w-4" />
-              </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handlePreviewEvent(event)}
+            >
+              <Eye className="h-4 w-4" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleAnalyticsEvent(event)}
+            >
+              <BarChart3 className="h-4 w-4" />
             </Button>
 
             <Button variant="ghost" size="sm" asChild>
               <Link href={`/dashboard/events/${event.id}/edit`}>
                 <Edit className="h-4 w-4" />
-              </Link>
-            </Button>
-
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/dashboard/events/${event.id}/analytics`}>
-                <BarChart3 className="h-4 w-4" />
               </Link>
             </Button>
           </div>
@@ -341,7 +371,7 @@ export function OrganizerEventsTable({
             </SelectContent>
           </Select>
           <Button asChild>
-            <Link href="/dashboard/create-event">
+            <Link href="/dashboard/events/create">
               <Plus className="h-4 w-4 mr-2" />
               Create Event
             </Link>
@@ -358,7 +388,7 @@ export function OrganizerEventsTable({
             Start by creating your first event to engage with your audience.
           </p>
           <Button asChild>
-            <Link href="/dashboard/create-event">
+            <Link href="/dashboard/events/create">
               <Plus className="h-4 w-4 mr-2" />
               Create Your First Event
             </Link>
@@ -462,6 +492,35 @@ export function OrganizerEventsTable({
             </div>
           </div>
         </>
+      )}
+
+      {/* Event Preview Modal */}
+      {selectedEvent && (
+        <EventPreviewModal
+          event={selectedEvent}
+          isOpen={showPreviewModal}
+          onClose={() => {
+            setShowPreviewModal(false);
+            setSelectedEvent(null);
+          }}
+          isUpdating={false}
+          userRole={userRole}
+          userSubRole={userSubRole}
+        />
+      )}
+
+      {/* Event Analytics Modal */}
+      {selectedEvent && (
+        <EventAnalyticsModal
+          event={selectedEvent}
+          isOpen={showAnalyticsModal}
+          onClose={() => {
+            setShowAnalyticsModal(false);
+            setSelectedEvent(null);
+          }}
+          userRole={userRole}
+          userSubRole={userSubRole}
+        />
       )}
     </div>
   );

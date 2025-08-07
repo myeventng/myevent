@@ -12,6 +12,8 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Trash2,
+  BarChart3,
 } from 'lucide-react';
 import {
   useReactTable,
@@ -42,9 +44,26 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { publishEvent, toggleEventFeatured } from '@/actions/event.actions';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
+  publishEvent,
+  toggleEventFeatured,
+  deleteEvent,
+} from '@/actions/event.actions';
 import { toast } from 'sonner';
 import { PublishedStatus } from '@/generated/prisma';
+import { EventPreviewModal } from '../events/event-preview-modal';
+import { EventAnalyticsModal } from '@/components/events/event-analystics-modal';
 
 interface AdminEventsTableProps {
   initialData: any[];
@@ -64,6 +83,9 @@ export function AdminEventsTable({
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
   const [isUpdating, setIsUpdating] = useState<{ [key: string]: boolean }>({});
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
 
   // Format date and time
   const formatDateTime = (dateString: string) => {
@@ -184,6 +206,45 @@ export function AdminEventsTable({
     } finally {
       setIsUpdating((prev) => ({ ...prev, [`feature-${id}`]: false }));
     }
+  };
+
+  // Handle event deletion (SUPER_ADMIN only)
+  const handleDeleteEvent = async (id: string) => {
+    if (userSubRole !== 'SUPER_ADMIN') {
+      toast.error('Only Super Admins can delete events');
+      return;
+    }
+
+    try {
+      setIsUpdating((prev) => ({ ...prev, [`delete-${id}`]: true }));
+
+      const response = await deleteEvent(id);
+
+      if (response.success) {
+        // Remove from list or mark as cancelled based on the response
+        setData((prevData) => prevData.filter((event) => event.id !== id));
+        toast.success('Event deleted successfully');
+      } else {
+        toast.error(response.message || 'Failed to delete event');
+      }
+    } catch (error) {
+      console.error('Error deleting event:', error);
+      toast.error('Failed to delete event');
+    } finally {
+      setIsUpdating((prev) => ({ ...prev, [`delete-${id}`]: false }));
+    }
+  };
+
+  // Handle event preview
+  const handlePreviewEvent = (event: any) => {
+    setSelectedEvent(event);
+    setShowPreviewModal(true);
+  };
+
+  // Handle event analytics
+  const handleAnalyticsEvent = (event: any) => {
+    setSelectedEvent(event);
+    setShowAnalyticsModal(true);
   };
 
   // Table columns definition
@@ -308,6 +369,7 @@ export function AdminEventsTable({
         const isAdmin =
           userRole === 'ADMIN' &&
           ['STAFF', 'SUPER_ADMIN'].includes(userSubRole);
+        const isSuperAdmin = userSubRole === 'SUPER_ADMIN';
         const isPendingOrDraft = ['PENDING_REVIEW', 'DRAFT'].includes(
           event.publishedStatus
         );
@@ -315,10 +377,20 @@ export function AdminEventsTable({
 
         return (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/events/${event.slug}`}>
-                <Eye className="h-4 w-4" />
-              </Link>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handlePreviewEvent(event)}
+            >
+              <Eye className="h-4 w-4" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleAnalyticsEvent(event)}
+            >
+              <BarChart3 className="h-4 w-4" />
             </Button>
 
             <Button variant="ghost" size="sm" asChild>
@@ -353,6 +425,43 @@ export function AdminEventsTable({
               >
                 <CheckCircle className="h-4 w-4 text-green-600" />
               </Button>
+            )}
+
+            {isSuperAdmin && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={isUpdating[`delete-${event.id}`]}
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Event</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete "{event.title}"? This
+                      action cannot be undone. If the event has orders or
+                      tickets, it will be cancelled instead of deleted.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => handleDeleteEvent(event.id)}
+                      className="bg-red-600 hover:bg-red-700"
+                      disabled={isUpdating[`delete-${event.id}`]}
+                    >
+                      {isUpdating[`delete-${event.id}`]
+                        ? 'Deleting...'
+                        : 'Delete'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
           </div>
         );
@@ -537,6 +646,57 @@ export function AdminEventsTable({
           </Button>
         </div>
       </div>
+
+      {/* Event Preview Modal */}
+      {selectedEvent && (
+        <EventPreviewModal
+          event={selectedEvent}
+          isOpen={showPreviewModal}
+          onClose={() => {
+            setShowPreviewModal(false);
+            setSelectedEvent(null);
+          }}
+          onApprove={
+            ['PENDING_REVIEW', 'DRAFT'].includes(
+              selectedEvent.publishedStatus
+            ) && !selectedEvent.isCancelled
+              ? (id: string) =>
+                  handlePublishEvent(id, selectedEvent.publishedStatus)
+              : undefined
+          }
+          onToggleFeature={
+            userRole === 'ADMIN' &&
+            ['STAFF', 'SUPER_ADMIN'].includes(userSubRole)
+              ? (id: string) => handleToggleFeature(id, selectedEvent.featured)
+              : undefined
+          }
+          isUpdating={
+            isUpdating[selectedEvent.id] ||
+            isUpdating[`feature-${selectedEvent.id}`] ||
+            false
+          }
+          userRole={userRole}
+          userSubRole={userSubRole}
+          showFeatureActions={
+            userRole === 'ADMIN' &&
+            ['STAFF', 'SUPER_ADMIN'].includes(userSubRole)
+          }
+        />
+      )}
+
+      {/* Event Analytics Modal */}
+      {selectedEvent && (
+        <EventAnalyticsModal
+          event={selectedEvent}
+          isOpen={showAnalyticsModal}
+          onClose={() => {
+            setShowAnalyticsModal(false);
+            setSelectedEvent(null);
+          }}
+          userRole={userRole}
+          userSubRole={userSubRole}
+        />
+      )}
     </div>
   );
 }

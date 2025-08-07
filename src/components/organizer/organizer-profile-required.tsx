@@ -14,7 +14,7 @@ interface OrganizerProfileRequiredProps {
 
 export function OrganizerProfileRequired({
   children,
-  redirectUrl = '/dashboard/create-event',
+  redirectUrl = '/dashboard/events/create',
 }: OrganizerProfileRequiredProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);

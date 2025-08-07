@@ -70,7 +70,9 @@ export function OrganizerAnalytics({
   const [eventStats, setEventStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingEvent, setIsLoadingEvent] = useState(false);
-  const [currentPlatformFee, setPlatformFee] = useState(initialPlatformFee);
+  const [currentPlatformFee, setPlatformFee] = useState(
+    initialPlatformFee || 5
+  );
 
   // Payout-related state
   const [revenueAnalytics, setRevenueAnalytics] = useState<any>(null);
@@ -111,6 +113,17 @@ export function OrganizerAnalytics({
       toast.error('Error loading event statistics');
     } finally {
       setIsLoadingEvent(false);
+    }
+  };
+
+  // Load platform fee
+  const loadPlatformFee = async () => {
+    try {
+      const feePercentage = await getPlatformFeePercentage();
+      setPlatformFee(feePercentage);
+    } catch (error) {
+      console.error('Error loading platform fee:', error);
+      // Keep default fee if loading fails
     }
   };
 
@@ -195,11 +208,36 @@ export function OrganizerAnalytics({
 
   // Load initial data
   useEffect(() => {
-    if (!initialStats) {
-      loadStats();
-    }
-    fetchPayoutAnalytics();
+    const initializeData = async () => {
+      if (!initialStats) {
+        await loadStats();
+      }
+
+      // Always load platform fee and payout analytics
+      await Promise.all([loadPlatformFee(), fetchPayoutAnalytics()]);
+    };
+
+    initializeData();
   }, [initialStats]);
+
+  // Recalculate stats with current platform fee when fee changes
+  useEffect(() => {
+    if (stats && currentPlatformFee) {
+      const updatedStats = {
+        ...stats,
+        overview: {
+          ...stats.overview,
+          platformFee: Math.round(
+            stats.overview.netRevenue * (currentPlatformFee / 100)
+          ),
+          organizerEarnings:
+            stats.overview.netRevenue -
+            Math.round(stats.overview.netRevenue * (currentPlatformFee / 100)),
+        },
+      };
+      setStats(updatedStats);
+    }
+  }, [currentPlatformFee]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-NG', {
@@ -213,7 +251,7 @@ export function OrganizerAnalytics({
   };
 
   const refreshAllData = async () => {
-    await Promise.all([loadStats(), fetchPayoutAnalytics()]);
+    await Promise.all([loadStats(), loadPlatformFee(), fetchPayoutAnalytics()]);
   };
 
   if (isLoading && !stats) {
@@ -353,7 +391,12 @@ export function OrganizerAnalytics({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
-                <CardTitle>Revenue Breakdown</CardTitle>
+                <CardTitle className="flex items-center justify-between">
+                  Revenue Breakdown
+                  <Badge variant="outline" className="text-xs">
+                    Current Platform Fee: {formatPercentage(currentPlatformFee)}
+                  </Badge>
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-between items-center">
@@ -376,7 +419,7 @@ export function OrganizerAnalytics({
                 </div>
                 <div className="flex justify-between items-center text-orange-600">
                   <span className="text-sm">
-                    Platform Fee ({formatPercentage(currentPlatformFee ?? 0)})
+                    Platform Fee ({formatPercentage(currentPlatformFee)})
                   </span>
                   <span className="font-medium">
                     -{formatCurrency(stats.overview.platformFee)}
@@ -419,6 +462,12 @@ export function OrganizerAnalytics({
                               stats.overview.totalEvents
                           )
                         : 0}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Platform Fee Rate</span>
+                    <span className="font-medium text-orange-600">
+                      {formatPercentage(currentPlatformFee)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -491,7 +540,7 @@ export function OrganizerAnalytics({
           </Card>
         </TabsContent>
 
-        {/* Revenue & Payouts Tab */}
+        {/* Revenue & Payouts Tab - keeping the existing implementation */}
         <TabsContent value="revenue" className="space-y-6">
           {/* Payout Overview Cards */}
           <div className="grid gap-4 md:grid-cols-4">
@@ -587,6 +636,57 @@ export function OrganizerAnalytics({
             </Card>
           </div>
 
+          {/* Platform Fee Information Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5" />
+                Platform Fee Information
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Current platform fee rate and its impact on your earnings
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-sm">Current Platform Fee Rate</span>
+                    <span className="font-medium text-orange-600">
+                      {formatPercentage(currentPlatformFee)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Your Retention Rate</span>
+                    <span className="font-medium text-green-600">
+                      {formatPercentage(100 - currentPlatformFee)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Total Fees Paid (All Time)</span>
+                    <span className="font-medium">
+                      {formatCurrency(stats.overview.platformFee)}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <p className="text-sm font-medium text-blue-800">
+                      Fee Calculation
+                    </p>
+                    <p className="text-xs text-blue-700 mt-1">
+                      Platform fee is calculated as{' '}
+                      {formatPercentage(currentPlatformFee)} of your net revenue
+                      (after refunds). This helps maintain and improve the
+                      platform services.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Rest of the payout request and history sections remain the same */}
           {/* Payout Request Section */}
           <Card>
             <CardHeader>
@@ -609,7 +709,8 @@ export function OrganizerAnalytics({
                     )}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Net amount after platform fees
+                    Net amount after platform fees (
+                    {formatPercentage(currentPlatformFee)})
                   </p>
                 </div>
                 <div className="text-right">
@@ -710,46 +811,56 @@ export function OrganizerAnalytics({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {revenueAnalytics.recentOrders.map((order: any) => (
-                        <TableRow key={order.id}>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">{order.event.title}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {order.quantity} ticket(s)
-                              </p>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">{order.buyer.name}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {order.buyer.email}
-                              </p>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {formatCurrency(order.totalAmount)}
-                          </TableCell>
-                          <TableCell>
-                            {formatCurrency(
-                              order.platformFee || order.totalAmount * 0.05
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <span className="font-medium text-green-600">
-                              {formatCurrency(
-                                order.totalAmount -
-                                  (order.platformFee ||
-                                    order.totalAmount * 0.05)
-                              )}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            {format(new Date(order.createdAt), 'MMM d, yyyy')}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {revenueAnalytics.recentOrders.map((order: any) => {
+                        const calculatedPlatformFee =
+                          order.platformFee ||
+                          order.totalAmount * (currentPlatformFee / 100);
+                        return (
+                          <TableRow key={order.id}>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium">
+                                  {order.event.title}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {order.quantity} ticket(s)
+                                </p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium">
+                                  {order.buyer.name}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {order.buyer.email}
+                                </p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {formatCurrency(order.totalAmount)}
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-orange-600">
+                                {formatCurrency(calculatedPlatformFee)}
+                              </span>
+                              <div className="text-xs text-muted-foreground">
+                                {formatPercentage(currentPlatformFee)}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="font-medium text-green-600">
+                                {formatCurrency(
+                                  order.totalAmount - calculatedPlatformFee
+                                )}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              {format(new Date(order.createdAt), 'MMM d, yyyy')}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -929,7 +1040,10 @@ export function OrganizerAnalytics({
                       {formatCurrency(eventStats.revenue.organizerRevenue)}
                     </div>
                     <div className="flex items-center text-xs text-muted-foreground">
-                      <span>After platform fee</span>
+                      <span>
+                        After {formatPercentage(currentPlatformFee)} platform
+                        fee
+                      </span>
                     </div>
                   </CardContent>
                 </Card>
@@ -1019,6 +1133,10 @@ export function OrganizerAnalytics({
               <Card>
                 <CardHeader>
                   <CardTitle>Revenue Details</CardTitle>
+                  <div className="text-sm text-muted-foreground">
+                    Platform fee calculated at{' '}
+                    {formatPercentage(currentPlatformFee)}
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
@@ -1044,8 +1162,7 @@ export function OrganizerAnalytics({
                     </div>
                     <div className="flex justify-between text-orange-600">
                       <span>
-                        Platform Fee (
-                        {formatPercentage(currentPlatformFee ?? 0)})
+                        Platform Fee ({formatPercentage(currentPlatformFee)})
                       </span>
                       <span className="font-medium">
                         -{formatCurrency(eventStats.revenue.platformFee)}

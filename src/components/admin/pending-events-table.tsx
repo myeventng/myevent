@@ -55,7 +55,7 @@ import {
 } from '@/components/ui/dialog';
 import { updateEventStatus } from '@/actions/event.actions';
 import { toast } from 'sonner';
-import { EventPreviewModal } from './event-preview-modal';
+import { EventPreviewModal } from '../events/event-preview-modal';
 
 interface PendingEventsTableProps {
   initialData: any[];

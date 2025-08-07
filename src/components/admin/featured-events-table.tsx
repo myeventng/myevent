@@ -47,7 +47,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toggleEventFeatured } from '@/actions/event.actions';
 import { toast } from 'sonner';
-import { EventPreviewModal } from './event-preview-modal';
+import { EventPreviewModal } from '../events/event-preview-modal';
 
 interface FeaturedEventsTableProps {
   initialData: any[];
