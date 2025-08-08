@@ -363,11 +363,6 @@ export function Sidebar({
         },
       ],
     },
-    {
-      title: 'Scanner',
-      href: '/dashboard/scanner',
-      icon: <ScanQrCode className="w-5 h-5" />,
-    },
   ];
 
   const userIsOrganizer = isOrganizer(user);

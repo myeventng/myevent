@@ -1593,17 +1593,20 @@ export async function getEventBySlug(
 }
 
 export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
-  // Validate user permission
-  const permissionCheck = await validateUserPermission();
-  if (!permissionCheck.success) {
+  // Get session directly for delete operation
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session) {
     return {
       success: false,
-      message: permissionCheck.message,
+      message: 'Not authenticated',
     };
   }
 
-  const userId = permissionCheck.userData!.userId;
-  const isAdmin = permissionCheck.userData!.isAdmin;
+  const { role, subRole, id: userId } = session.user;
 
   try {
     // Check if event exists
@@ -1626,11 +1629,14 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
       };
     }
 
-    // If not an admin, check if the user owns this event
-    if (!isAdmin && event.userId !== userId) {
+    // Permission check: Only SUPER_ADMIN can delete events, or event owner if organizer
+    const isSuperAdmin = role === 'ADMIN' && subRole === 'SUPER_ADMIN';
+    const isEventOwner = event.userId === userId && subRole === 'ORGANIZER';
+
+    if (!isSuperAdmin && !isEventOwner) {
       return {
         success: false,
-        message: 'You can only delete events that you created',
+        message: 'Only Super Admins or event owners can delete events',
       };
     }
 
@@ -1651,6 +1657,7 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
       });
 
       revalidatePath('/admin/events');
+      revalidatePath('/admin/dashboard/events');
       revalidatePath('/dashboard/events');
       revalidatePath('/events');
 
@@ -1667,6 +1674,7 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
     });
 
     revalidatePath('/admin/events');
+    revalidatePath('/admin/dashboard/events');
     revalidatePath('/dashboard/events');
     revalidatePath('/events');
 
@@ -1676,13 +1684,19 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
     };
   } catch (error) {
     console.error('Error deleting event:', error);
+
+    // Provide more specific error information
+    if (error instanceof Error) {
+      console.error('Error details:', error.message);
+      console.error('Error stack:', error.stack);
+    }
+
     return {
       success: false,
       message: 'Failed to delete event',
     };
   }
 }
-
 export async function publishEvent(id: string): Promise<ActionResponse<any>> {
   // Validate user permission
   const permissionCheck = await validateUserPermission();

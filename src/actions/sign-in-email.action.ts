@@ -20,9 +20,6 @@ export async function signInEmailAction(formData: FormData) {
         password,
       },
     });
-
-    // If successful, the session will be automatically set via cookies
-    // No need to manually store in localStorage on server side
     return { error: null, success: true };
   } catch (err) {
     if (err instanceof APIError) {
