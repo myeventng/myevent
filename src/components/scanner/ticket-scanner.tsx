@@ -688,8 +688,8 @@ export function TicketScanner({
         <CardContent>
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>
-              • <strong>QR Code Scanning:</strong> Click "Start QR Scanner" and
-              position QR codes in the target area
+              • <strong>QR Code Scanning:</strong> Click &quot;Start QR
+              Scanner&quot; and position QR codes in the target area
             </p>
             <p>
               • <strong>Automatic Detection:</strong> The scanner will
@@ -697,7 +697,7 @@ export function TicketScanner({
             </p>
             <p>
               • <strong>Manual Entry:</strong> Type ticket ID and press Enter or
-              click "Validate"
+              click &quot;Validate&quot;
             </p>
             <p>
               • <strong>Audio Feedback:</strong> Listen for success (two beeps)
