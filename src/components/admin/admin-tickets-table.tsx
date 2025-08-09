@@ -1,15 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { format } from 'date-fns';
 import {
-  Eye,
-  Download,
-  ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Eye,
+  Download,
+  Mail,
+  ChevronLeft,
 } from 'lucide-react';
 import {
   useReactTable,
@@ -41,6 +41,13 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { TicketStatus } from '@/generated/prisma';
+import { generateTicketPDF } from '@/utils/pdf-ticket-generator';
+import { toast } from 'sonner';
+import { TicketPreviewModal } from '@/components/tickets/ticket-preview-modal';
+import {
+  resendTicketEmail,
+  resendBulkTicketEmails,
+} from '@/actions/email-ticket-actions';
 
 interface AdminTicketsTableProps {
   initialData: any[];
@@ -50,9 +57,9 @@ interface AdminTicketsTableProps {
 
 export function AdminTicketsTable({
   initialData,
-}: // userRole,
-// userSubRole,
-AdminTicketsTableProps) {
+  userRole,
+  userSubRole,
+}: AdminTicketsTableProps) {
   const [data, setData] = useState<any[]>(initialData);
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'purchasedAt', desc: true },
@@ -106,42 +113,84 @@ AdminTicketsTableProps) {
     }
   };
 
+  // Download individual ticket
+  const downloadTicket = (ticket: any) => {
+    try {
+      generateTicketPDF(ticket);
+      toast.success('Ticket PDF downloaded successfully');
+    } catch (error) {
+      console.error('Error downloading ticket PDF:', error);
+      toast.error('Failed to download ticket PDF');
+    }
+  };
+
+  const resendAllTicketEmails = async () => {
+    try {
+      const ticketsWithEmails = data.filter((ticket) => ticket.user?.email);
+
+      if (ticketsWithEmails.length === 0) {
+        toast.error('No tickets with valid customer emails found');
+        return;
+      }
+
+      const ticketIds = ticketsWithEmails.map((ticket) => ticket.id);
+      const result = await resendBulkTicketEmails(ticketIds);
+
+      if (result.success) {
+        toast.success(result.message || 'Bulk ticket emails sent successfully');
+      } else {
+        toast.error(result.message || 'Failed to send bulk ticket emails');
+      }
+    } catch (error) {
+      console.error('Error sending bulk ticket emails:', error);
+      toast.error('Failed to send bulk ticket emails');
+    }
+  };
+
+  // Add this function for individual email resending from table
+  const resendSingleTicketEmail = async (ticket: any) => {
+    if (!ticket.user?.email) {
+      toast.error('No email address found for this customer');
+      return;
+    }
+
+    try {
+      const result = await resendTicketEmail(ticket.id);
+
+      if (result.success) {
+        toast.success(result.message || 'Ticket email sent successfully');
+      } else {
+        toast.error(result.message || 'Failed to send ticket email');
+      }
+    } catch (error) {
+      console.error('Error sending ticket email:', error);
+      toast.error('Failed to send ticket email');
+    }
+  };
+
   // Export to CSV function
-  const exportToCSV = () => {
-    const csvData = data.map((ticket) => ({
-      'Ticket ID': ticket.ticketId,
-      Event: ticket.ticketType.event.title,
-      'Event Date': formatDateTime(ticket.ticketType.event.startDateTime),
-      Venue: `${ticket.ticketType.event.venue.name}, ${ticket.ticketType.event.venue.city?.name}`,
-      'Ticket Type': ticket.ticketType.name,
-      Price: formatPrice(ticket.ticketType.price),
-      'Customer Name': ticket.user?.name || 'Unknown',
-      'Customer Email': ticket.user?.email || 'Unknown',
-      'Purchase Date': formatDateTime(ticket.purchasedAt),
-      Status: ticket.status,
-    }));
+  const exportAllTicketsPDF = () => {
+    try {
+      if (data.length === 0) {
+        toast.error('No tickets to export');
+        return;
+      }
 
-    const csvContent = [
-      Object.keys(csvData[0]).join(','),
-      ...csvData.map((row) =>
-        Object.values(row)
-          .map((value) => `"${value}"`)
-          .join(',')
-      ),
-    ].join('\n');
+      // Generate PDFs for multiple tickets (you can modify this to create a single PDF with all tickets)
+      data.forEach((ticket, index) => {
+        setTimeout(() => {
+          generateTicketPDF(
+            ticket,
+            `ticket_${index + 1}_${ticket.ticketId}.pdf`
+          );
+        }, index * 100); // Small delay to prevent browser overload
+      });
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute(
-      'download',
-      `tickets_export_${format(new Date(), 'yyyy-MM-dd')}.csv`
-    );
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      toast.success(`Started download of ${data.length} ticket PDFs`);
+    } catch (error) {
+      console.error('Error exporting tickets to PDF:', error);
+      toast.error('Failed to export tickets to PDF');
+    }
   };
 
   // Table columns definition
@@ -235,15 +284,34 @@ AdminTicketsTableProps) {
 
         return (
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/admin/tickets/${ticket.id}`}>
-                <Eye className="h-4 w-4" />
-              </Link>
-            </Button>
+            <TicketPreviewModal
+              ticket={ticket}
+              trigger={
+                <Button variant="ghost" size="sm" title="View Ticket">
+                  <Eye className="h-4 w-4" />
+                </Button>
+              }
+            />
 
-            <Button variant="ghost" size="sm">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => downloadTicket(ticket)}
+              title="Download PDF"
+            >
               <Download className="h-4 w-4" />
             </Button>
+
+            {ticket.user?.email && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => resendSingleTicketEmail(ticket)}
+                title="Resend Email"
+              >
+                <Mail className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         );
       },
@@ -295,9 +363,7 @@ AdminTicketsTableProps) {
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem disabled value="placeholder">
-                All Statuses
-              </SelectItem>
+              <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="UNUSED">Unused</SelectItem>
               <SelectItem value="USED">Used</SelectItem>
               <SelectItem value="REFUNDED">Refunded</SelectItem>
@@ -322,9 +388,13 @@ AdminTicketsTableProps) {
               <SelectItem value="50">50</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={exportToCSV}>
+          <Button variant="outline" onClick={exportAllTicketsPDF}>
             <Download className="h-4 w-4 mr-2" />
             Export CSV
+          </Button>
+          <Button variant="outline" onClick={exportAllTicketsPDF}>
+            <Download className="h-4 w-4 mr-2" />
+            Export All PDFs
           </Button>
         </div>
       </div>

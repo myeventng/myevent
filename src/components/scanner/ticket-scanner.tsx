@@ -1,3 +1,5 @@
+// You'll need to install: npm install jsqr
+
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -23,6 +25,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { validateTicket } from '@/actions/ticket.actions';
+import jsQR from 'jsqr';
 
 interface TicketScannerProps {
   eventId: string;
@@ -63,11 +66,13 @@ export function TicketScanner({
   const [lastScanTime, setLastScanTime] = useState<Date | null>(null);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [showErrorAnimation, setShowErrorAnimation] = useState(false);
+  const [lastScannedTicketId, setLastScannedTicketId] = useState<string>('');
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Play sound feedback
   const playSound = (type: 'success' | 'error') => {
@@ -136,7 +141,11 @@ export function TicketScanner({
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         setIsScanning(true);
-        toast.info('Camera started - Ready to scan!');
+
+        // Start QR scanning loop
+        scanIntervalRef.current = setInterval(scanQRCode, 500);
+
+        toast.info('Camera started - Ready to scan QR codes!');
       }
     } catch (error) {
       console.error('Error accessing camera:', error);
@@ -150,31 +159,77 @@ export function TicketScanner({
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
+
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
+
     setIsScanning(false);
     toast.info('Camera stopped');
   };
 
   // Scan QR code from video
   const scanQRCode = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current || isProcessing) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
 
-    if (!context) return;
+    if (!context || video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0);
 
     try {
-      // Try to decode QR code using a simple pattern match
-      // In a real implementation, you'd use a QR code library like jsQR
       const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
 
-      // Mock QR detection - replace with actual QR code library
-      // For demo purposes, we'll check if user manually enters a ticket ID
+      if (qrCode && qrCode.data) {
+        try {
+          // Parse QR code data
+          const qrData = JSON.parse(qrCode.data);
+
+          // Validate QR code format
+          if (
+            qrData.type === 'EVENT_TICKET' &&
+            qrData.ticketId &&
+            qrData.eventId
+          ) {
+            // Check if this is the same ticket we just scanned (prevent duplicate scans)
+            if (qrData.ticketId === lastScannedTicketId) {
+              return;
+            }
+
+            // Validate that this QR code is for the current event
+            if (qrData.eventId !== eventId) {
+              toast.error('This ticket is for a different event!');
+              triggerErrorAnimation();
+              playSound('error');
+              return;
+            }
+
+            setLastScannedTicketId(qrData.ticketId);
+            await validateScannedTicket(qrData.ticketId);
+
+            // Clear the last scanned ID after a delay to allow re-scanning if needed
+            setTimeout(() => setLastScannedTicketId(''), 3000);
+          } else {
+            // QR code doesn't match our format
+            console.log('Invalid QR code format:', qrData);
+          }
+        } catch (e) {
+          // Not a JSON QR code, might be a simple text ticket ID
+          const ticketId = qrCode.data.trim();
+          if (ticketId && ticketId !== lastScannedTicketId) {
+            setLastScannedTicketId(ticketId);
+            await validateScannedTicket(ticketId);
+            setTimeout(() => setLastScannedTicketId(''), 3000);
+          }
+        }
+      }
     } catch (error) {
       console.error('Error scanning QR code:', error);
     }
@@ -278,17 +333,10 @@ export function TicketScanner({
     };
   }, []);
 
-  // Auto-scan effect (for demo - replace with real QR library)
-  useEffect(() => {
-    if (isScanning) {
-      const interval = setInterval(scanQRCode, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [isScanning]);
-
   const resetScanner = () => {
     setScanResult(null);
     setManualTicketId('');
+    setLastScannedTicketId('');
     toast.info('Scanner reset');
   };
 
@@ -360,7 +408,7 @@ export function TicketScanner({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Scan className="h-5 w-5" />
-            Ticket Scanner
+            QR Code Scanner
             {isProcessing && (
               <div className="flex items-center gap-1 text-blue-500">
                 <RefreshCw className="h-4 w-4 animate-spin" />
@@ -378,12 +426,12 @@ export function TicketScanner({
             {!isScanning ? (
               <Button onClick={startCamera} className="flex-1">
                 <Camera className="mr-2 h-4 w-4" />
-                Start Camera
+                Start QR Scanner
               </Button>
             ) : (
               <Button onClick={stopCamera} variant="outline" className="flex-1">
                 <X className="mr-2 h-4 w-4" />
-                Stop Camera
+                Stop Scanner
               </Button>
             )}
             <Button onClick={resetScanner} variant="outline">
@@ -402,18 +450,37 @@ export function TicketScanner({
               />
               <canvas ref={canvasRef} className="hidden" />
 
-              {/* Scanning overlay */}
+              {/* Scanning overlay with QR code target */}
               <div className="absolute inset-0 flex items-center justify-center">
-                <div
-                  className={`w-48 h-48 border-2 border-dashed rounded-lg flex items-center justify-center transition-all duration-300 ${
-                    isProcessing
-                      ? 'border-blue-500 bg-blue-500/20'
-                      : 'border-white'
-                  }`}
-                >
-                  <span className="text-white text-sm font-medium text-center px-2">
-                    {isProcessing ? 'Validating...' : 'Position QR code here'}
-                  </span>
+                <div className="relative">
+                  {/* QR Code targeting square */}
+                  <div
+                    className={`w-48 h-48 border-2 border-dashed rounded-lg relative transition-all duration-300 ${
+                      isProcessing
+                        ? 'border-blue-500 bg-blue-500/20'
+                        : 'border-white bg-black/20'
+                    }`}
+                  >
+                    {/* Corner indicators */}
+                    <div className="absolute top-0 left-0 w-8 h-8 border-l-4 border-t-4 border-white"></div>
+                    <div className="absolute top-0 right-0 w-8 h-8 border-r-4 border-t-4 border-white"></div>
+                    <div className="absolute bottom-0 left-0 w-8 h-8 border-l-4 border-b-4 border-white"></div>
+                    <div className="absolute bottom-0 right-0 w-8 h-8 border-r-4 border-b-4 border-white"></div>
+
+                    {/* Center text */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-white text-sm font-medium text-center px-2 bg-black/50 rounded">
+                        {isProcessing
+                          ? 'Validating...'
+                          : 'Position QR code here'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Scanning line animation */}
+                  {!isProcessing && (
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white to-transparent animate-pulse"></div>
+                  )}
                 </div>
               </div>
 
@@ -432,7 +499,7 @@ export function TicketScanner({
               {/* Success animation overlay */}
               {showSuccessAnimation && (
                 <div className="absolute inset-0 bg-green-500 bg-opacity-20 flex items-center justify-center animate-pulse">
-                  <div className="bg-green-500 text-white p-6 rounded-full">
+                  <div className="bg-green-500 text-white p-6 rounded-full animate-bounce">
                     <CheckCircle className="h-12 w-12" />
                   </div>
                 </div>
@@ -441,7 +508,7 @@ export function TicketScanner({
               {/* Error animation overlay */}
               {showErrorAnimation && (
                 <div className="absolute inset-0 bg-red-500 bg-opacity-20 flex items-center justify-center animate-pulse">
-                  <div className="bg-red-500 text-white p-6 rounded-full">
+                  <div className="bg-red-500 text-white p-6 rounded-full animate-bounce">
                     <XCircle className="h-12 w-12" />
                   </div>
                 </div>
@@ -615,18 +682,22 @@ export function TicketScanner({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Info className="h-5 w-5" />
-            Scanner Instructions
+            QR Scanner Instructions
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>
-              • <strong>Camera Scanning:</strong> Click &quot;Start Camera&quot;
-              and position QR codes in the viewfinder
+              • <strong>QR Code Scanning:</strong> Click "Start QR Scanner" and
+              position QR codes in the target area
+            </p>
+            <p>
+              • <strong>Automatic Detection:</strong> The scanner will
+              automatically detect and validate QR codes
             </p>
             <p>
               • <strong>Manual Entry:</strong> Type ticket ID and press Enter or
-              click &quot;Validate&quot;
+              click "Validate"
             </p>
             <p>
               • <strong>Audio Feedback:</strong> Listen for success (two beeps)
@@ -637,8 +708,8 @@ export function TicketScanner({
               red (error) animations
             </p>
             <p>
-              • <strong>Status Tracking:</strong> Monitor scan count and timing
-              in the dashboard above
+              • <strong>Event Validation:</strong> QR codes are automatically
+              validated for the correct event
             </p>
           </div>
         </CardContent>
