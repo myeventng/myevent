@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Bell, Check, X, ExternalLink } from 'lucide-react';
+import { Bell, Check, X, ExternalLink, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -21,6 +21,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { NotificationPreviewModal } from './notification-preview-modal';
 
 interface NotificationBellProps {
   className?: string;
@@ -31,6 +32,10 @@ export function NotificationBell({ className }: NotificationBellProps) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<any | null>(
+    null
+  );
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   // Fetch notifications and unread count
   const fetchNotifications = async () => {
@@ -67,7 +72,15 @@ export function NotificationBell({ className }: NotificationBellProps) {
   }, []);
 
   // Handle notification click
-  const handleNotificationClick = async (notification: any) => {
+  const handleNotificationClick = async (
+    notification: any,
+    event: React.MouseEvent
+  ) => {
+    // Prevent the click if it's on a button
+    if ((event.target as HTMLElement).closest('button')) {
+      return;
+    }
+
     if (notification.status === 'UNREAD') {
       const result = await markNotificationAsRead(notification.id);
       if (result.success) {
@@ -79,13 +92,28 @@ export function NotificationBell({ className }: NotificationBellProps) {
         setUnreadCount((prev) => Math.max(0, prev - 1));
       }
     }
+
+    // Navigate to action URL if available
+    if (notification.actionUrl) {
+      window.open(notification.actionUrl, '_blank');
+      setIsOpen(false);
+    }
+  };
+
+  // Handle preview click
+  const handlePreviewClick = (notification: any, event: React.MouseEvent) => {
+    event.stopPropagation();
+    event.preventDefault();
+    setSelectedNotification(notification);
+    setIsPreviewOpen(true);
+    setIsOpen(false);
   };
 
   // Handle mark all as read
   const handleMarkAllAsRead = async () => {
     const result = await markAllNotificationsAsRead();
     if (result.success) {
-      setNotifications((prev) => prev.map((n) => ({ ...n, status: 'READ' })));
+      setNotifications((prev) => prev.map((n) => ({ ...n, status: 'read' })));
       setUnreadCount(0);
       toast.success('All notifications marked as read');
     }
@@ -109,6 +137,39 @@ export function NotificationBell({ className }: NotificationBellProps) {
       if (deletedNotification?.status === 'UNREAD') {
         setUnreadCount((prev) => Math.max(0, prev - 1));
       }
+      toast.success('Notification deleted');
+    }
+  };
+
+  // Handle mark as read from preview modal
+  const handleMarkAsReadFromModal = async (notificationId: string) => {
+    const result = await markNotificationAsRead(notificationId);
+    if (result.success) {
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.id === notificationId ? { ...n, status: 'read' } : n
+        )
+      );
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+      setSelectedNotification((prev: any) =>
+        prev ? { ...prev, status: 'read' } : prev
+      );
+    }
+  };
+
+  // Handle delete from preview modal
+  const handleDeleteFromModal = async (notificationId: string) => {
+    const result = await deleteNotification(notificationId);
+    if (result.success) {
+      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+      const deletedNotification = notifications.find(
+        (n) => n.id === notificationId
+      );
+      if (deletedNotification?.status === 'UNREAD') {
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      }
+      setSelectedNotification(null);
+      setIsPreviewOpen(false);
       toast.success('Notification deleted');
     }
   };
@@ -140,109 +201,108 @@ export function NotificationBell({ className }: NotificationBellProps) {
   };
 
   return (
-    <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className={className}>
-          <div className="relative">
-            <Bell className="w-5 h-5" />
+    <>
+      <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className={className}>
+            <div className="relative">
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <Badge
+                  variant="destructive"
+                  className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                >
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Badge>
+              )}
+            </div>
+          </Button>
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent className="w-96 p-0" align="end">
+          <div className="flex items-center justify-between p-4 border-b">
+            <h3 className="font-semibold">Notifications</h3>
             {unreadCount > 0 && (
-              <Badge
-                variant="destructive"
-                className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs"
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleMarkAllAsRead}
+                className="text-xs"
               >
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </Badge>
+                <Check className="w-3 h-3 mr-1" />
+                Mark all read
+              </Button>
             )}
           </div>
-        </Button>
-      </DropdownMenuTrigger>
 
-      <DropdownMenuContent className="w-96 p-0" align="end">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="font-semibold">Notifications</h3>
-          {unreadCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleMarkAllAsRead}
-              className="text-xs"
-            >
-              <Check className="w-3 h-3 mr-1" />
-              Mark all read
-            </Button>
+          <ScrollArea className="h-96">
+            {isLoading ? (
+              <div className="flex items-center justify-center p-8">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center">
+                <Bell className="w-8 h-8 text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  No notifications yet
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {notifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    className={`p-4 hover:bg-muted/50 cursor-pointer transition-colors ${
+                      notification.status === 'UNREAD' ? 'bg-blue-50' : ''
+                    }`}
+                    onClick={(e) => handleNotificationClick(notification, e)}
+                  >
+                    <NotificationItem
+                      notification={notification}
+                      onDelete={(e) =>
+                        handleDeleteNotification(notification.id, e)
+                      }
+                      onPreview={(e) => handlePreviewClick(notification, e)}
+                      getIcon={getNotificationIcon}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+
+          {notifications.length > 0 && (
+            <>
+              <Separator />
+              <div className="p-2">
+                <Link href="/admin/dashboard/notifications">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-center text-sm"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    View all notifications
+                    <ExternalLink className="w-3 h-3 ml-1" />
+                  </Button>
+                </Link>
+              </div>
+            </>
           )}
-        </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
-        <ScrollArea className="h-96">
-          {isLoading ? (
-            <div className="flex items-center justify-center p-8">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-            </div>
-          ) : notifications.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-8 text-center">
-              <Bell className="w-8 h-8 text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">
-                No notifications yet
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {notifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`p-4 hover:bg-muted/50 cursor-pointer transition-colors ${
-                    notification.status === 'UNREAD' ? 'bg-blue-50' : ''
-                  }`}
-                >
-                  {notification.actionUrl ? (
-                    <Link
-                      href={notification.actionUrl}
-                      onClick={() => handleNotificationClick(notification)}
-                      className="block"
-                    >
-                      <NotificationItem
-                        notification={notification}
-                        onDelete={(e) =>
-                          handleDeleteNotification(notification.id, e)
-                        }
-                        getIcon={getNotificationIcon}
-                      />
-                    </Link>
-                  ) : (
-                    <div onClick={() => handleNotificationClick(notification)}>
-                      <NotificationItem
-                        notification={notification}
-                        onDelete={(e) =>
-                          handleDeleteNotification(notification.id, e)
-                        }
-                        getIcon={getNotificationIcon}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </ScrollArea>
-
-        {notifications.length > 0 && (
-          <>
-            <Separator />
-            <div className="p-2">
-              <Link href="/dashboard/notifications">
-                <Button
-                  variant="ghost"
-                  className="w-full justify-center text-sm"
-                >
-                  View all notifications
-                  <ExternalLink className="w-3 h-3 ml-1" />
-                </Button>
-              </Link>
-            </div>
-          </>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      {/* Preview Modal */}
+      <NotificationPreviewModal
+        notification={selectedNotification}
+        isOpen={isPreviewOpen}
+        onClose={() => {
+          setIsPreviewOpen(false);
+          setSelectedNotification(null);
+        }}
+        onMarkAsRead={handleMarkAsReadFromModal}
+        onDelete={handleDeleteFromModal}
+      />
+    </>
   );
 }
 
@@ -250,10 +310,12 @@ export function NotificationBell({ className }: NotificationBellProps) {
 function NotificationItem({
   notification,
   onDelete,
+  onPreview,
   getIcon,
 }: {
   notification: any;
   onDelete: (e: React.MouseEvent) => void;
+  onPreview: (e: React.MouseEvent) => void;
   getIcon: (type: string) => string;
 }) {
   return (
@@ -278,8 +340,18 @@ function NotificationItem({
             <Button
               variant="ghost"
               size="sm"
+              onClick={onPreview}
+              className="h-6 w-6 p-0 hover:bg-blue-100"
+              title="Preview notification"
+            >
+              <Eye className="w-3 h-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={onDelete}
               className="h-6 w-6 p-0 hover:bg-destructive hover:text-destructive-foreground"
+              title="Delete notification"
             >
               <X className="w-3 h-3" />
             </Button>
