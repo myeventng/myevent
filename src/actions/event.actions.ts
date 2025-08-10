@@ -1609,7 +1609,7 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
   const { role, subRole, id: userId } = session.user;
 
   try {
-    // Check if event exists
+    // Check if event exists with comprehensive relations
     const event = await prisma.event.findUnique({
       where: { id },
       include: {
@@ -1618,7 +1618,14 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
             tickets: true,
           },
         },
-        orders: true,
+        orders: {
+          include: {
+            tickets: true,
+          },
+        },
+        waitingList: true,
+        ratings: true,
+        Notification: true, // Note: Capital 'N' as per your schema
       },
     });
 
@@ -1668,9 +1675,64 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
       };
     }
 
-    // If no orders or tickets, we can safely delete
-    await prisma.event.delete({
-      where: { id },
+    // If no orders or tickets, we need to delete in the correct order to avoid foreign key constraints
+    await prisma.$transaction(async (tx) => {
+      // Delete in reverse dependency order
+
+      // 1. Delete notifications
+      await tx.notification.deleteMany({
+        where: { eventId: id },
+      });
+
+      // 2. Delete ratings
+      await tx.rating.deleteMany({
+        where: { eventId: id },
+      });
+
+      // 3. Delete waiting list entries
+      await tx.waitingList.deleteMany({
+        where: { eventId: id },
+      });
+
+      // 4. Delete tickets (if any exist without orders)
+      const ticketTypeIds = event.ticketTypes.map((tt) => tt.id);
+      if (ticketTypeIds.length > 0) {
+        // Delete ticket validations first
+        await tx.ticketValidation.deleteMany({
+          where: {
+            ticket: {
+              ticketTypeId: { in: ticketTypeIds },
+            },
+          },
+        });
+
+        // Delete tickets
+        await tx.ticket.deleteMany({
+          where: {
+            ticketTypeId: { in: ticketTypeIds },
+          },
+        });
+      }
+
+      // 5. Delete ticket types
+      await tx.ticketType.deleteMany({
+        where: { eventId: id },
+      });
+
+      // 6. Disconnect tags (many-to-many relationship)
+      await tx.event.update({
+        where: { id },
+        data: {
+          tags: {
+            set: [], // Disconnect all tags
+          },
+        },
+      });
+
+      // 7. Finally delete the event
+      await tx.event.delete({
+        where: { id },
+      });
     });
 
     revalidatePath('/admin/events');
@@ -1689,14 +1751,409 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
     if (error instanceof Error) {
       console.error('Error details:', error.message);
       console.error('Error stack:', error.stack);
+
+      // Check for specific database constraint errors
+      if (error.message.includes('foreign key constraint')) {
+        return {
+          success: false,
+          message:
+            'Cannot delete event due to existing related data. Try cancelling the event instead.',
+        };
+      }
+
+      if (error.message.includes('Record to delete does not exist')) {
+        return {
+          success: false,
+          message: 'Event not found or already deleted',
+        };
+      }
     }
 
     return {
       success: false,
-      message: 'Failed to delete event',
+      message: 'Failed to delete event. Please try again or contact support.',
     };
   }
 }
+
+export async function hardDeleteEvent(
+  id: string
+): Promise<ActionResponse<null>> {
+  // Get session for authentication
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session) {
+    return {
+      success: false,
+      message: 'Not authenticated',
+    };
+  }
+
+  const { role, subRole, id: adminUserId } = session.user;
+
+  // STRICT PERMISSION CHECK - Only SUPER_ADMIN can perform hard delete
+  if (role !== 'ADMIN' || subRole !== 'SUPER_ADMIN') {
+    return {
+      success: false,
+      message: 'Only Super Administrators can perform hard delete operations',
+    };
+  }
+
+  try {
+    console.log(`Starting hard delete for event ID: ${id}`);
+
+    // Check if event exists and get full data for audit log
+    const event = await prisma.event.findUnique({
+      where: { id },
+      include: {
+        ticketTypes: {
+          include: {
+            tickets: {
+              include: {
+                order: true,
+                validations: true,
+              },
+            },
+          },
+        },
+        orders: {
+          include: {
+            tickets: true,
+            Notification: true,
+          },
+        },
+        waitingList: true,
+        ratings: true,
+        Notification: true,
+        tags: true,
+        category: true,
+        venue: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    if (!event) {
+      console.log(`Event not found: ${id}`);
+      return {
+        success: false,
+        message: 'Event not found',
+      };
+    }
+
+    console.log(`Event found: ${event.title}`);
+    console.log(`Ticket types: ${event.ticketTypes.length}`);
+    console.log(`Orders: ${event.orders.length}`);
+    console.log(`Ratings: ${event.ratings.length}`);
+    console.log(`Notifications: ${event.Notification.length}`);
+    console.log(`Waiting list: ${event.waitingList.length}`);
+
+    // Get client IP and user agent for audit trail
+    const headerList = await headers();
+    const ipAddress =
+      headerList.get('x-forwarded-for') ||
+      headerList.get('x-real-ip') ||
+      'unknown';
+    const userAgent = headerList.get('user-agent') || 'unknown';
+
+    // Perform hard delete in transaction with audit logging
+    await prisma.$transaction(async (tx) => {
+      console.log('Starting transaction...');
+
+      try {
+        // Create comprehensive audit log BEFORE deletion
+        console.log('Creating initial audit log...');
+        await tx.auditLog.create({
+          data: {
+            userId: adminUserId,
+            action: 'HARD_DELETE',
+            entity: 'EVENT',
+            entityId: id,
+            oldValues: {
+              event: {
+                id: event.id,
+                title: event.title,
+                slug: event.slug,
+                description: event.description,
+                startDateTime: event.startDateTime?.toISOString(),
+                endDateTime: event.endDateTime?.toISOString(),
+                publishedStatus: event.publishedStatus,
+                isCancelled: event.isCancelled,
+                featured: event.featured,
+                userId: event.userId,
+                venueId: event.venueId,
+                categoryId: event.categoryId,
+                createdAt: event.createdAt?.toISOString(),
+                updatedAt: event.updatedAt?.toISOString(),
+              },
+              organizer: event.user,
+              venue: event.venue?.name,
+              category: event.category?.name,
+              tags: event.tags.map((tag) => tag.name),
+              ticketTypesCount: event.ticketTypes.length,
+              ticketsCount: event.ticketTypes.reduce(
+                (sum, tt) => sum + tt.tickets.length,
+                0
+              ),
+              ordersCount: event.orders.length,
+              ratingsCount: event.ratings.length,
+              waitingListCount: event.waitingList.length,
+              notificationsCount: event.Notification.length,
+              totalRevenue: event.orders.reduce(
+                (sum, order) => sum + order.totalAmount,
+                0
+              ),
+            },
+            newValues: { deleted: true },
+            ipAddress,
+            userAgent,
+          },
+        });
+
+        // 1. Delete all ticket validations
+        console.log('Deleting ticket validations...');
+        const ticketTypeIds = event.ticketTypes.map((tt) => tt.id);
+        if (ticketTypeIds.length > 0) {
+          const deletedValidations = await tx.ticketValidation.deleteMany({
+            where: {
+              ticket: {
+                ticketTypeId: { in: ticketTypeIds },
+              },
+            },
+          });
+          console.log(`Deleted ${deletedValidations.count} ticket validations`);
+        }
+
+        // 2. Delete all tickets
+        console.log('Deleting tickets...');
+        if (ticketTypeIds.length > 0) {
+          const deletedTickets = await tx.ticket.deleteMany({
+            where: {
+              ticketTypeId: { in: ticketTypeIds },
+            },
+          });
+          console.log(`Deleted ${deletedTickets.count} tickets`);
+        }
+
+        // 3. Delete all order notifications
+        console.log('Deleting order notifications...');
+        const orderIds = event.orders.map((order) => order.id);
+        if (orderIds.length > 0) {
+          const deletedOrderNotifications = await tx.notification.deleteMany({
+            where: {
+              orderId: { in: orderIds },
+            },
+          });
+          console.log(
+            `Deleted ${deletedOrderNotifications.count} order notifications`
+          );
+        }
+
+        // 4. Delete all orders
+        console.log('Deleting orders...');
+        if (orderIds.length > 0) {
+          const deletedOrders = await tx.order.deleteMany({
+            where: { eventId: id },
+          });
+          console.log(`Deleted ${deletedOrders.count} orders`);
+        }
+
+        // 5. Delete all ticket types
+        console.log('Deleting ticket types...');
+        const deletedTicketTypes = await tx.ticketType.deleteMany({
+          where: { eventId: id },
+        });
+        console.log(`Deleted ${deletedTicketTypes.count} ticket types`);
+
+        // 6. Delete all event notifications
+        console.log('Deleting event notifications...');
+        const deletedEventNotifications = await tx.notification.deleteMany({
+          where: { eventId: id },
+        });
+        console.log(
+          `Deleted ${deletedEventNotifications.count} event notifications`
+        );
+
+        // 7. Delete all ratings
+        console.log('Deleting ratings...');
+        const deletedRatings = await tx.rating.deleteMany({
+          where: { eventId: id },
+        });
+        console.log(`Deleted ${deletedRatings.count} ratings`);
+
+        // 8. Delete all waiting list entries
+        console.log('Deleting waiting list entries...');
+        const deletedWaitingList = await tx.waitingList.deleteMany({
+          where: { eventId: id },
+        });
+        console.log(`Deleted ${deletedWaitingList.count} waiting list entries`);
+
+        // 8.5. Delete any audit logs that reference this event (optional - be careful!)
+        console.log('Deleting event-related audit logs...');
+        const deletedAuditLogs = await tx.auditLog.deleteMany({
+          where: {
+            entity: 'EVENT',
+            entityId: id,
+          },
+        });
+        console.log(`Deleted ${deletedAuditLogs.count} audit logs`);
+
+        // 9. Disconnect tags (many-to-many relationship)
+        console.log('Disconnecting tags...');
+        await tx.event.update({
+          where: { id },
+          data: {
+            tags: {
+              set: [], // Disconnect all tags
+            },
+          },
+        });
+        console.log('Tags disconnected');
+
+        // 10. Finally delete the event itself
+        console.log('Deleting event...');
+        await tx.event.delete({
+          where: { id },
+        });
+        console.log('Event deleted successfully');
+
+        // Log additional audit entry for successful completion
+        console.log('Creating completion audit log...');
+        await tx.auditLog.create({
+          data: {
+            userId: adminUserId,
+            action: 'HARD_DELETE_COMPLETED',
+            entity: 'EVENT',
+            entityId: id,
+            oldValues: undefined,
+            newValues: {
+              deletedAt: new Date().toISOString(),
+              deletedBy: adminUserId,
+              eventTitle: event.title,
+              totalRecordsDeleted: {
+                tickets: event.ticketTypes.reduce(
+                  (sum, tt) => sum + tt.tickets.length,
+                  0
+                ),
+                orders: event.orders.length,
+                ratings: event.ratings.length,
+                notifications: event.Notification.length,
+                waitingList: event.waitingList.length,
+                ticketTypes: event.ticketTypes.length,
+              },
+            },
+            ipAddress,
+            userAgent,
+          },
+        });
+        console.log('Transaction completed successfully');
+      } catch (transactionError) {
+        console.error('Error in transaction:', transactionError);
+        throw transactionError; // Re-throw to trigger transaction rollback
+      }
+    });
+
+    // Revalidate all relevant paths
+    revalidatePath('/admin/events');
+    revalidatePath('/admin/dashboard/events');
+    revalidatePath('/dashboard/events');
+    revalidatePath('/events');
+    revalidatePath(`/events/${event.slug}`);
+
+    console.log('Hard delete completed successfully');
+    return {
+      success: true,
+      message: `Event "${event.title}" and all related data have been permanently deleted. This action has been logged for audit purposes.`,
+    };
+  } catch (error) {
+    console.error('Error performing hard delete:', error);
+
+    // Log the full error details
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+
+      // Check for specific Prisma errors
+      if (error.message.includes('P2003')) {
+        console.error('Foreign key constraint failure');
+      }
+      if (error.message.includes('P2025')) {
+        console.error('Record not found');
+      }
+      if (error.message.includes('P2002')) {
+        console.error('Unique constraint failure');
+      }
+    }
+
+    // Log failed deletion attempt with more details
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: adminUserId,
+          action: 'HARD_DELETE_FAILED',
+          entity: 'EVENT',
+          entityId: id,
+          oldValues: {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            errorName: error instanceof Error ? error.name : 'Unknown',
+            stack: error instanceof Error ? error.stack : undefined,
+            timestamp: new Date().toISOString(),
+          },
+          newValues: { failed: true },
+          ipAddress: (await headers()).get('x-forwarded-for') || 'unknown',
+          userAgent: (await headers()).get('user-agent') || 'unknown',
+        },
+      });
+    } catch (auditError) {
+      console.error('Failed to log audit entry:', auditError);
+    }
+
+    // Return more specific error message
+    if (error instanceof Error) {
+      if (
+        error.message.includes('foreign key constraint') ||
+        error.message.includes('P2003')
+      ) {
+        return {
+          success: false,
+          message:
+            'Database constraint error: Some related data still exists that prevents deletion.',
+        };
+      }
+
+      if (
+        error.message.includes('Record to delete does not exist') ||
+        error.message.includes('P2025')
+      ) {
+        return {
+          success: false,
+          message: 'Event not found or already deleted.',
+        };
+      }
+
+      // Return the actual error message for debugging
+      return {
+        success: false,
+        message: `Hard delete failed: ${error.message}`,
+      };
+    }
+
+    return {
+      success: false,
+      message: 'Failed to perform hard delete. Check server logs for details.',
+    };
+  }
+}
+
 export async function publishEvent(id: string): Promise<ActionResponse<any>> {
   // Validate user permission
   const permissionCheck = await validateUserPermission();

@@ -14,6 +14,7 @@ import {
   ChevronsRight,
   Trash2,
   BarChart3,
+  AlertTriangle, // New icon for hard delete
 } from 'lucide-react';
 import {
   useReactTable,
@@ -59,11 +60,13 @@ import {
   publishEvent,
   toggleEventFeatured,
   deleteEvent,
+  hardDeleteEvent, // Import the new hard delete function
 } from '@/actions/event.actions';
 import { toast } from 'sonner';
 import { PublishedStatus } from '@/generated/prisma';
 import { EventPreviewModal } from '../events/event-preview-modal';
 import { EventAnalyticsModal } from '@/components/events/event-analystics-modal';
+import { HardDeleteConfirmationDialog } from '@/components/admin/hard-delete-confirmation-dialog';
 
 interface AdminEventsTableProps {
   initialData: any[];
@@ -86,6 +89,9 @@ export function AdminEventsTable({
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
+
+  // Check if user is SUPER_ADMIN
+  const isSuperAdmin = userRole === 'ADMIN' && userSubRole === 'SUPER_ADMIN';
 
   // Format date and time
   const formatDateTime = (dateString: string) => {
@@ -208,7 +214,7 @@ export function AdminEventsTable({
     }
   };
 
-  // Handle event deletion (SUPER_ADMIN only)
+  // Handle regular event deletion
   const handleDeleteEvent = async (id: string) => {
     if (userSubRole !== 'SUPER_ADMIN') {
       toast.error('Only Super Admins can delete events');
@@ -221,7 +227,6 @@ export function AdminEventsTable({
       const response = await deleteEvent(id);
 
       if (response.success) {
-        // Remove from list or mark as cancelled based on the response
         setData((prevData) => prevData.filter((event) => event.id !== id));
         toast.success('Event deleted successfully');
       } else {
@@ -232,6 +237,28 @@ export function AdminEventsTable({
       toast.error('Failed to delete event');
     } finally {
       setIsUpdating((prev) => ({ ...prev, [`delete-${id}`]: false }));
+    }
+  };
+
+  // Handle HARD DELETE (SUPER_ADMIN only)
+  const handleHardDeleteEvent = async (id: string, eventTitle: string) => {
+    try {
+      setIsUpdating((prev) => ({ ...prev, [`hard-delete-${id}`]: true }));
+
+      const response = await hardDeleteEvent(id);
+
+      if (response.success) {
+        // Remove from list completely
+        setData((prevData) => prevData.filter((event) => event.id !== id));
+        toast.success(response.message || 'Event permanently deleted');
+      } else {
+        toast.error(response.message || 'Failed to perform hard delete');
+      }
+    } catch (error) {
+      console.error('Error performing hard delete:', error);
+      toast.error('Failed to perform hard delete');
+    } finally {
+      setIsUpdating((prev) => ({ ...prev, [`hard-delete-${id}`]: false }));
     }
   };
 
@@ -369,7 +396,6 @@ export function AdminEventsTable({
         const isAdmin =
           userRole === 'ADMIN' &&
           ['STAFF', 'SUPER_ADMIN'].includes(userSubRole);
-        const isSuperAdmin = userSubRole === 'SUPER_ADMIN';
         const isPendingOrDraft = ['PENDING_REVIEW', 'DRAFT'].includes(
           event.publishedStatus
         );
@@ -463,6 +489,32 @@ export function AdminEventsTable({
                 </AlertDialogContent>
               </AlertDialog>
             )}
+
+            {/* HARD DELETE - Only visible to SUPER_ADMIN */}
+            {isSuperAdmin && (
+              <HardDeleteConfirmationDialog
+                trigger={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={isUpdating[`hard-delete-${event.id}`]}
+                    className="text-red-800 hover:text-red-900 hover:bg-red-50"
+                    title="Hard Delete - Permanently removes all data"
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                  </Button>
+                }
+                event={{
+                  id: event.id,
+                  title: event.title,
+                  createdAt: event.createdAt,
+                  publishedStatus: event.publishedStatus,
+                  user: event.user,
+                }}
+                isLoading={isUpdating[`hard-delete-${event.id}`] || false}
+                onConfirm={handleHardDeleteEvent}
+              />
+            )}
           </div>
         );
       },
@@ -550,6 +602,22 @@ export function AdminEventsTable({
           </Button>
         </div>
       </div>
+
+      {/* Admin Notice for Hard Delete Feature */}
+      {isSuperAdmin && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-3">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-red-600" />
+            <p className="text-sm text-red-800">
+              <strong>Super Admin Notice:</strong> You have access to Hard
+              Delete functionality (
+              <AlertTriangle className="h-3 w-3 inline mx-1" />
+              icon). This permanently removes all event data and cannot be
+              undone.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="rounded-md border">
