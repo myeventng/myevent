@@ -368,7 +368,7 @@ export async function createOrganizerUpgradeNotification(
       type: 'SYSTEM_UPDATE',
       title: 'New Organizer Registration 🎉',
       message: `${user.name || 'A user'} has created an organizer profile for "${user.organizerProfile?.organizationName}" and been upgraded to organizer status.`,
-      actionUrl: `/admin/dashboard/organizers`,
+      actionUrl: `/admin/dashboard/events/organizers`,
       isAdminNotification: true,
       metadata: {
         userId: user.id,

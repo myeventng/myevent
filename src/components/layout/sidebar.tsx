@@ -33,6 +33,7 @@ import {
   XCircle, // Added Bell icon
   DollarSign,
   CreditCard,
+  ShoppingCart, // Added ShoppingCart icon for orders
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -85,6 +86,12 @@ export function Sidebar({
       if (pathname.includes('/users')) newExpanded.push('admin-users');
       if (pathname.includes('/notifications'))
         newExpanded.push('admin-notifications');
+      if (
+        pathname.includes('/orders') ||
+        pathname.includes('/payouts') ||
+        pathname.includes('/revenue')
+      )
+        newExpanded.push('admin-finances');
     } else {
       if (pathname.includes('/events') || pathname.includes('/events/create')) {
         newExpanded.push('organizer-events');
@@ -119,6 +126,11 @@ export function Sidebar({
       icon: <LayoutDashboard className="w-5 h-5" />,
     },
     {
+      title: 'Order Management', // NEW: Order Management for Admin
+      href: '/admin/dashboard/orders',
+      icon: <ShoppingCart className="w-5 h-5" />,
+    },
+    {
       title: 'Notifications',
       href: '/admin/dashboard/notifications',
       icon: <Bell className="w-5 h-5" />,
@@ -136,11 +148,6 @@ export function Sidebar({
           title: 'All Users',
           href: '/admin/dashboard/users',
           icon: <List className="w-4 h-4" />,
-        },
-        {
-          title: 'Organizers',
-          href: '/admin/dashboard/users/organizers',
-          icon: <UserCog className="w-4 h-4" />,
         },
       ],
     },
@@ -167,6 +174,11 @@ export function Sidebar({
           title: 'Featured Events',
           href: '/admin/dashboard/events/featured',
           icon: <Star className="w-4 h-4" />,
+        },
+        {
+          title: 'Organizers',
+          href: '/admin/dashboard/events/organizers',
+          icon: <UserCog className="w-4 h-4" />,
         },
         {
           title: 'Categories',
@@ -218,7 +230,7 @@ export function Sidebar({
       ],
     },
     {
-      title: 'Finances', // NEW SECTION
+      title: 'Finances',
       icon: <DollarSign className="w-5 h-5" />,
       children: [
         {
@@ -338,7 +350,12 @@ export function Sidebar({
       ],
     },
     {
-      title: 'Analytics & Payouts', // NEW SECTION
+      title: 'Orders', // NEW: Orders for Organizers
+      href: '/dashboard/orders',
+      icon: <ShoppingCart className="w-5 h-5" />,
+    },
+    {
+      title: 'Analytics & Payouts',
       href: '/dashboard/analytics',
       icon: <BarChart3 className="w-5 h-5" />,
     },
@@ -383,6 +400,7 @@ export function Sidebar({
       if (item.title === 'Tickets') return 'admin-tickets';
       if (item.title === 'Users') return 'admin-users';
       if (item.title === 'Notifications') return 'admin-notifications';
+      if (item.title === 'Finances') return 'admin-finances';
     } else {
       if (item.title === 'Events') return 'organizer-events';
       if (item.title === 'Venues') return 'organizer-venues';

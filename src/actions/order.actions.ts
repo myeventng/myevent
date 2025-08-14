@@ -964,3 +964,70 @@ export async function getOrganizerOrders(
     };
   }
 }
+
+// Get all orders (admin only)
+export async function getAllOrders(): Promise<ActionResponse<any[]>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session || session.user.role !== 'ADMIN') {
+    return {
+      success: false,
+      message: 'Admin access required',
+    };
+  }
+
+  try {
+    const orders = await prisma.order.findMany({
+      include: {
+        event: {
+          include: {
+            venue: {
+              include: {
+                city: true,
+              },
+            },
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+        buyer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        tickets: {
+          include: {
+            ticketType: {
+              select: {
+                name: true,
+                price: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      success: true,
+      data: orders,
+    };
+  } catch (error) {
+    console.error('Error fetching all orders:', error);
+    return {
+      success: false,
+      message: 'Failed to fetch orders',
+    };
+  }
+}
