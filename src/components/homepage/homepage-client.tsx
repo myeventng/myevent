@@ -117,77 +117,58 @@ export function HomepageClient() {
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [isHeroLoading, setIsHeroLoading] = useState(true);
+  const [isHeroLoading, setIsHeroLoading] = useState(false); // Changed to false for immediate display
   const [sectionsLoaded, setSectionsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch hero data immediately for faster initial load
+  // Fetch all data immediately but prioritize hero data
   useEffect(() => {
-    const fetchHeroData = async () => {
+    const fetchAllData = async () => {
       try {
         setError(null);
 
-        // Only fetch featured events for hero section first
-        const featuredResponse = await getFeaturedEvents();
+        // Start all requests in parallel for maximum speed
+        const [featuredResponse, eventsResponse, filterResponse, blogResponse] =
+          await Promise.all([
+            getFeaturedEvents(),
+            getEventsWithFilters({
+              page: 1,
+              limit: 9,
+              featured: false,
+            }),
+            getEventFilterOptions(),
+            getPublishedBlogs(1, 3),
+          ]);
 
+        // Set featured events immediately for hero
         if (featuredResponse.success && featuredResponse.data) {
           setFeaturedEvents(featuredResponse.data);
         }
+
+        // Set other data
+        if (eventsResponse.success && eventsResponse.data) {
+          setRegularEvents(eventsResponse.data.events);
+        }
+
+        if (filterResponse.success && filterResponse.data) {
+          setCategories(filterResponse.data.categories);
+        }
+
+        if (blogResponse.success && blogResponse.data) {
+          setBlogPosts(blogResponse.data.blogs);
+        }
+
+        setSectionsLoaded(true);
       } catch (error) {
-        console.error('Error fetching hero data:', error);
-        setError('Failed to load events');
-      } finally {
-        setIsHeroLoading(false);
+        console.error('Error fetching data:', error);
+        setError('Failed to load content');
+        // Even on error, show the hero section
+        setSectionsLoaded(true);
       }
     };
 
-    fetchHeroData();
+    fetchAllData();
   }, []);
-
-  // Fetch remaining data after hero loads
-  useEffect(() => {
-    if (!isHeroLoading && !sectionsLoaded) {
-      const fetchRemainingData = async () => {
-        try {
-          // Fetch non-critical data in parallel
-          const [eventsResponse, filterResponse, blogResponse] =
-            await Promise.all([
-              getEventsWithFilters({
-                page: 1,
-                limit: 9,
-                featured: false,
-              }),
-              getEventFilterOptions(),
-              getPublishedBlogs(1, 3),
-            ]);
-
-          // Handle regular events
-          if (eventsResponse.success && eventsResponse.data) {
-            setRegularEvents(eventsResponse.data.events);
-          }
-
-          // Handle filter options for categories
-          if (filterResponse.success && filterResponse.data) {
-            setCategories(filterResponse.data.categories);
-          }
-
-          // Handle blog posts
-          if (blogResponse.success && blogResponse.data) {
-            setBlogPosts(blogResponse.data.blogs);
-          }
-
-          setSectionsLoaded(true);
-        } catch (error) {
-          console.error('Error fetching remaining data:', error);
-          toast.error('Some content failed to load');
-        }
-      };
-
-      // Delay slightly to let hero render first
-      const timer = setTimeout(fetchRemainingData, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [isHeroLoading, sectionsLoaded]);
 
   // Fetch filtered events when category changes
   useEffect(() => {
@@ -238,7 +219,7 @@ export function HomepageClient() {
     }
   }, [selectedCategory, categories, sectionsLoaded]);
 
-  if (error) {
+  if (error && !sectionsLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center max-w-md mx-auto p-6">
@@ -259,7 +240,7 @@ export function HomepageClient() {
 
   return (
     <div className="min-h-screen">
-      {/* Hero Section - Loads immediately */}
+      {/* Hero Section - Always shows immediately with welcome content or events */}
       <HeroSection featuredEvents={featuredEvents} isLoading={isHeroLoading} />
 
       {/* Progressive loading of other sections */}

@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Mail } from 'lucide-react';
+import { Mail, Ticket, Calendar, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -130,7 +130,7 @@ export const NewsletterSection: React.FC = () => {
           <div className="grid md:grid-cols-3 gap-6 mt-12 max-w-2xl mx-auto">
             <div className="text-center">
               <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                <span className="text-white text-xl">🎟️</span>
+                <Ticket className="h-6 w-6 text-white" />
               </div>
               <h3 className="text-white font-semibold mb-2">
                 Exclusive Offers
@@ -141,7 +141,7 @@ export const NewsletterSection: React.FC = () => {
             </div>
             <div className="text-center">
               <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                <span className="text-white text-xl">📅</span>
+                <Calendar className="h-6 w-6 text-white" />
               </div>
               <h3 className="text-white font-semibold mb-2">Event Updates</h3>
               <p className="text-white/70 text-sm">
@@ -150,7 +150,7 @@ export const NewsletterSection: React.FC = () => {
             </div>
             <div className="text-center">
               <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                <span className="text-white text-xl">💡</span>
+                <Lightbulb className="h-6 w-6 text-white" />
               </div>
               <h3 className="text-white font-semibold mb-2">Insider Tips</h3>
               <p className="text-white/70 text-sm">
