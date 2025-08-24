@@ -149,6 +149,11 @@ export function Sidebar({
           href: '/admin/dashboard/users',
           icon: <List className="w-4 h-4" />,
         },
+        {
+          title: 'Organizers',
+          href: '/admin/dashboard/users/organizers',
+          icon: <UserCog className="w-4 h-4" />,
+        },
       ],
     },
     {
@@ -174,11 +179,6 @@ export function Sidebar({
           title: 'Featured Events',
           href: '/admin/dashboard/events/featured',
           icon: <Star className="w-4 h-4" />,
-        },
-        {
-          title: 'Organizers',
-          href: '/admin/dashboard/events/organizers',
-          icon: <UserCog className="w-4 h-4" />,
         },
         {
           title: 'Categories',

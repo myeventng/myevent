@@ -1,5 +1,4 @@
 'use client';
-
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import {
@@ -60,9 +59,68 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
+import {
+  getOrganizersWithAnalytics,
+  verifyOrganizer,
+  suspendOrganizer,
+  sendMessageToOrganizer,
+  getOrganizerSummaryStats,
+} from '@/actions/admin-organizer.actions';
+
+// Updated interface to match Prisma model
+interface OrganizerWithAnalytics {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: Date;
+  organizerProfile?: {
+    id: string;
+    organizationName: string;
+    bio?: string | null;
+    website?: string | null;
+    businessRegistrationNumber?: string | null;
+    taxIdentificationNumber?: string | null;
+    organizationType?: string | null;
+    verificationStatus: string;
+    bankAccount?: string | null;
+    bankCode?: string | null;
+    accountName?: string | null;
+  } | null;
+  analytics: {
+    totalEvents: number;
+    publishedEvents: number;
+    pendingEvents: number;
+    draftEvents: number;
+    rejectedEvents: number;
+    totalTicketsSold: number;
+    totalRevenue: number;
+    averageRating: number;
+    totalRatings: number;
+    eventsThisMonth: number;
+    ticketsLast30Days: number;
+    revenueLast30Days: number;
+    lastEventDate?: Date;
+  };
+  revenue: {
+    grossRevenue: number;
+    platformFees: number;
+    refunds: number;
+    netEarnings: number;
+    totalPayouts: number;
+    pendingPayout: number;
+    lastPayoutDate?: Date;
+  };
+  recentEvents: Array<{
+    id: string;
+    title: string;
+    startDateTime: Date;
+    publishedStatus: string;
+    ticketsSold: number;
+  }>;
+}
 
 interface OrganizerPreviewModalProps {
-  organizer: any;
+  organizer: OrganizerWithAnalytics | null;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -418,7 +476,7 @@ function OrganizerPreviewModal({
 
               <div className="space-y-3">
                 {organizer.recentEvents?.length > 0 ? (
-                  organizer.recentEvents.map((event: any) => (
+                  organizer.recentEvents.map((event) => (
                     <Card key={event.id}>
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
@@ -558,103 +616,123 @@ function OrganizerPreviewModal({
 }
 
 export default function AdminOrganizersPage() {
-  const [organizers, setOrganizers] = useState<any[]>([]);
+  const [organizers, setOrganizers] = useState<OrganizerWithAnalytics[]>([]);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedOrganizer, setSelectedOrganizer] = useState<any>(null);
+  const [selectedOrganizer, setSelectedOrganizer] =
+    useState<OrganizerWithAnalytics | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [summaryStats, setSummaryStats] = useState({
+    totalOrganizers: 0,
+    verifiedOrganizers: 0,
+    pendingOrganizers: 0,
+    totalRevenue: 0,
+  });
 
-  // Mock data - replace with actual API call
+  // Fetch organizers data
   useEffect(() => {
-    const fetchOrganizers = async () => {
+    const fetchData = async () => {
       setIsLoading(true);
-      // Simulate API call
-      setTimeout(() => {
-        const mockOrganizers = [
-          {
-            id: '1',
-            name: 'John Doe',
-            email: 'john@eventcompany.com',
-            createdAt: new Date('2024-01-15'),
-            organizerProfile: {
-              organizationName: 'Event Masters Ltd',
-              organizationType: 'COMPANY',
-              verificationStatus: 'VERIFIED',
-              bio: 'Professional event management company with 10+ years experience.',
-              website: 'https://eventmasters.com',
-              businessRegistrationNumber: 'RC123456',
-              taxIdentificationNumber: 'TIN789012',
-              bankAccount: '1234567890',
-            },
-            analytics: {
-              totalEvents: 15,
-              publishedEvents: 12,
-              pendingEvents: 2,
-              draftEvents: 1,
-              rejectedEvents: 0,
-              totalTicketsSold: 2456,
-              totalRevenue: 15500000,
-              averageRating: 4.7,
-              totalRatings: 89,
-              eventsThisMonth: 3,
-              ticketsLast30Days: 145,
-              revenueLast30Days: 850000,
-              lastEventDate: new Date('2024-12-10'),
-            },
-            revenue: {
-              grossRevenue: 15500000,
-              platformFees: 775000,
-              refunds: 250000,
-              netEarnings: 14475000,
-              totalPayouts: 12000000,
-              pendingPayout: 2475000,
-              lastPayoutDate: new Date('2024-11-30'),
-            },
-            recentEvents: [
-              {
-                id: '1',
-                title: 'Tech Conference 2024',
-                startDateTime: new Date('2024-12-15'),
-                publishedStatus: 'PUBLISHED',
-                ticketsSold: 245,
-              },
-              {
-                id: '2',
-                title: 'Music Festival Lagos',
-                startDateTime: new Date('2024-12-22'),
-                publishedStatus: 'PUBLISHED',
-                ticketsSold: 1250,
-              },
-            ],
-          },
-          // Add more mock organizers...
-        ];
-        setOrganizers(mockOrganizers);
+      try {
+        const [organizersResult, statsResult] = await Promise.all([
+          getOrganizersWithAnalytics(),
+          getOrganizerSummaryStats(),
+        ]);
+
+        if (organizersResult.success && organizersResult.data) {
+          setOrganizers(organizersResult.data);
+        } else {
+          toast.error(organizersResult.message || 'Failed to fetch organizers');
+        }
+
+        if (statsResult.success && statsResult.data) {
+          setSummaryStats(statsResult.data);
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        toast.error('Failed to load organizers data');
+      } finally {
         setIsLoading(false);
-      }, 1000);
+      }
     };
 
-    fetchOrganizers();
+    fetchData();
   }, []);
 
-  const handlePreviewOrganizer = (organizer: any) => {
+  const handlePreviewOrganizer = (organizer: OrganizerWithAnalytics) => {
     setSelectedOrganizer(organizer);
     setShowPreviewModal(true);
   };
 
   const handleVerifyOrganizer = async (organizerId: string) => {
-    // Implement verification logic
-    toast.success('Organizer verified successfully');
+    try {
+      const result = await verifyOrganizer(organizerId);
+      if (result.success) {
+        toast.success(result.message || 'Organizer verified successfully');
+        // Refresh the organizers list
+        const organizersResult = await getOrganizersWithAnalytics();
+        if (organizersResult.success && organizersResult.data) {
+          setOrganizers(organizersResult.data);
+        }
+      } else {
+        toast.error(result.message || 'Failed to verify organizer');
+      }
+    } catch (error) {
+      console.error('Error verifying organizer:', error);
+      toast.error('An unexpected error occurred');
+    }
   };
 
   const handleSuspendOrganizer = async (organizerId: string) => {
-    // Implement suspension logic
-    toast.success('Organizer suspended successfully');
+    try {
+      const reason = prompt(
+        'Please provide a reason for suspension (optional):'
+      );
+      const result = await suspendOrganizer(organizerId, reason || undefined);
+
+      if (result.success) {
+        toast.success(result.message || 'Organizer suspended successfully');
+        // Refresh the organizers list
+        const organizersResult = await getOrganizersWithAnalytics();
+        if (organizersResult.success && organizersResult.data) {
+          setOrganizers(organizersResult.data);
+        }
+      } else {
+        toast.error(result.message || 'Failed to suspend organizer');
+      }
+    } catch (error) {
+      console.error('Error suspending organizer:', error);
+      toast.error('An unexpected error occurred');
+    }
   };
 
-  const columns: ColumnDef<any>[] = [
+  const handleSendMessage = async (
+    organizerId: string,
+    organizerName: string
+  ) => {
+    const title = prompt('Message title:');
+    if (!title) return;
+
+    const message = prompt('Message content:');
+    if (!message) return;
+
+    try {
+      const result = await sendMessageToOrganizer(organizerId, title, message);
+
+      if (result.success) {
+        toast.success(result.message || 'Message sent successfully');
+      } else {
+        toast.error(result.message || 'Failed to send message');
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast.error('An unexpected error occurred');
+    }
+  };
+
+  const columns: ColumnDef<OrganizerWithAnalytics>[] = [
     {
       id: 'organization',
       header: 'Organization',
@@ -767,19 +845,26 @@ export default function AdminOrganizersPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => handleVerifyOrganizer(organizer.id)}
-                >
-                  <UserCheck className="h-4 w-4 mr-2" />
-                  Verify Organizer
-                </DropdownMenuItem>
+                {organizer.organizerProfile?.verificationStatus !==
+                  'VERIFIED' && (
+                  <DropdownMenuItem
+                    onClick={() => handleVerifyOrganizer(organizer.id)}
+                  >
+                    <UserCheck className="h-4 w-4 mr-2" />
+                    Verify Organizer
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   onClick={() => handleSuspendOrganizer(organizer.id)}
                 >
                   <Ban className="h-4 w-4 mr-2" />
                   Suspend Account
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    handleSendMessage(organizer.id, organizer.name)
+                  }
+                >
                   <Mail className="h-4 w-4 mr-2" />
                   Send Message
                 </DropdownMenuItem>
@@ -846,7 +931,9 @@ export default function AdminOrganizersPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{organizers.length}</div>
+            <div className="text-2xl font-bold">
+              {summaryStats.totalOrganizers}
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -856,11 +943,7 @@ export default function AdminOrganizersPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {
-                organizers.filter(
-                  (o) => o.organizerProfile?.verificationStatus === 'VERIFIED'
-                ).length
-              }
+              {summaryStats.verifiedOrganizers}
             </div>
           </CardContent>
         </Card>
@@ -873,11 +956,7 @@ export default function AdminOrganizersPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {
-                organizers.filter(
-                  (o) => o.organizerProfile?.verificationStatus === 'PENDING'
-                ).length
-              }
+              {summaryStats.pendingOrganizers}
             </div>
           </CardContent>
         </Card>
@@ -888,14 +967,7 @@ export default function AdminOrganizersPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ₦
-              {(
-                organizers.reduce(
-                  (sum, o) => sum + (o.analytics?.totalRevenue || 0),
-                  0
-                ) / 1000000
-              ).toFixed(1)}
-              M
+              ₦{(summaryStats.totalRevenue / 1000000).toFixed(1)}M
             </div>
           </CardContent>
         </Card>
@@ -961,6 +1033,36 @@ export default function AdminOrganizersPage() {
             )}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Pagination */}
+      <div className="flex items-center justify-between space-x-2 py-4">
+        <div className="flex-1 text-sm text-muted-foreground">
+          {table.getFilteredSelectedRowModel().rows.length} of{' '}
+          {table.getFilteredRowModel().rows.length} row(s) selected.
+        </div>
+        <div className="flex items-center space-x-2">
+          <p className="text-sm font-medium">
+            Page {table.getState().pagination.pageIndex + 1} of{' '}
+            {table.getPageCount()}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => table.previousPage()}
+            disabled={!table.getCanPreviousPage()}
+          >
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => table.nextPage()}
+            disabled={!table.getCanNextPage()}
+          >
+            Next
+          </Button>
+        </div>
       </div>
 
       {/* Preview Modal */}
