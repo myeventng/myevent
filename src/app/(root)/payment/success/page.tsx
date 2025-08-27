@@ -1,5 +1,6 @@
 // app/payment/success/page.tsx
 import { prisma } from '@/lib/prisma';
+import Link from 'next/link';
 
 export default async function PaymentSuccess({
   searchParams,
@@ -26,9 +27,9 @@ export default async function PaymentSuccess({
           'Your order is confirmed.'
         )}
       </p>
-      <a className="underline" href="/dashboard/tickets">
+      <Link className="underline" href="/dashboard/tickets">
         Go to My Tickets
-      </a>
+      </Link>
     </main>
   );
 }
