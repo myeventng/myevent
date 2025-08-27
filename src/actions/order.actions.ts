@@ -11,6 +11,7 @@ import {
   WaitingStatus,
 } from '@/generated/prisma';
 import { createTicketNotification } from '@/actions/notification.actions';
+import { ticketEmailService } from '@/lib/email-service';
 import {
   getSetting,
   getPlatformFeePercentage,
@@ -309,6 +310,7 @@ export async function completeOrder(
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
+        buyer: true,
         event: {
           include: {
             ticketTypes: true,
@@ -319,7 +321,17 @@ export async function completeOrder(
             },
           },
         },
-        buyer: true,
+        tickets: {
+          include: {
+            ticketType: {
+              include: {
+                event: {
+                  include: { venue: { include: { city: true } } },
+                },
+              },
+            },
+          },
+        },
       },
     });
 
@@ -334,6 +346,15 @@ export async function completeOrder(
       return {
         success: false,
         message: 'Order already completed',
+        data: order,
+      };
+    }
+
+    // If event is not free, paystackReference must be provided
+    if (!order.event.isFree && order.totalAmount > 0 && !paystackReference) {
+      return {
+        success: false,
+        message: 'Missing payment reference for paid order',
       };
     }
 
@@ -349,7 +370,7 @@ export async function completeOrder(
       }
 
       const verifyResponse = await fetch(
-        `${paystackConfig.baseUrl}/transaction/verify/${paystackReference}`,
+        `${paystackConfig.baseUrl || 'https://api.paystack.co'}/transaction/verify/${paystackReference}`,
         {
           headers: {
             Authorization: `Bearer ${paystackConfig.secretKey}`,
@@ -359,84 +380,109 @@ export async function completeOrder(
 
       const verifyData = await verifyResponse.json();
 
-      if (!verifyData.status || verifyData.data.status !== 'success') {
-        return {
-          success: false,
-          message: 'Payment verification failed',
-        };
+      const statusOk =
+        Boolean(verifyData?.status) && verifyData?.data?.status === 'success';
+
+      if (!statusOk) {
+        return { success: false, message: 'Payment verification failed' };
       }
 
       // Check if payment amount matches order amount
-      const paidAmount = verifyData.data.amount / 100; // Convert from kobo
-      if (paidAmount !== order.totalAmount) {
-        return {
-          success: false,
-          message: 'Payment amount mismatch',
-        };
+      const paidKobo = Number(verifyData.data.amount); // integer from Paystack
+      const orderKobo = Math.round(Number(order.totalAmount) * 100);
+      if (paidKobo !== orderKobo) {
+        return { success: false, message: 'Payment amount mismatch' };
       }
+
+      // ❗ If you want the old naira-equality exactly, use this instead (less robust due to floats):
+      // const paidAmount = verifyData.data.amount / 100;
+      // if (paidAmount !== order.totalAmount) {
+      //   return { success: false, message: 'Payment amount mismatch' };
+      // }
+    }
+    function generateTicketId(orderId: string, idx: number) {
+      const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
+      return `TX-${orderId.slice(-6)}-${rand}-${idx + 1}`;
+    }
+    const availableTypes = order.event.ticketTypes.filter(
+      (tt) => tt.quantity > 0
+    );
+    if (availableTypes.length === 0) {
+      return { success: false, message: 'No ticket type available for event' };
     }
 
-    // Generate tickets based on order quantity
-    const ticketTypes = order.event.ticketTypes.filter((tt) => tt.quantity > 0);
+    let remaining = order.quantity;
     const ticketsToCreate: TicketToCreate[] = [];
+    let createdCount = 0;
 
-    // This is simplified - in production, you'd store the exact ticket selections
-    const remainingQuantity = order.quantity;
-    let createdQuantity = 0;
+    for (const tt of availableTypes) {
+      if (remaining <= 0) break;
 
-    for (const ticketType of ticketTypes) {
-      if (createdQuantity >= remainingQuantity) break;
+      const take = Math.min(tt.quantity, remaining);
 
-      const quantityForThisType = Math.min(
-        ticketType.quantity,
-        remainingQuantity - createdQuantity
-      );
-
-      for (let i = 0; i < quantityForThisType; i++) {
+      for (let i = 0; i < take; i++) {
         ticketsToCreate.push({
-          ticketId: generateTicketId(),
+          ticketId: generateTicketId(order.id, createdCount + i),
           userId: order.buyerId,
-          ticketTypeId: ticketType.id,
-          status: 'UNUSED' as TicketStatus,
+          ticketTypeId: tt.id,
+          status: TicketStatus.UNUSED, // <-- typed enum
           purchasedAt: new Date(),
         });
-        createdQuantity++;
       }
+
+      createdCount += take;
+      remaining -= take;
+    }
+
+    if (remaining > 0) {
+      return { success: false, message: 'Not enough ticket inventory' };
     }
 
     // Create tickets and update order in a transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Create tickets with order reference
       const createdTickets = await Promise.all(
-        ticketsToCreate.map(async (ticketData) => {
-          return await tx.ticket.create({
-            data: {
-              ...ticketData,
-              orderId: order.id, // Link tickets to order
+        ticketsToCreate.map((t) =>
+          tx.ticket.create({
+            data: { ...t, orderId: order.id },
+            include: {
+              ticketType: {
+                include: {
+                  event: { include: { venue: { include: { city: true } } } },
+                },
+              },
             },
-          });
-        })
+          })
+        )
       );
 
-      // Update ticket type quantities
-      for (const ticketType of ticketTypes) {
-        const usedQuantity = ticketsToCreate.filter(
-          (t) => t.ticketTypeId === ticketType.id
+      // decrement per type actually used
+      for (const tt of availableTypes) {
+        const usedQty = ticketsToCreate.filter(
+          (t) => t.ticketTypeId === tt.id
         ).length;
-
-        if (usedQuantity > 0) {
+        if (usedQty > 0) {
           await tx.ticketType.update({
-            where: { id: ticketType.id },
-            data: { quantity: { decrement: usedQuantity } },
+            where: { id: tt.id },
+            data: { quantity: { decrement: usedQty } },
           });
         }
       }
 
-      // Update order status
       const updatedOrder = await tx.order.update({
-        where: { id: orderId },
-        data: {
-          paymentStatus: 'COMPLETED',
+        where: { id: order.id },
+        data: { paymentStatus: 'COMPLETED', refundStatus: null },
+        include: {
+          buyer: true,
+          event: { include: { venue: { include: { city: true } } } },
+          tickets: {
+            include: {
+              ticketType: {
+                include: {
+                  event: { include: { venue: { include: { city: true } } } },
+                },
+              },
+            },
+          },
         },
       });
 
@@ -444,7 +490,11 @@ export async function completeOrder(
     });
 
     // Create notification for ticket purchase
-    await createTicketNotification(orderId, 'TICKET_PURCHASED', order.buyerId);
+    await createTicketNotification(result.order.id, 'TICKET_PURCHASED');
+    await ticketEmailService.sendTicketEmail(
+      result.order,
+      result.order.tickets
+    );
 
     // Process waiting list for this event
     await processWaitingList(order.event.id);
@@ -452,11 +502,12 @@ export async function completeOrder(
     revalidatePath('/dashboard/tickets');
     revalidatePath('/dashboard/orders');
     revalidatePath(`/events/${order.event.slug}`);
+    revalidatePath(`/dashboard/events/${result.order.eventId}/analytics`);
 
     return {
       success: true,
       message: 'Order completed successfully',
-      data: result,
+      data: result.order,
     };
   } catch (error) {
     console.error('Error completing order:', error);
@@ -651,6 +702,7 @@ export async function initiateRefund(
       return {
         success: false,
         message: 'Can only refund completed orders',
+        data: order,
       };
     }
 

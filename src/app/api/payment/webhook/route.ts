@@ -64,17 +64,12 @@ export async function POST(request: NextRequest) {
 
 async function handleChargeSuccess(data: any) {
   try {
-    const { reference, metadata, amount, customer } = data;
+    const { reference, amount } = data;
 
-    // Find the order
     const order = await prisma.order.findUnique({
       where: { paystackId: reference },
-      include: {
-        event: true,
-        buyer: true,
-      },
+      include: { event: true, buyer: true },
     });
-
     if (!order) {
       console.error(`Order not found for reference: ${reference}`);
       return;
@@ -82,23 +77,20 @@ async function handleChargeSuccess(data: any) {
 
     if (order.paymentStatus === 'COMPLETED') {
       console.log(`Order ${order.id} already completed`);
-      return;
+      return; // idempotent
     }
 
-    // Verify amount matches
-    const expectedAmount = order.totalAmount * 100; // Convert to kobo
-    if (amount !== expectedAmount) {
+    // Safer amount check
+    const expectedKobo = Math.round(order.totalAmount * 100);
+    if (amount !== expectedKobo) {
       console.error(
-        `Amount mismatch for order ${order.id}: expected ${expectedAmount}, got ${amount}`
+        `Amount mismatch for order ${order.id}: expected ${expectedKobo}, got ${amount}`
       );
       return;
     }
 
-    // Complete the order
+    // Single call – completeOrder handles tickets, inventory, notifications, email
     await completeOrder(order.id, reference);
-
-    // Send email notification
-    await sendTicketEmail(order);
 
     console.log(`Order ${order.id} completed successfully`);
   } catch (error) {

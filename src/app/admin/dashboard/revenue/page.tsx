@@ -7,7 +7,7 @@ import { redirect } from 'next/navigation';
 export default async function AdminRevenuePage() {
   const session = await getServerSideAuth({
     roles: ['ADMIN'],
-    subRoles: ['STAFF', 'SUPER_ADMIN'],
+    subRoles: ['SUPER_ADMIN'],
   });
 
   if (!session) {

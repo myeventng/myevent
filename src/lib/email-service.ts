@@ -1,3 +1,4 @@
+// lib/email-service.ts
 import { Resend } from 'resend';
 import QRCode from 'qrcode';
 import { TicketEmailTemplate } from '@/components/email/ticket-template';
@@ -51,7 +52,7 @@ class ResendEmailService implements EmailService {
             ticketId: ticket.ticketId,
             eventId: ticket.ticketType.event.id,
             userId: ticket.userId,
-            type: 'TICKET_VALIDATION',
+            type: 'EVENT_TICKET',
             timestamp: Date.now(),
           });
 
