@@ -308,7 +308,7 @@ export function AdminRevenueAnalytics() {
       </div>
 
       {/* Detailed Revenue Breakdown */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle>Revenue by Event Category</CardTitle>
           <CardDescription>
@@ -317,7 +317,6 @@ export function AdminRevenueAnalytics() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-3">
-            {/* This would be populated with actual category data */}
             <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
               <div className="flex items-center justify-between mb-2">
                 <p className="font-medium text-blue-800">Tech Events</p>
@@ -346,7 +345,7 @@ export function AdminRevenueAnalytics() {
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Quick Actions */}
       <Card>

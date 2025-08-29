@@ -1,3 +1,4 @@
+// src/actions/order.actions.ts - Fixed version
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -34,14 +35,6 @@ interface InitiateOrderInput {
   purchaseNotes?: string;
 }
 
-interface TicketToCreate {
-  ticketId: string;
-  userId: string;
-  ticketTypeId: string;
-  status: TicketStatus;
-  purchasedAt: Date;
-}
-
 interface PaystackConfig {
   secretKey: string;
   publicKey: string;
@@ -54,20 +47,29 @@ interface TicketToCreate {
   ticketTypeId: string;
   status: TicketStatus;
   purchasedAt: Date;
+  qrCodeData?: string;
 }
 
-// Paystack configuration
-// const paystackConfig: PaystackConfig = {
-//   secretKey: process.env.PAYSTACK_SECRET_KEY!,
-//   publicKey: process.env.PAYSTACK_PUBLIC_KEY!,
-//   baseUrl: 'https://api.paystack.co',
-// };
-
 // Generate unique ticket ID
-const generateTicketId = (): string => {
-  const timestamp = Date.now().toString(36);
-  const randomBytes = crypto.randomBytes(6).toString('hex').toUpperCase();
-  return `TKT-${timestamp}-${randomBytes}`;
+const generateTicketId = (orderId?: string, idx?: number): string => {
+  const rand6 = (() => {
+    if (
+      typeof globalThis !== 'undefined' &&
+      globalThis.crypto?.getRandomValues
+    ) {
+      const bytes = new Uint8Array(3);
+      globalThis.crypto.getRandomValues(bytes);
+      return Array.from(bytes, (b) => b.toString(16).padStart(2, '0'))
+        .join('')
+        .toUpperCase();
+    }
+    return Math.random().toString(16).slice(2, 8).padEnd(6, '0').toUpperCase();
+  })();
+
+  const ts = Date.now().toString(36).toUpperCase();
+  const prefix = orderId ? orderId.slice(-6).toUpperCase() : ts;
+  const suffix = typeof idx === 'number' ? `-${idx + 1}` : '';
+  return `TKT-${prefix}-${rand6}${suffix}`;
 };
 
 // Get Paystack configuration from platform settings
@@ -84,13 +86,57 @@ const getPaystackConfig = async () => {
   };
 };
 
-// Calculate platform fee (configurable by admin)
+// Calculate platform fee
 const calculatePlatformFee = async (amount: number): Promise<number> => {
   const feePercentage = await getPlatformFeePercentage();
   return Math.round((amount * feePercentage) / 100);
 };
 
-// Initiate order and create Paystack payment
+// Store ticket selections in database for reliable retrieval
+const storeTicketSelections = async (orderId: string, selections: any[]) => {
+  try {
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        // Store selections as JSON in purchaseNotes or create a separate field
+        // For now, we'll use a metadata approach
+        purchaseNotes: JSON.stringify({
+          originalNotes: '',
+          ticketSelections: selections,
+        }),
+      },
+    });
+  } catch (error) {
+    console.error('Failed to store ticket selections:', error);
+  }
+};
+
+// Retrieve ticket selections from database
+const getStoredTicketSelections = async (orderId: string) => {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { purchaseNotes: true },
+    });
+
+    if (order?.purchaseNotes) {
+      try {
+        const parsed = JSON.parse(order.purchaseNotes);
+        if (parsed.ticketSelections) {
+          return parsed.ticketSelections;
+        }
+      } catch {
+        // If parsing fails, fall back to null
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error('Failed to retrieve ticket selections:', error);
+    return null;
+  }
+};
+
+// FIXED: Initiate order with proper ticket selection storage
 export async function initiateOrder(
   data: InitiateOrderInput
 ): Promise<ActionResponse<any>> {
@@ -209,7 +255,7 @@ export async function initiateOrder(
       .toString(36)
       .substr(2, 9)}`;
 
-    // Create order
+    // Create order with ticket selections stored
     const order = await prisma.order.create({
       data: {
         paystackId: paystackReference,
@@ -219,29 +265,35 @@ export async function initiateOrder(
         paymentStatus: 'PENDING',
         eventId: data.eventId,
         buyerId: session.user.id,
-        purchaseNotes: data.purchaseNotes,
+        // FIXED: Store ticket selections reliably
+        purchaseNotes: JSON.stringify({
+          originalNotes: data.purchaseNotes || '',
+          ticketSelections: data.ticketSelections,
+        }),
       },
     });
 
     // If it's a free event, complete the order immediately
     if (event.isFree || totalAmount === 0) {
-      return await completeOrder(order.id, null);
+      return await completeOrderWithSelections(
+        order.id,
+        data.ticketSelections,
+        null
+      );
     }
 
     // Get Paystack configuration
     const paystackConfig = await getPaystackConfig();
 
     if (!paystackConfig.secretKey) {
-      // Delete the created order if Paystack is not configured
       await prisma.order.delete({ where: { id: order.id } });
-
       return {
         success: false,
         message: 'Payment system not configured',
       };
     }
 
-    // Initialize Paystack payment
+    // Initialize Paystack payment with ticket selections in metadata
     const paystackResponse = await fetch(
       `${paystackConfig.baseUrl}/transaction/initialize`,
       {
@@ -252,7 +304,7 @@ export async function initiateOrder(
         },
         body: JSON.stringify({
           email: session.user.email,
-          amount: totalAmount * 100, // Paystack expects amount in kobo
+          amount: totalAmount * 100,
           reference: paystackReference,
           callback_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/payment/callback`,
           metadata: {
@@ -261,6 +313,8 @@ export async function initiateOrder(
             userId: session.user.id,
             eventTitle: event.title,
             platformFee,
+            // FIXED: Ensure ticket selections are in metadata
+            ticketSelections: data.ticketSelections,
           },
         }),
       }
@@ -269,9 +323,7 @@ export async function initiateOrder(
     const paystackData = await paystackResponse.json();
 
     if (!paystackData.status) {
-      // Delete the created order if Paystack initialization fails
       await prisma.order.delete({ where: { id: order.id } });
-
       return {
         success: false,
         message: paystackData.message || 'Failed to initialize payment',
@@ -301,9 +353,10 @@ export async function initiateOrder(
   }
 }
 
-// Complete order after successful payment
-export async function completeOrder(
+// FIXED: Complete order with specific ticket selections
+export async function completeOrderWithSelections(
   orderId: string,
+  ticketSelections: { ticketTypeId: string; quantity: number }[],
   paystackReference?: string | null
 ): Promise<ActionResponse<any>> {
   try {
@@ -314,32 +367,14 @@ export async function completeOrder(
         event: {
           include: {
             ticketTypes: true,
-            venue: {
-              include: {
-                city: true,
-              },
-            },
-          },
-        },
-        tickets: {
-          include: {
-            ticketType: {
-              include: {
-                event: {
-                  include: { venue: { include: { city: true } } },
-                },
-              },
-            },
+            venue: { include: { city: true } },
           },
         },
       },
     });
 
     if (!order) {
-      return {
-        success: false,
-        message: 'Order not found',
-      };
+      return { success: false, message: 'Order not found' };
     }
 
     if (order.paymentStatus === 'COMPLETED') {
@@ -350,100 +385,102 @@ export async function completeOrder(
       };
     }
 
-    // If event is not free, paystackReference must be provided
-    if (!order.event.isFree && order.totalAmount > 0 && !paystackReference) {
-      return {
-        success: false,
-        message: 'Missing payment reference for paid order',
-      };
-    }
-
-    // Verify payment with Paystack (if not free event)
+    // Verify payment if not free event
     if (!order.event.isFree && order.totalAmount > 0 && paystackReference) {
       const paystackConfig = await getPaystackConfig();
 
       if (!paystackConfig.secretKey) {
-        return {
-          success: false,
-          message: 'Payment system not configured',
-        };
+        return { success: false, message: 'Payment system not configured' };
       }
 
       const verifyResponse = await fetch(
-        `${paystackConfig.baseUrl || 'https://api.paystack.co'}/transaction/verify/${paystackReference}`,
+        `${paystackConfig.baseUrl}/transaction/verify/${paystackReference}`,
         {
           headers: {
             Authorization: `Bearer ${paystackConfig.secretKey}`,
           },
+          cache: 'no-store',
         }
       );
 
       const verifyData = await verifyResponse.json();
 
-      const statusOk =
-        Boolean(verifyData?.status) && verifyData?.data?.status === 'success';
-
-      if (!statusOk) {
+      if (!verifyData?.status || verifyData?.data?.status !== 'success') {
         return { success: false, message: 'Payment verification failed' };
       }
 
-      // Check if payment amount matches order amount
-      const paidKobo = Number(verifyData.data.amount); // integer from Paystack
+      const paidKobo = Number(verifyData.data.amount);
       const orderKobo = Math.round(Number(order.totalAmount) * 100);
       if (paidKobo !== orderKobo) {
         return { success: false, message: 'Payment amount mismatch' };
       }
-
-      // ❗ If you want the old naira-equality exactly, use this instead (less robust due to floats):
-      // const paidAmount = verifyData.data.amount / 100;
-      // if (paidAmount !== order.totalAmount) {
-      //   return { success: false, message: 'Payment amount mismatch' };
-      // }
-    }
-    function generateTicketId(orderId: string, idx: number) {
-      const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
-      return `TX-${orderId.slice(-6)}-${rand}-${idx + 1}`;
-    }
-    const availableTypes = order.event.ticketTypes.filter(
-      (tt) => tt.quantity > 0
-    );
-    if (availableTypes.length === 0) {
-      return { success: false, message: 'No ticket type available for event' };
     }
 
-    let remaining = order.quantity;
-    const ticketsToCreate: TicketToCreate[] = [];
+    // FIXED: Use the provided ticket selections
+    const ticketsToCreate: (TicketToCreate & { qrCodeData: string })[] = [];
     let createdCount = 0;
 
-    for (const tt of availableTypes) {
-      if (remaining <= 0) break;
+    // Validate all selections first
+    for (const selection of ticketSelections) {
+      const ticketType = order.event.ticketTypes.find(
+        (tt) => tt.id === selection.ticketTypeId
+      );
 
-      const take = Math.min(tt.quantity, remaining);
-
-      for (let i = 0; i < take; i++) {
-        ticketsToCreate.push({
-          ticketId: generateTicketId(order.id, createdCount + i),
-          userId: order.buyerId,
-          ticketTypeId: tt.id,
-          status: TicketStatus.UNUSED, // <-- typed enum
-          purchasedAt: new Date(),
-        });
+      if (!ticketType) {
+        return {
+          success: false,
+          message: `Ticket type ${selection.ticketTypeId} not found`,
+        };
       }
 
-      createdCount += take;
-      remaining -= take;
+      if (selection.quantity > ticketType.quantity) {
+        return {
+          success: false,
+          message: `Not enough ${ticketType.name} tickets available. Requested: ${selection.quantity}, Available: ${ticketType.quantity}`,
+        };
+      }
     }
 
-    if (remaining > 0) {
-      return { success: false, message: 'Not enough ticket inventory' };
+    // Create tickets for each selection
+    for (const selection of ticketSelections) {
+      for (let i = 0; i < selection.quantity; i++) {
+        const ticketId = generateTicketId(order.id, createdCount);
+        const qrCodeData = JSON.stringify({
+          type: 'EVENT_TICKET',
+          ticketId,
+          eventId: order.event.id,
+          userId: order.buyerId,
+          issuedAt: Date.now(),
+        });
+
+        ticketsToCreate.push({
+          ticketId,
+          userId: order.buyerId,
+          ticketTypeId: selection.ticketTypeId,
+          status: TicketStatus.UNUSED,
+          purchasedAt: new Date(),
+          qrCodeData,
+        });
+
+        createdCount++;
+      }
     }
 
-    // Create tickets and update order in a transaction
+    // Validate total quantity
+    if (ticketsToCreate.length !== order.quantity) {
+      return {
+        success: false,
+        message: `Ticket quantity mismatch: expected ${order.quantity}, creating ${ticketsToCreate.length}`,
+      };
+    }
+
+    // Create tickets and update order in transaction
     const result = await prisma.$transaction(async (tx) => {
+      // Create all tickets
       const createdTickets = await Promise.all(
-        ticketsToCreate.map((t) =>
+        ticketsToCreate.map((ticketData) =>
           tx.ticket.create({
-            data: { ...t, orderId: order.id },
+            data: { ...ticketData, orderId: order.id },
             include: {
               ticketType: {
                 include: {
@@ -455,22 +492,21 @@ export async function completeOrder(
         )
       );
 
-      // decrement per type actually used
-      for (const tt of availableTypes) {
-        const usedQty = ticketsToCreate.filter(
-          (t) => t.ticketTypeId === tt.id
-        ).length;
-        if (usedQty > 0) {
-          await tx.ticketType.update({
-            where: { id: tt.id },
-            data: { quantity: { decrement: usedQty } },
-          });
-        }
+      // FIXED: Update ticket type quantities properly
+      for (const selection of ticketSelections) {
+        await tx.ticketType.update({
+          where: { id: selection.ticketTypeId },
+          data: { quantity: { decrement: selection.quantity } },
+        });
       }
 
+      // FIXED: Update order status to COMPLETED
       const updatedOrder = await tx.order.update({
         where: { id: order.id },
-        data: { paymentStatus: 'COMPLETED', refundStatus: null },
+        data: {
+          paymentStatus: PaymentStatus.COMPLETED,
+          refundStatus: null,
+        },
         include: {
           buyer: true,
           event: { include: { venue: { include: { city: true } } } },
@@ -489,14 +525,17 @@ export async function completeOrder(
       return { tickets: createdTickets, order: updatedOrder };
     });
 
-    // Create notification for ticket purchase
+    // Create notification and send email
     await createTicketNotification(result.order.id, 'TICKET_PURCHASED');
-    await ticketEmailService.sendTicketEmail(
-      result.order,
-      result.order.tickets
-    );
 
-    // Process waiting list for this event
+    try {
+      await ticketEmailService.sendTicketEmail(result.order, result.tickets);
+      console.log('Ticket email sent successfully');
+    } catch (emailError) {
+      console.error('Error sending ticket email:', emailError);
+    }
+
+    // Process waiting list
     await processWaitingList(order.event.id);
 
     revalidatePath('/dashboard/tickets');
@@ -510,10 +549,298 @@ export async function completeOrder(
       data: result.order,
     };
   } catch (error) {
+    console.error('Error completing order with selections:', error);
+    return {
+      success: false,
+      message: 'Failed to complete order',
+    };
+  }
+}
+
+// FIXED: Complete order with better ticket selection retrieval
+export async function completeOrder(
+  orderId: string,
+  paystackReference?: string | null
+): Promise<ActionResponse<any>> {
+  try {
+    // Try to get ticket selections from stored data or Paystack metadata
+    let ticketSelections: { ticketTypeId: string; quantity: number }[] = [];
+
+    // First, try to get from stored order data
+    const storedSelections = await getStoredTicketSelections(orderId);
+    if (storedSelections) {
+      ticketSelections = storedSelections;
+    }
+
+    // If no stored selections and we have a Paystack reference, try to get from Paystack
+    if (ticketSelections.length === 0 && paystackReference) {
+      try {
+        const paystackConfig = await getPaystackConfig();
+        if (paystackConfig.secretKey) {
+          const transactionResponse = await fetch(
+            `${paystackConfig.baseUrl}/transaction/verify/${paystackReference}`,
+            {
+              headers: {
+                Authorization: `Bearer ${paystackConfig.secretKey}`,
+              },
+            }
+          );
+          const transactionData = await transactionResponse.json();
+
+          if (transactionData?.data?.metadata?.ticketSelections) {
+            ticketSelections = transactionData.data.metadata.ticketSelections;
+          }
+        }
+      } catch (error) {
+        console.warn(
+          'Could not retrieve ticket selections from Paystack:',
+          error
+        );
+      }
+    }
+
+    // If we have specific selections, use the new function
+    if (ticketSelections.length > 0) {
+      return await completeOrderWithSelections(
+        orderId,
+        ticketSelections,
+        paystackReference
+      );
+    }
+
+    // Fallback: Use the old logic but improved
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        buyer: true,
+        event: {
+          include: {
+            ticketTypes: true,
+            venue: { include: { city: true } },
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      return { success: false, message: 'Order not found' };
+    }
+
+    if (order.paymentStatus === 'COMPLETED') {
+      return {
+        success: false,
+        message: 'Order already completed',
+        data: order,
+      };
+    }
+
+    // Payment verification for paid events
+    if (!order.event.isFree && order.totalAmount > 0 && paystackReference) {
+      const paystackConfig = await getPaystackConfig();
+
+      if (!paystackConfig.secretKey) {
+        return { success: false, message: 'Payment system not configured' };
+      }
+
+      const verifyResponse = await fetch(
+        `${paystackConfig.baseUrl}/transaction/verify/${paystackReference}`,
+        {
+          headers: {
+            Authorization: `Bearer ${paystackConfig.secretKey}`,
+          },
+          cache: 'no-store',
+        }
+      );
+
+      const verifyData = await verifyResponse.json();
+
+      if (!verifyData?.status || verifyData?.data?.status !== 'success') {
+        return { success: false, message: 'Payment verification failed' };
+      }
+
+      const paidKobo = Number(verifyData.data.amount);
+      const orderKobo = Math.round(Number(order.totalAmount) * 100);
+      if (paidKobo !== orderKobo) {
+        return { success: false, message: 'Payment amount mismatch' };
+      }
+    }
+
+    // FALLBACK: Distribute tickets to available types
+    const availableTypes = order.event.ticketTypes.filter(
+      (tt) => tt.quantity > 0
+    );
+    if (availableTypes.length === 0) {
+      return { success: false, message: 'No ticket types available for event' };
+    }
+
+    // Simple distribution: assign to first available type if only one, otherwise distribute evenly
+    const fallbackSelections: { ticketTypeId: string; quantity: number }[] = [];
+
+    if (availableTypes.length === 1) {
+      fallbackSelections.push({
+        ticketTypeId: availableTypes[0].id,
+        quantity: order.quantity,
+      });
+    } else {
+      // Distribute evenly across available types
+      let remaining = order.quantity;
+      for (let i = 0; i < availableTypes.length; i++) {
+        const isLast = i === availableTypes.length - 1;
+        const quantity = isLast
+          ? remaining
+          : Math.ceil(remaining / (availableTypes.length - i));
+        const actualQuantity = Math.min(
+          quantity,
+          availableTypes[i].quantity,
+          remaining
+        );
+
+        if (actualQuantity > 0) {
+          fallbackSelections.push({
+            ticketTypeId: availableTypes[i].id,
+            quantity: actualQuantity,
+          });
+          remaining -= actualQuantity;
+        }
+      }
+    }
+
+    return await completeOrderWithSelections(
+      orderId,
+      fallbackSelections,
+      paystackReference
+    );
+  } catch (error) {
     console.error('Error completing order:', error);
     return {
       success: false,
       message: 'Failed to complete order',
+    };
+  }
+}
+
+// Process waiting list when tickets become available
+export async function processWaitingList(eventId: string): Promise<void> {
+  try {
+    const availableTickets = await prisma.ticketType.findMany({
+      where: {
+        eventId,
+        quantity: { gt: 0 },
+      },
+    });
+
+    if (availableTickets.length === 0) return;
+
+    const waitingEntries = await prisma.waitingList.findMany({
+      where: {
+        eventId,
+        status: 'WAITING',
+      },
+      include: {
+        user: true,
+      },
+      orderBy: {
+        id: 'asc',
+      },
+    });
+
+    const totalAvailable = availableTickets.reduce(
+      (sum, tt) => sum + tt.quantity,
+      0
+    );
+    const toOffer = Math.min(waitingEntries.length, totalAvailable);
+
+    for (let i = 0; i < toOffer; i++) {
+      const entry = waitingEntries[i];
+      const offerExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await prisma.waitingList.update({
+        where: { id: entry.id },
+        data: {
+          status: 'OFFERED',
+          offerExpiresAt,
+        },
+      });
+
+      await prisma.notification.create({
+        data: {
+          type: 'TICKET_AVAILABLE',
+          title: 'Tickets Available!',
+          message:
+            'Tickets are now available for the event you were waiting for.',
+          userId: entry.userId,
+          eventId,
+          actionUrl: `/events/${eventId}`,
+        },
+      });
+    }
+  } catch (error) {
+    console.error('Error processing waiting list:', error);
+  }
+}
+
+// Resend tickets email (admin only)
+export async function resendOrderTickets(orderId: string) {
+  const headersList = await headers();
+  const session = await auth.api.getSession({ headers: headersList });
+
+  if (!session) {
+    return { success: false, message: 'Not authenticated' };
+  }
+
+  // only ADMIN with STAFF or SUPER_ADMIN can manually email tickets
+  const isAdmin =
+    session.user.role === 'ADMIN' &&
+    ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole);
+
+  if (!isAdmin) {
+    return { success: false, message: 'Not authorized' };
+  }
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        buyer: true,
+        event: {
+          include: {
+            venue: { include: { city: true } },
+            ticketTypes: true,
+          },
+        },
+        tickets: {
+          include: {
+            ticketType: {
+              include: {
+                event: { include: { venue: { include: { city: true } } } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!order) return { success: false, message: 'Order not found' };
+    if (order.paymentStatus !== PaymentStatus.COMPLETED) {
+      return { success: false, message: 'Order is not completed' };
+    }
+    if (!order.tickets || order.tickets.length === 0) {
+      return {
+        success: false,
+        message:
+          'No tickets found for this order. Please generate tickets first.',
+      };
+    }
+
+    const { ticketEmailService } = await import('@/lib/email-service');
+    await ticketEmailService.sendTicketEmail(order, order.tickets);
+
+    return { success: true, message: 'Tickets email sent successfully' };
+  } catch (error) {
+    console.error('resendOrderTickets error:', error);
+    return {
+      success: false,
+      message:
+        error instanceof Error ? error.message : 'Failed to send tickets email',
     };
   }
 }
@@ -583,70 +910,6 @@ export async function joinWaitingList(
       success: false,
       message: 'Failed to join waiting list',
     };
-  }
-}
-
-// Process waiting list when tickets become available
-export async function processWaitingList(eventId: string): Promise<void> {
-  try {
-    // Get available tickets
-    const availableTickets = await prisma.ticketType.findMany({
-      where: {
-        eventId,
-        quantity: { gt: 0 },
-      },
-    });
-
-    if (availableTickets.length === 0) return;
-
-    // Get waiting list entries
-    const waitingEntries = await prisma.waitingList.findMany({
-      where: {
-        eventId,
-        status: 'WAITING',
-      },
-      include: {
-        user: true,
-      },
-      orderBy: {
-        id: 'asc', // FIFO
-      },
-    });
-
-    const totalAvailable = availableTickets.reduce(
-      (sum, tt) => sum + tt.quantity,
-      0
-    );
-    const toOffer = Math.min(waitingEntries.length, totalAvailable);
-
-    // Offer tickets to waiting users
-    for (let i = 0; i < toOffer; i++) {
-      const entry = waitingEntries[i];
-      const offerExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-      await prisma.waitingList.update({
-        where: { id: entry.id },
-        data: {
-          status: 'OFFERED',
-          offerExpiresAt,
-        },
-      });
-
-      // Send notification about ticket availability
-      await prisma.notification.create({
-        data: {
-          type: 'TICKET_AVAILABLE',
-          title: 'Tickets Available!',
-          message:
-            'Tickets are now available for the event you were waiting for.',
-          userId: entry.userId,
-          eventId,
-          actionUrl: `/events/${eventId}`,
-        },
-      });
-    }
-  } catch (error) {
-    console.error('Error processing waiting list:', error);
   }
 }
 

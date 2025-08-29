@@ -42,19 +42,35 @@ class ResendEmailService implements EmailService {
 
   async sendTicketEmail(order: any, tickets: any[]): Promise<void> {
     try {
-      const event = tickets[0].ticketType.event;
-      const venue = event.venue;
+      // Validate inputs
+      if (!order || !tickets || tickets.length === 0) {
+        throw new Error('Invalid order or tickets data for email');
+      }
+
+      const event = order.event || tickets[0]?.ticketType?.event;
+      const venue = event?.venue;
+
+      if (!event || !venue) {
+        throw new Error('Missing event or venue information for ticket email');
+      }
 
       // Generate QR codes for each ticket
       const ticketsWithQR = await Promise.all(
         tickets.map(async (ticket) => {
-          const qrCodeData = JSON.stringify({
-            ticketId: ticket.ticketId,
-            eventId: ticket.ticketType.event.id,
-            userId: ticket.userId,
-            type: 'EVENT_TICKET',
-            timestamp: Date.now(),
-          });
+          let qrCodeData;
+
+          // Use stored QR data if available, otherwise generate
+          if (ticket.qrCodeData) {
+            qrCodeData = ticket.qrCodeData;
+          } else {
+            qrCodeData = JSON.stringify({
+              type: 'EVENT_TICKET',
+              ticketId: ticket.ticketId,
+              eventId: event.id,
+              userId: ticket.userId,
+              timestamp: Date.now(),
+            });
+          }
 
           const qrCodeDataURL = await QRCode.toDataURL(qrCodeData, {
             width: 200,
@@ -100,7 +116,9 @@ class ResendEmailService implements EmailService {
       );
     } catch (error) {
       console.error('Error sending ticket email:', error);
-      throw error;
+      throw new Error(
+        `Failed to send ticket email: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   }
 

@@ -74,6 +74,7 @@ import {
 import { PaymentStatus, RefundStatus } from '@/generated/prisma';
 import { getAllOrders, processRefund } from '@/actions/order.actions';
 import { OrderDetailModal } from './order-detail-modal';
+import { resendOrderTickets } from '@/actions/order.actions';
 
 interface AdminOrderManagementProps {
   initialOrders: any[];
@@ -554,6 +555,44 @@ export function AdminOrderManagement({
                                 >
                                   <XCircle className="w-4 h-4 mr-2" />
                                   Reject Refund
+                                </DropdownMenuItem>
+                              </>
+                            )}
+
+                            {order.paymentStatus === 'COMPLETED' && (
+                              <>
+                                <DropdownMenuSeparator />
+
+                                {/* Download for admins */}
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    window.open(
+                                      `/api/orders/${order.id}/tickets`,
+                                      '_blank'
+                                    )
+                                  }
+                                >
+                                  <Download className="w-4 h-4 mr-2" />
+                                  Download Tickets (PDF)
+                                </DropdownMenuItem>
+
+                                {/* Email for admins */}
+                                <DropdownMenuItem
+                                  onClick={async () => {
+                                    const res = await resendOrderTickets(
+                                      order.id
+                                    );
+                                    if (res.success)
+                                      toast.success('Tickets email sent');
+                                    else
+                                      toast.error(
+                                        res.message ||
+                                          'Failed to send tickets email'
+                                      );
+                                  }}
+                                >
+                                  <Mail className="w-4 h-4 mr-2" />
+                                  Send Tickets by Email
                                 </DropdownMenuItem>
                               </>
                             )}

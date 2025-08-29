@@ -973,3 +973,458 @@ export async function getTicketById(id: string): Promise<ActionResponse<any>> {
     };
   }
 }
+
+// Add this function to your ticket-actions.ts file
+
+export async function getAdminTickets(): Promise<ActionResponse<any[]>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session) {
+    return {
+      success: false,
+      message: 'Not authenticated',
+    };
+  }
+
+  // Check if user is admin with proper permissions
+  const { role, subRole } = session.user;
+  if (role !== 'ADMIN' || !['STAFF', 'SUPER_ADMIN'].includes(subRole)) {
+    return {
+      success: false,
+      message: 'You do not have permission to view admin tickets',
+    };
+  }
+
+  try {
+    const tickets = await prisma.ticket.findMany({
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+        ticketType: {
+          include: {
+            event: {
+              select: {
+                id: true,
+                title: true,
+                startDateTime: true,
+                endDateTime: true,
+                publishedStatus: true,
+                venue: {
+                  select: {
+                    name: true,
+                    address: true,
+                    city: {
+                      select: {
+                        name: true,
+                        state: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        order: {
+          select: {
+            id: true,
+            paystackId: true,
+            paymentStatus: true,
+            refundStatus: true,
+            totalAmount: true,
+          },
+        },
+      },
+      orderBy: {
+        purchasedAt: 'desc',
+      },
+    });
+
+    return {
+      success: true,
+      data: tickets,
+    };
+  } catch (error) {
+    console.error('Error fetching admin tickets:', error);
+    return {
+      success: false,
+      message: 'Failed to fetch tickets',
+    };
+  }
+}
+
+// Get filtered admin tickets with pagination and search
+export async function getFilteredAdminTickets(
+  page: number = 1,
+  limit: number = 50,
+  filters?: {
+    status?: string;
+    eventId?: string;
+    userId?: string;
+    search?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }
+): Promise<ActionResponse<any>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session) {
+    return {
+      success: false,
+      message: 'Not authenticated',
+    };
+  }
+
+  // Check permissions
+  const { role, subRole } = session.user;
+  if (role !== 'ADMIN' || !['STAFF', 'SUPER_ADMIN'].includes(subRole)) {
+    return {
+      success: false,
+      message: 'You do not have permission to view admin tickets',
+    };
+  }
+
+  try {
+    const skip = (page - 1) * limit;
+
+    // Build where clause based on filters
+    const whereClause: any = {};
+
+    if (filters?.status && filters.status !== 'all') {
+      whereClause.status = filters.status;
+    }
+
+    if (filters?.eventId) {
+      whereClause.ticketType = {
+        eventId: filters.eventId,
+      };
+    }
+
+    if (filters?.userId) {
+      whereClause.userId = filters.userId;
+    }
+
+    if (filters?.dateFrom || filters?.dateTo) {
+      whereClause.purchasedAt = {};
+      if (filters.dateFrom) {
+        whereClause.purchasedAt.gte = new Date(filters.dateFrom);
+      }
+      if (filters.dateTo) {
+        whereClause.purchasedAt.lte = new Date(filters.dateTo);
+      }
+    }
+
+    // Handle search across multiple fields
+    if (filters?.search) {
+      const searchTerm = filters.search.toLowerCase();
+      whereClause.OR = [
+        {
+          ticketId: {
+            contains: searchTerm,
+            mode: 'insensitive',
+          },
+        },
+        {
+          user: {
+            name: {
+              contains: searchTerm,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          user: {
+            email: {
+              contains: searchTerm,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          ticketType: {
+            name: {
+              contains: searchTerm,
+              mode: 'insensitive',
+            },
+          },
+        },
+        {
+          ticketType: {
+            event: {
+              title: {
+                contains: searchTerm,
+                mode: 'insensitive',
+              },
+            },
+          },
+        },
+      ];
+    }
+
+    const [tickets, totalCount] = await Promise.all([
+      prisma.ticket.findMany({
+        where: whereClause,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              image: true,
+            },
+          },
+          ticketType: {
+            include: {
+              event: {
+                select: {
+                  id: true,
+                  title: true,
+                  startDateTime: true,
+                  endDateTime: true,
+                  publishedStatus: true,
+                  venue: {
+                    select: {
+                      name: true,
+                      address: true,
+                      city: {
+                        select: {
+                          name: true,
+                          state: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          order: {
+            select: {
+              id: true,
+              paystackId: true,
+              paymentStatus: true,
+              refundStatus: true,
+              totalAmount: true,
+            },
+          },
+        },
+        orderBy: {
+          purchasedAt: 'desc',
+        },
+        skip,
+        take: limit,
+      }),
+      prisma.ticket.count({
+        where: whereClause,
+      }),
+    ]);
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    // Calculate summary statistics for current filter
+    const statusStats = await prisma.ticket.groupBy({
+      by: ['status'],
+      where: whereClause,
+      _count: true,
+    });
+
+    const stats = {
+      total: totalCount,
+      unused: statusStats.find((s) => s.status === 'UNUSED')?._count || 0,
+      used: statusStats.find((s) => s.status === 'USED')?._count || 0,
+      refunded: statusStats.find((s) => s.status === 'REFUNDED')?._count || 0,
+      cancelled: statusStats.find((s) => s.status === 'CANCELLED')?._count || 0,
+    };
+
+    return {
+      success: true,
+      data: {
+        tickets,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalCount,
+          limit,
+          hasMore: page < totalPages,
+        },
+        stats,
+      },
+    };
+  } catch (error) {
+    console.error('Error fetching filtered admin tickets:', error);
+    return {
+      success: false,
+      message: 'Failed to fetch tickets',
+    };
+  }
+}
+
+// Get admin ticket statistics
+export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session) {
+    return {
+      success: false,
+      message: 'Not authenticated',
+    };
+  }
+
+  // Check permissions
+  const { role, subRole } = session.user;
+  if (role !== 'ADMIN' || !['STAFF', 'SUPER_ADMIN'].includes(subRole)) {
+    return {
+      success: false,
+      message: 'You do not have permission to view admin statistics',
+    };
+  }
+
+  try {
+    // Get ticket status breakdown
+    const ticketStats = await prisma.ticket.groupBy({
+      by: ['status'],
+      _count: true,
+    });
+
+    // Get total revenue from completed orders
+    const revenueStats = await prisma.order.aggregate({
+      where: {
+        paymentStatus: 'COMPLETED',
+      },
+      _sum: {
+        totalAmount: true,
+      },
+      _count: true,
+    });
+
+    // Get refund statistics
+    const refundStats = await prisma.order.aggregate({
+      where: {
+        refundStatus: 'PROCESSED',
+      },
+      _sum: {
+        totalAmount: true,
+      },
+      _count: true,
+    });
+
+    // Calculate platform fees (assuming 5% fee)
+    const totalRevenue = revenueStats._sum.totalAmount || 0;
+    const totalRefunded = refundStats._sum.totalAmount || 0;
+    const netRevenue = totalRevenue - totalRefunded;
+    const platformFees = Math.round(netRevenue * 0.05);
+
+    // Get recent activity (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const recentActivity = await prisma.ticket.count({
+      where: {
+        purchasedAt: {
+          gte: thirtyDaysAgo,
+        },
+      },
+    });
+
+    // Get top events by ticket sales
+    const topEvents = await prisma.event.findMany({
+      include: {
+        ticketTypes: {
+          include: {
+            tickets: {
+              where: {
+                status: { in: ['UNUSED', 'USED'] },
+              },
+            },
+          },
+        },
+        venue: {
+          select: {
+            name: true,
+            city: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      take: 10,
+    });
+
+    const eventStats = topEvents
+      .map((event) => {
+        const ticketsSold = event.ticketTypes.reduce(
+          (sum, tt) => sum + tt.tickets.length,
+          0
+        );
+        const revenue = event.ticketTypes.reduce(
+          (sum, tt) => sum + tt.tickets.length * tt.price,
+          0
+        );
+
+        return {
+          id: event.id,
+          title: event.title,
+          startDateTime: event.startDateTime,
+          venue: event.venue,
+          ticketsSold,
+          revenue,
+        };
+      })
+      .sort((a, b) => b.ticketsSold - a.ticketsSold)
+      .slice(0, 5);
+
+    const totalTickets = ticketStats.reduce(
+      (sum, stat) => sum + stat._count,
+      0
+    );
+
+    return {
+      success: true,
+      data: {
+        overview: {
+          totalTickets,
+          totalRevenue,
+          totalRefunded,
+          netRevenue,
+          platformFees,
+          recentActivity,
+        },
+        ticketsByStatus: ticketStats.reduce(
+          (acc, stat) => {
+            acc[stat.status.toLowerCase()] = stat._count;
+            return acc;
+          },
+          {} as Record<string, number>
+        ),
+        topEvents: eventStats,
+        orders: {
+          completed: revenueStats._count,
+          refunded: refundStats._count,
+        },
+      },
+    };
+  } catch (error) {
+    console.error('Error fetching admin ticket statistics:', error);
+    return {
+      success: false,
+      message: 'Failed to fetch statistics',
+    };
+  }
+}

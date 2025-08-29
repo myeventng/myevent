@@ -2,7 +2,16 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { AdminTicketsTable } from '@/components/admin/admin-tickets-table';
 import { getServerSideAuth } from '@/lib/auth-server';
 import { redirect } from 'next/navigation';
-import { prisma } from '@/lib/prisma';
+import { getAdminTickets } from '@/actions/ticket.actions';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 
 export default async function AdminTickets() {
   const session = await getServerSideAuth({
@@ -15,42 +24,35 @@ export default async function AdminTickets() {
     redirect('/unauthorized');
   }
 
-  // Fetch all tickets with related data
-  const tickets = await prisma.ticket.findMany({
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-      ticketType: {
-        include: {
-          event: {
-            select: {
-              id: true,
-              title: true,
-              startDateTime: true,
-              venue: {
-                select: {
-                  name: true,
-                  city: {
-                    select: {
-                      name: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    orderBy: {
-      purchasedAt: 'desc',
-    },
-  });
+  // Fetch tickets using the server action
+  const ticketsResult = await getAdminTickets();
+
+  // Handle error case
+  if (!ticketsResult.success) {
+    return (
+      <DashboardLayout session={session}>
+        <div className="space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold">Tickets Management</h1>
+              <p className="text-muted-foreground">
+                View and manage all tickets in the system.
+              </p>
+            </div>
+          </div>
+
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {ticketsResult.message || 'Failed to load tickets'}
+            </AlertDescription>
+          </Alert>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const tickets = ticketsResult.data || [];
 
   return (
     <DashboardLayout session={session}>
@@ -64,9 +66,8 @@ export default async function AdminTickets() {
             </p>
           </div>
         </div>
-
         <AdminTicketsTable
-          initialData={tickets ?? []}
+          initialData={tickets}
           userRole={session.user.role}
           userSubRole={session.user.subRole}
         />

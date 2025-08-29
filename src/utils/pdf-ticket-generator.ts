@@ -479,9 +479,11 @@ export const formatPrice = (price: number): string =>
     price
   );
 
-export const formatDateTime = (dateString: string): string => {
-  const date = new Date(dateString);
-  return format(date, 'PPP p');
+export const formatDateTime = (value: Date | string | number): string => {
+  const d = value instanceof Date ? value : new Date(value);
+  // guard against invalid inputs
+  if (Number.isNaN(d.getTime())) return '';
+  return format(d, 'PPP p');
 };
 
 /* ===== Public API (unchanged) ===== */

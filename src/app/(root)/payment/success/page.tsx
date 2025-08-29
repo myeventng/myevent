@@ -5,11 +5,13 @@ import Link from 'next/link';
 export default async function PaymentSuccess({
   searchParams,
 }: {
-  searchParams: { orderId?: string };
+  searchParams: Promise<{ orderId?: string }>;
 }) {
-  const order = searchParams.orderId
+  const params = await searchParams;
+
+  const order = params.orderId
     ? await prisma.order.findUnique({
-        where: { id: searchParams.orderId },
+        where: { id: params.orderId },
         include: { event: true },
       })
     : null;
@@ -20,8 +22,8 @@ export default async function PaymentSuccess({
       <p className="text-muted-foreground mb-6">
         {order ? (
           <>
-            Order <span className="font-mono">{order.id.slice(-8)}</span> for “
-            {order.event.title}” is confirmed.
+            Order <span className="font-mono">{order.id.slice(-8)}</span> for "
+            {order.event.title}" is confirmed.
           </>
         ) : (
           'Your order is confirmed.'

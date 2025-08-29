@@ -434,6 +434,7 @@ model Ticket {
   @@index([userId])
   @@index([ticketTypeId])
   @@index([status])
+  @@index([orderId])
 }
 
 model TicketType {

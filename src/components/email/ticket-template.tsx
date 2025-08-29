@@ -1,3 +1,4 @@
+// components/email/ticket-template.tsx
 import {
   Html,
   Head,

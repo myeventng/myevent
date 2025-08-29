@@ -1,7 +1,10 @@
 // app/api/payment/callback/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { completeOrder } from '@/actions/order.actions';
+import {
+  completeOrder,
+  completeOrderWithSelections,
+} from '@/actions/order.actions';
 import { getSetting } from '@/actions/platform-settings.actions';
 
 export async function GET(request: NextRequest) {
@@ -64,7 +67,53 @@ export async function GET(request: NextRequest) {
 
         // Complete the order if not already completed
         if (order.paymentStatus !== 'COMPLETED') {
-          const result = await completeOrder(order.id, reference);
+          let result;
+
+          // FIXED: Try to get ticket selections from Paystack metadata first
+          const ticketSelections = data.data.metadata?.ticketSelections;
+
+          if (ticketSelections && Array.isArray(ticketSelections)) {
+            console.log(
+              'Using ticket selections from Paystack metadata:',
+              ticketSelections
+            );
+            result = await completeOrderWithSelections(
+              order.id,
+              ticketSelections,
+              reference
+            );
+          } else {
+            // FIXED: Try to get ticket selections from stored order data
+            let storedSelections = null;
+
+            try {
+              if (order.purchaseNotes) {
+                const parsed = JSON.parse(order.purchaseNotes);
+                storedSelections = parsed.ticketSelections;
+              }
+            } catch (parseError) {
+              console.warn(
+                'Could not parse stored ticket selections:',
+                parseError
+              );
+            }
+
+            if (storedSelections && Array.isArray(storedSelections)) {
+              console.log(
+                'Using ticket selections from stored data:',
+                storedSelections
+              );
+              result = await completeOrderWithSelections(
+                order.id,
+                storedSelections,
+                reference
+              );
+            } else {
+              // Fallback to old method with improved logic
+              console.warn('No ticket selections found, using fallback method');
+              result = await completeOrder(order.id, reference);
+            }
+          }
 
           if (!result.success) {
             console.error(
@@ -72,9 +121,13 @@ export async function GET(request: NextRequest) {
               result.message
             );
             return NextResponse.redirect(
-              `${process.env.NEXT_PUBLIC_APP_URL}/payment/error?error=completion_failed`
+              `${process.env.NEXT_PUBLIC_APP_URL}/payment/error?error=completion_failed&message=${encodeURIComponent(result.message || 'Unknown error')}`
             );
           }
+
+          console.log(`Order ${order.id} completed successfully`);
+        } else {
+          console.log(`Order ${order.id} was already completed`);
         }
 
         return NextResponse.redirect(
@@ -95,7 +148,93 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Payment callback error:', error);
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/payment/error?error=system_error`
+      `${process.env.NEXT_PUBLIC_APP_URL}/payment/error?error=system_error&details=${encodeURIComponent(error instanceof Error ? error.message : 'Unknown error')}`
+    );
+  }
+}
+
+// OPTIONAL: Add webhook handler for server-to-server notifications
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { event, data } = body;
+
+    console.log('Paystack webhook received:', event, data?.reference);
+
+    if (event === 'charge.success' && data?.reference) {
+      const reference = data.reference;
+
+      // Find the order
+      const order = await prisma.order.findUnique({
+        where: { paystackId: reference },
+        include: {
+          event: true,
+        },
+      });
+
+      if (order && order.paymentStatus === 'PENDING') {
+        console.log(`Processing webhook for order ${order.id}`);
+
+        // Try to get ticket selections from webhook metadata
+        const ticketSelections = data.metadata?.ticketSelections;
+
+        let result;
+        if (ticketSelections && Array.isArray(ticketSelections)) {
+          result = await completeOrderWithSelections(
+            order.id,
+            ticketSelections,
+            reference
+          );
+        } else {
+          // Try to get from stored order data
+          let storedSelections = null;
+          try {
+            if (order.purchaseNotes) {
+              const parsed = JSON.parse(order.purchaseNotes);
+              storedSelections = parsed.ticketSelections;
+            }
+          } catch (parseError) {
+            console.warn(
+              'Could not parse stored ticket selections in webhook:',
+              parseError
+            );
+          }
+
+          if (storedSelections) {
+            result = await completeOrderWithSelections(
+              order.id,
+              storedSelections,
+              reference
+            );
+          } else {
+            result = await completeOrder(order.id, reference);
+          }
+        }
+
+        if (result.success) {
+          console.log(`Webhook: Order ${order.id} completed successfully`);
+        } else {
+          console.error(
+            `Webhook: Failed to complete order ${order.id}:`,
+            result.message
+          );
+        }
+      } else if (order) {
+        console.log(
+          `Webhook: Order ${order.id} already completed or not found`
+        );
+      }
+    }
+
+    return NextResponse.json({ status: 'success' });
+  } catch (error) {
+    console.error('Webhook processing error:', error);
+    return NextResponse.json(
+      {
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
+      { status: 500 }
     );
   }
 }
