@@ -17,9 +17,12 @@ const generateTicketId = (orderId: string, idx: number): string => {
 
 export async function POST(
   _req: NextRequest,
-  { params }: { params: { orderId: string } }
+  context: { params: Promise<{ orderId: string }> }
 ) {
   try {
+    // Await the params Promise
+    const { orderId } = await context.params;
+
     const headersList = await headers();
     const session = await auth.api.getSession({ headers: headersList });
 
@@ -28,7 +31,7 @@ export async function POST(
     }
 
     const order = await prisma.order.findUnique({
-      where: { id: params.orderId },
+      where: { id: orderId },
       include: {
         buyer: true,
         event: {
