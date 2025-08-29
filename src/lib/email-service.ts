@@ -1,5 +1,5 @@
 // lib/email-service.ts
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import QRCode from 'qrcode';
 import { TicketEmailTemplate } from '@/components/email/ticket-template';
 import { EventNotificationTemplate } from '@/components/email/event-notification-template';
@@ -14,7 +14,16 @@ import {
   PayoutEmail,
 } from './notification-template';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Create nodemailer transporter
+const transporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST,
+  port: 465,
+  secure: true,
+  auth: {
+    user: process.env.NODEMAILER_USER,
+    pass: process.env.NODEMAILER_APP_PASSWORD,
+  },
+});
 
 interface EmailOptions {
   to: string;
@@ -33,11 +42,11 @@ interface EmailService {
   sendRefundNotification: (recipient: string, order: any) => Promise<void>;
 }
 
-class ResendEmailService implements EmailService {
-  private resend: Resend;
+class NodemailerEmailService implements EmailService {
+  private transporter: nodemailer.Transporter;
 
   constructor() {
-    this.resend = new Resend(process.env.RESEND_API_KEY);
+    this.transporter = transporter;
   }
 
   async sendTicketEmail(order: any, tickets: any[]): Promise<void> {
@@ -101,9 +110,9 @@ class ResendEmailService implements EmailService {
         })
       );
 
-      await this.resend.emails.send({
-        from: `${process.env.PLATFORM_NAME} <${process.env.RESEND_FROM_EMAIL}>`,
-        to: [order.buyer.email],
+      await this.transporter.sendMail({
+        from: `"${process.env.PLATFORM_NAME}" <${process.env.NODEMAILER_USER}>`,
+        to: order.buyer.email,
         subject: `Your tickets for ${event.title}`,
         html: emailHtml,
         headers: {
@@ -161,9 +170,9 @@ class ResendEmailService implements EmailService {
         })
       );
 
-      await this.resend.emails.send({
-        from: `${process.env.PLATFORM_NAME} <${process.env.RESEND_FROM_EMAIL}>`,
-        to: [recipient],
+      await this.transporter.sendMail({
+        from: `"${process.env.PLATFORM_NAME}" <${process.env.NODEMAILER_USER}>`,
+        to: recipient,
         subject,
         html: emailHtml,
         headers: {
@@ -196,9 +205,9 @@ class ResendEmailService implements EmailService {
         })
       );
 
-      await this.resend.emails.send({
-        from: `${process.env.PLATFORM_NAME} <${process.env.RESEND_FROM_EMAIL}>`,
-        to: [recipient],
+      await this.transporter.sendMail({
+        from: `"${process.env.PLATFORM_NAME}" <${process.env.NODEMAILER_USER}>`,
+        to: recipient,
         subject,
         html: emailHtml,
         headers: {
@@ -250,9 +259,9 @@ class ResendEmailService implements EmailService {
         </div>
       `;
 
-      await this.resend.emails.send({
-        from: `${process.env.PLATFORM_NAME} <${process.env.RESEND_FROM_EMAIL}>`,
-        to: [recipient],
+      await this.transporter.sendMail({
+        from: `"${process.env.PLATFORM_NAME}" <${process.env.NODEMAILER_USER}>`,
+        to: recipient,
         subject,
         html: emailHtml,
         headers: {
@@ -274,15 +283,15 @@ class NotificationEmailService {
   private async sendEmail({ to, subject, html }: EmailOptions) {
     try {
       const resolvedHtml = await html;
-      const result = await resend.emails.send({
-        from: 'notifications@yourplatform.com',
+      const result = await transporter.sendMail({
+        from: `"${process.env.PLATFORM_NAME}" <${process.env.NODEMAILER_USER}>`,
         to,
         subject,
         html: resolvedHtml,
       });
 
       console.log('✅ Email sent successfully:', result);
-      return { success: true, messageId: result.data?.id };
+      return { success: true, messageId: result.messageId };
     } catch (error) {
       console.error('❌ Failed to send email:', error);
       return { success: false, error };
@@ -426,5 +435,8 @@ class NotificationEmailService {
 }
 
 // Export both services with different names
-export const ticketEmailService = new ResendEmailService();
+export const ticketEmailService = new NodemailerEmailService();
 export const notificationEmailService = new NotificationEmailService();
+
+// Optional: Export transporter for direct use elsewhere
+export { transporter };

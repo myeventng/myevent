@@ -265,7 +265,6 @@ export async function initiateOrder(
         paymentStatus: 'PENDING',
         eventId: data.eventId,
         buyerId: session.user.id,
-        // FIXED: Store ticket selections reliably
         purchaseNotes: JSON.stringify({
           originalNotes: data.purchaseNotes || '',
           ticketSelections: data.ticketSelections,
