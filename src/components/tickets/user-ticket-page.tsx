@@ -13,6 +13,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Ticket,
   Calendar,
   MapPin,
@@ -26,6 +32,8 @@ import {
   CheckCircle,
   XCircle,
   Eye,
+  CalendarPlus,
+  ChevronDown,
 } from 'lucide-react';
 import { getUserTickets } from '@/actions/ticket.actions';
 import { createTicketNotification } from '@/actions/notification.actions';
@@ -204,6 +212,121 @@ export function UserTicketsPage({ userId }: UserTicketsPageProps) {
     linkElement.click();
 
     toast.success('Ticket downloaded successfully');
+  };
+
+  // Calendar reminder functions
+  const generateCalendarEvent = (ticket: any) => {
+    const event = ticket.ticketType.event;
+    const startDate = new Date(event.startDateTime);
+    const endDate = event.endDateTime
+      ? new Date(event.endDateTime)
+      : new Date(startDate.getTime() + 2 * 60 * 60 * 1000); // Default 2 hours if no end time
+
+    // Format dates for calendar (YYYYMMDDTHHMMSS format)
+    const formatCalendarDate = (date: Date) => {
+      return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    };
+
+    const calendarEvent = {
+      title: event.title,
+      description: `${event.description || ''}\n\nTicket Type: ${ticket.ticketType.name}\nTicket ID: ${ticket.ticketId}`,
+      location: event.venue?.name || '',
+      startDate: formatCalendarDate(startDate),
+      endDate: formatCalendarDate(endDate),
+      reminder: 60, // 1 hour before
+    };
+
+    return calendarEvent;
+  };
+
+  const addToGoogleCalendar = (ticket: any) => {
+    const event = generateCalendarEvent(ticket);
+
+    const googleCalendarUrl = new URL(
+      'https://calendar.google.com/calendar/render'
+    );
+    googleCalendarUrl.searchParams.set('action', 'TEMPLATE');
+    googleCalendarUrl.searchParams.set('text', event.title);
+    googleCalendarUrl.searchParams.set(
+      'dates',
+      `${event.startDate}/${event.endDate}`
+    );
+    googleCalendarUrl.searchParams.set('details', event.description);
+    googleCalendarUrl.searchParams.set('location', event.location);
+    googleCalendarUrl.searchParams.set('sf', 'true');
+    googleCalendarUrl.searchParams.set('output', 'xml');
+
+    window.open(googleCalendarUrl.toString(), '_blank');
+    toast.success('Opening Google Calendar...');
+  };
+
+  const addToOutlookCalendar = (ticket: any) => {
+    const event = generateCalendarEvent(ticket);
+
+    const outlookUrl = new URL(
+      'https://outlook.live.com/calendar/0/deeplink/compose'
+    );
+    outlookUrl.searchParams.set('subject', event.title);
+    outlookUrl.searchParams.set('startdt', event.startDate);
+    outlookUrl.searchParams.set('enddt', event.endDate);
+    outlookUrl.searchParams.set('body', event.description);
+    outlookUrl.searchParams.set('location', event.location);
+
+    window.open(outlookUrl.toString(), '_blank');
+    toast.success('Opening Outlook Calendar...');
+  };
+
+  const addToAppleCalendar = (ticket: any) => {
+    const event = generateCalendarEvent(ticket);
+
+    // Create ICS file content
+    const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//EventPlatform//Event Reminder//EN
+BEGIN:VEVENT
+UID:${ticket.ticketId}@eventplatform.com
+DTSTART:${event.startDate}
+DTEND:${event.endDate}
+SUMMARY:${event.title}
+DESCRIPTION:${event.description.replace(/\n/g, '\\n')}
+LOCATION:${event.location}
+BEGIN:VALARM
+TRIGGER:-PT1H
+ACTION:DISPLAY
+DESCRIPTION:Event reminder: ${event.title}
+END:VALARM
+END:VEVENT
+END:VCALENDAR`;
+
+    // Create blob and download
+    const blob = new Blob([icsContent], {
+      type: 'text/calendar;charset=utf-8',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${event.title.replace(/[^a-z0-9]/gi, '-')}-reminder.ics`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+
+    toast.success('Calendar file downloaded! Open it to add to your calendar.');
+  };
+
+  const addToYahooCalendar = (ticket: any) => {
+    const event = generateCalendarEvent(ticket);
+
+    const yahooUrl = new URL('https://calendar.yahoo.com/');
+    yahooUrl.searchParams.set('v', '60');
+    yahooUrl.searchParams.set('view', 'd');
+    yahooUrl.searchParams.set('type', '20');
+    yahooUrl.searchParams.set('title', event.title);
+    yahooUrl.searchParams.set('st', event.startDate);
+    yahooUrl.searchParams.set('et', event.endDate);
+    yahooUrl.searchParams.set('desc', event.description);
+    yahooUrl.searchParams.set('in_loc', event.location);
+
+    window.open(yahooUrl.toString(), '_blank');
+    toast.success('Opening Yahoo Calendar...');
   };
 
   const formatCurrency = (amount: number) => {
@@ -435,7 +558,7 @@ export function UserTicketsPage({ userId }: UserTicketsPageProps) {
                         </Link>
                       </Button>
 
-                      {canRefundTicket(ticket) && (
+                      {/* {canRefundTicket(ticket) && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -445,18 +568,62 @@ export function UserTicketsPage({ userId }: UserTicketsPageProps) {
                           <AlertTriangle className="w-4 h-4 mr-1" />
                           Request Refund
                         </Button>
-                      )}
+                      )} */}
 
+                      {/* Calendar Reminder Dropdown */}
                       {ticket.status === 'UNUSED' &&
                         !isEventPast(ticket.ticketType.event.startDateTime) && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-blue-600 border-blue-600 hover:bg-blue-50"
-                          >
-                            <Calendar className="w-4 h-4 mr-1" />
-                            Add to Calendar
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-blue-600 border-blue-600 hover:bg-blue-50"
+                              >
+                                <CalendarPlus className="w-4 h-4 mr-1" />
+                                Add to Calendar
+                                <ChevronDown className="w-3 h-3 ml-1" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-48">
+                              <DropdownMenuItem
+                                onClick={() => addToGoogleCalendar(ticket)}
+                                className="cursor-pointer"
+                              >
+                                <div className="flex items-center">
+                                  <div className="w-4 h-4 mr-2 rounded bg-blue-500"></div>
+                                  Google Calendar
+                                </div>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => addToOutlookCalendar(ticket)}
+                                className="cursor-pointer"
+                              >
+                                <div className="flex items-center">
+                                  <div className="w-4 h-4 mr-2 rounded bg-blue-600"></div>
+                                  Outlook Calendar
+                                </div>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => addToAppleCalendar(ticket)}
+                                className="cursor-pointer"
+                              >
+                                <div className="flex items-center">
+                                  <div className="w-4 h-4 mr-2 rounded bg-gray-800"></div>
+                                  Apple Calendar (.ics)
+                                </div>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => addToYahooCalendar(ticket)}
+                                className="cursor-pointer"
+                              >
+                                <div className="flex items-center">
+                                  <div className="w-4 h-4 mr-2 rounded bg-purple-600"></div>
+                                  Yahoo Calendar
+                                </div>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                     </div>
                   </div>

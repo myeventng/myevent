@@ -1,62 +1,126 @@
 // src/app/api/payment/webhook/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { completeOrder } from '@/actions/order.actions';
+import {
+  completeOrder,
+  completeOrderWithSelections,
+} from '@/actions/order.actions';
+import { getSetting } from '@/actions/platform-settings.actions';
 import crypto from 'crypto';
 
 const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY!;
 
+// FIXED webhook handler in app/api/payment/callback/route.ts
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.text();
-    const signature = request.headers.get('x-paystack-signature');
+    const body = await request.json();
+    const { event, data } = body;
 
-    if (!signature) {
-      return NextResponse.json(
-        { error: 'No signature provided' },
-        { status: 400 }
-      );
-    }
+    console.log('Paystack webhook received:', event, data?.reference);
 
-    // Verify webhook signature
-    const hash = crypto
-      .createHmac('sha512', paystackSecretKey)
-      .update(body, 'utf8')
-      .digest('hex');
+    if (event === 'charge.success' && data?.reference) {
+      const reference = data.reference;
 
-    if (hash !== signature) {
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
-    }
+      // Find the order
+      const order = await prisma.order.findUnique({
+        where: { paystackId: reference },
+        include: {
+          event: true,
+          buyer: true,
+        },
+      });
 
-    const event = JSON.parse(body);
+      if (!order) {
+        console.error(`Webhook: Order not found for reference: ${reference}`);
+        return NextResponse.json({ status: 'order_not_found' });
+      }
 
-    // Handle different webhook events
-    switch (event.event) {
-      case 'charge.success':
-        await handleChargeSuccess(event.data);
-        break;
+      if (order.paymentStatus === 'COMPLETED') {
+        console.log(`Webhook: Order ${order.id} already completed`);
+        return NextResponse.json({ status: 'already_completed' });
+      }
 
-      case 'charge.failed':
-        await handleChargeFailed(event.data);
-        break;
+      console.log(`Webhook: Processing order ${order.id}`);
 
-      case 'refund.processed':
-        await handleRefundProcessed(event.data);
-        break;
+      // FIXED: Get ticket selections with better fallback logic
+      let ticketSelections = [];
 
-      case 'transfer.success':
-        await handleTransferSuccess(event.data);
-        break;
+      // Try webhook metadata first
+      if (
+        data.metadata?.ticketSelections &&
+        Array.isArray(data.metadata.ticketSelections)
+      ) {
+        ticketSelections = data.metadata.ticketSelections;
+        console.log(
+          'Webhook: Using ticket selections from metadata:',
+          ticketSelections
+        );
+      } else {
+        // Try stored order data
+        try {
+          if (order.purchaseNotes) {
+            const parsed = JSON.parse(order.purchaseNotes);
+            if (
+              parsed.ticketSelections &&
+              Array.isArray(parsed.ticketSelections)
+            ) {
+              ticketSelections = parsed.ticketSelections;
+              console.log(
+                'Webhook: Using stored ticket selections:',
+                ticketSelections
+              );
+            }
+          }
+        } catch (parseError) {
+          console.warn(
+            'Webhook: Could not parse stored ticket selections:',
+            parseError
+          );
+        }
+      }
 
-      default:
-        console.log(`Unhandled webhook event: ${event.event}`);
+      // Complete order with proper ticket selections
+      let result;
+      if (ticketSelections.length > 0) {
+        result = await completeOrderWithSelections(
+          order.id,
+          ticketSelections,
+          reference
+        );
+      } else {
+        console.warn(
+          'Webhook: No ticket selections found, this may cause issues'
+        );
+        // This should not happen with the fixes, but keeping as fallback
+        result = await completeOrder(order.id, reference);
+      }
+
+      if (result.success) {
+        console.log(`Webhook: Order ${order.id} completed successfully`);
+        return NextResponse.json({ status: 'success', orderId: order.id });
+      } else {
+        console.error(
+          `Webhook: Failed to complete order ${order.id}:`,
+          result.message
+        );
+        return NextResponse.json({
+          status: 'completion_failed',
+          error: result.message,
+          orderId: order.id,
+        });
+      }
+    } else {
+      console.log(`Webhook: Unhandled event type: ${event}`);
     }
 
     return NextResponse.json({ status: 'success' });
   } catch (error) {
-    console.error('Webhook error:', error);
+    console.error('Webhook processing error:', error);
     return NextResponse.json(
-      { error: 'Webhook processing failed' },
+      {
+        status: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     );
   }

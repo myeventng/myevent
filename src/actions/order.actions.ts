@@ -360,6 +360,9 @@ export async function completeOrderWithSelections(
   paystackReference?: string | null
 ): Promise<ActionResponse<any>> {
   try {
+    console.log(`Starting completeOrderWithSelections for order: ${orderId}`);
+    console.log('Ticket selections:', ticketSelections);
+
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -374,12 +377,14 @@ export async function completeOrderWithSelections(
     });
 
     if (!order) {
+      console.error(`Order not found: ${orderId}`);
       return { success: false, message: 'Order not found' };
     }
 
     if (order.paymentStatus === 'COMPLETED') {
+      console.log(`Order ${order.id} already completed`);
       return {
-        success: false,
+        success: true,
         message: 'Order already completed',
         data: order,
       };
@@ -390,9 +395,11 @@ export async function completeOrderWithSelections(
       const paystackConfig = await getPaystackConfig();
 
       if (!paystackConfig.secretKey) {
+        console.error('Paystack secret key not configured');
         return { success: false, message: 'Payment system not configured' };
       }
 
+      console.log(`Verifying payment for reference: ${paystackReference}`);
       const verifyResponse = await fetch(
         `${paystackConfig.baseUrl}/transaction/verify/${paystackReference}`,
         {
@@ -406,27 +413,42 @@ export async function completeOrderWithSelections(
       const verifyData = await verifyResponse.json();
 
       if (!verifyData?.status || verifyData?.data?.status !== 'success') {
+        console.error('Payment verification failed:', verifyData);
         return { success: false, message: 'Payment verification failed' };
       }
 
       const paidKobo = Number(verifyData.data.amount);
       const orderKobo = Math.round(Number(order.totalAmount) * 100);
       if (paidKobo !== orderKobo) {
+        console.error(
+          `Payment amount mismatch: expected ${orderKobo}, got ${paidKobo}`
+        );
         return { success: false, message: 'Payment amount mismatch' };
       }
+      console.log('Payment verification successful');
     }
 
-    // FIXED: Use the provided ticket selections
-    const ticketsToCreate: (TicketToCreate & { qrCodeData: string })[] = [];
-    let createdCount = 0;
+    // Validate ticket selections exist and are valid
+    if (
+      !ticketSelections ||
+      !Array.isArray(ticketSelections) ||
+      ticketSelections.length === 0
+    ) {
+      console.error('Invalid or empty ticket selections');
+      return {
+        success: false,
+        message: 'Invalid ticket selections. Please try booking again.',
+      };
+    }
 
-    // Validate all selections first
+    // Pre-validate all ticket types exist and have availability
     for (const selection of ticketSelections) {
       const ticketType = order.event.ticketTypes.find(
         (tt) => tt.id === selection.ticketTypeId
       );
 
       if (!ticketType) {
+        console.error(`Ticket type not found: ${selection.ticketTypeId}`);
         return {
           success: false,
           message: `Ticket type ${selection.ticketTypeId} not found`,
@@ -434,22 +456,39 @@ export async function completeOrderWithSelections(
       }
 
       if (selection.quantity > ticketType.quantity) {
+        console.error(
+          `Not enough tickets: requested ${selection.quantity}, available ${ticketType.quantity}`
+        );
         return {
           success: false,
           message: `Not enough ${ticketType.name} tickets available. Requested: ${selection.quantity}, Available: ${ticketType.quantity}`,
         };
       }
+
+      if (selection.quantity <= 0) {
+        console.error(`Invalid quantity: ${selection.quantity}`);
+        return {
+          success: false,
+          message: `Invalid quantity for ${ticketType.name}`,
+        };
+      }
     }
 
-    // Create tickets for each selection
+    console.log('All ticket selections validated successfully');
+
+    // Prepare tickets to create
+    const ticketsToCreate: TicketToCreate[] = [];
+    let ticketIndex = 0;
+
     for (const selection of ticketSelections) {
       for (let i = 0; i < selection.quantity; i++) {
-        const ticketId = generateTicketId(order.id, createdCount);
+        const ticketId = generateTicketId(order.id, ticketIndex);
         const qrCodeData = JSON.stringify({
           type: 'EVENT_TICKET',
           ticketId,
           eventId: order.event.id,
           userId: order.buyerId,
+          orderId: order.id,
           issuedAt: Date.now(),
         });
 
@@ -462,86 +501,142 @@ export async function completeOrderWithSelections(
           qrCodeData,
         });
 
-        createdCount++;
+        ticketIndex++;
       }
     }
 
-    // Validate total quantity
-    if (ticketsToCreate.length !== order.quantity) {
-      return {
-        success: false,
-        message: `Ticket quantity mismatch: expected ${order.quantity}, creating ${ticketsToCreate.length}`,
-      };
-    }
+    console.log(`Prepared ${ticketsToCreate.length} tickets to create`);
 
-    // Create tickets and update order in transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Create all tickets
-      const createdTickets = await Promise.all(
-        ticketsToCreate.map((ticketData) =>
-          tx.ticket.create({
-            data: { ...ticketData, orderId: order.id },
+    // Execute transaction with better error handling
+    const result = await prisma.$transaction(
+      async (tx) => {
+        console.log('Starting database transaction...');
+
+        // 1. Create all tickets first
+        const createdTickets = [];
+        for (const ticketData of ticketsToCreate) {
+          try {
+            const ticket = await tx.ticket.create({
+              data: {
+                ...ticketData,
+                orderId: order.id,
+              },
+              include: {
+                ticketType: {
+                  include: {
+                    event: { include: { venue: { include: { city: true } } } },
+                  },
+                },
+              },
+            });
+            createdTickets.push(ticket);
+            console.log(`Created ticket: ${ticket.ticketId}`);
+          } catch (ticketError) {
+            console.error(
+              `Failed to create ticket ${ticketData.ticketId}:`,
+              ticketError
+            );
+            throw new Error(`Failed to create ticket: ${ticketError}`);
+          }
+        }
+
+        console.log(`Successfully created ${createdTickets.length} tickets`);
+
+        // 2. Update ticket type quantities
+        for (const selection of ticketSelections) {
+          try {
+            await tx.ticketType.update({
+              where: { id: selection.ticketTypeId },
+              data: {
+                quantity: {
+                  decrement: selection.quantity,
+                },
+              },
+            });
+            console.log(
+              `Decremented quantity for ticket type ${selection.ticketTypeId} by ${selection.quantity}`
+            );
+          } catch (updateError) {
+            console.error(
+              `Failed to update ticket type quantity:`,
+              updateError
+            );
+            throw new Error(
+              `Failed to update ticket inventory: ${updateError}`
+            );
+          }
+        }
+
+        // 3. Update order status last
+        try {
+          const updatedOrder = await tx.order.update({
+            where: { id: order.id },
+            data: {
+              paymentStatus: 'COMPLETED',
+              refundStatus: null,
+            },
             include: {
-              ticketType: {
+              buyer: true,
+              event: { include: { venue: { include: { city: true } } } },
+              tickets: {
                 include: {
-                  event: { include: { venue: { include: { city: true } } } },
+                  ticketType: {
+                    include: {
+                      event: {
+                        include: { venue: { include: { city: true } } },
+                      },
+                    },
+                  },
                 },
               },
             },
-          })
-        )
-      );
+          });
 
-      // FIXED: Update ticket type quantities properly
-      for (const selection of ticketSelections) {
-        await tx.ticketType.update({
-          where: { id: selection.ticketTypeId },
-          data: { quantity: { decrement: selection.quantity } },
-        });
+          console.log(`Updated order ${order.id} to COMPLETED status`);
+          return { tickets: createdTickets, order: updatedOrder };
+        } catch (orderUpdateError) {
+          console.error('Failed to update order status:', orderUpdateError);
+          throw new Error(`Failed to update order status: ${orderUpdateError}`);
+        }
+      },
+      {
+        maxWait: 10000, // 10 seconds
+        timeout: 30000, // 30 seconds
       }
+    );
 
-      // FIXED: Update order status to COMPLETED
-      const updatedOrder = await tx.order.update({
-        where: { id: order.id },
-        data: {
-          paymentStatus: PaymentStatus.COMPLETED,
-          refundStatus: null,
-        },
-        include: {
-          buyer: true,
-          event: { include: { venue: { include: { city: true } } } },
-          tickets: {
-            include: {
-              ticketType: {
-                include: {
-                  event: { include: { venue: { include: { city: true } } } },
-                },
-              },
-            },
-          },
-        },
-      });
+    console.log('Database transaction completed successfully');
 
-      return { tickets: createdTickets, order: updatedOrder };
-    });
-
-    // Create notification and send email
-    await createTicketNotification(result.order.id, 'TICKET_PURCHASED');
-
+    // Post-transaction operations (notifications and emails)
     try {
+      // Create notification
+      await createTicketNotification(result.order.id, 'TICKET_PURCHASED');
+      console.log('Notification created');
+
+      // Send email
       await ticketEmailService.sendTicketEmail(result.order, result.tickets);
       console.log('Ticket email sent successfully');
     } catch (emailError) {
       console.error('Error sending ticket email:', emailError);
+      // Don't fail the whole operation for email errors
     }
 
     // Process waiting list
-    await processWaitingList(order.event.id);
+    try {
+      await processWaitingList(order.event.id);
+      console.log('Waiting list processed');
+    } catch (waitingListError) {
+      console.error('Error processing waiting list:', waitingListError);
+      // Don't fail for waiting list errors
+    }
 
+    // Revalidate paths
     revalidatePath('/dashboard/tickets');
     revalidatePath('/dashboard/orders');
     revalidatePath(`/events/${order.event.slug}`);
     revalidatePath(`/dashboard/events/${result.order.eventId}/analytics`);
+
+    console.log(`Order ${orderId} completion process finished successfully`);
 
     return {
       success: true,
@@ -549,10 +644,23 @@ export async function completeOrderWithSelections(
       data: result.order,
     };
   } catch (error) {
-    console.error('Error completing order with selections:', error);
+    console.error('Error in completeOrderWithSelections:', error);
+
+    // Try to update order status to FAILED if it's still PENDING
+    try {
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { paymentStatus: 'FAILED' },
+      });
+      console.log(`Marked order ${orderId} as FAILED due to completion error`);
+    } catch (updateError) {
+      console.error('Failed to mark order as failed:', updateError);
+    }
+
     return {
       success: false,
-      message: 'Failed to complete order',
+      message:
+        error instanceof Error ? error.message : 'Failed to complete order',
     };
   }
 }
