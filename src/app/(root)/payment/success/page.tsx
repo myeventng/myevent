@@ -22,8 +22,9 @@ export default async function PaymentSuccess({
       <p className="text-muted-foreground mb-6">
         {order ? (
           <>
-            Order <span className="font-mono">{order.id.slice(-8)}</span> for "
-            {order.event.title}" is confirmed.
+            Order <span className="font-mono">{order.id.slice(-8)}</span> for
+            &quot;
+            {order.event.title}&quot; is confirmed.
           </>
         ) : (
           'Your order is confirmed.'
