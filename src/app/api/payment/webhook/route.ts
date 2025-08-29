@@ -1,23 +1,55 @@
-// src/app/api/payment/webhook/route.ts
+// src/app/api/payment/webhook/route.ts - FIXED VERSION
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import {
-  completeOrder,
-  completeOrderWithSelections,
-} from '@/actions/order.actions';
+import { completeOrderWithSelections } from '@/actions/order.actions';
 import { getSetting } from '@/actions/platform-settings.actions';
 import crypto from 'crypto';
 
-const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY!;
-
-// FIXED webhook handler in app/api/payment/callback/route.ts
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { event, data } = body;
+    const body = await request.text(); // Get raw body for signature verification
+    const signature = request.headers.get('x-paystack-signature');
 
-    console.log('Paystack webhook received:', event, data?.reference);
+    if (!signature) {
+      console.error('Webhook: No signature provided');
+      return NextResponse.json({ error: 'No signature' }, { status: 400 });
+    }
 
+    // Get Paystack secret key
+    const paystackSecretKey =
+      (await getSetting('financial.paystackSecretKey')) ||
+      process.env.PAYSTACK_SECRET_KEY;
+
+    if (!paystackSecretKey) {
+      console.error('Webhook: Paystack secret key not configured');
+      return NextResponse.json(
+        { error: 'Configuration error' },
+        { status: 500 }
+      );
+    }
+
+    // Verify webhook signature
+    const hash = crypto
+      .createHmac('sha512', paystackSecretKey)
+      .update(body)
+      .digest('hex');
+
+    if (hash !== signature) {
+      console.error('Webhook: Invalid signature');
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+    }
+
+    // Parse the verified body
+    const webhookData = JSON.parse(body);
+    const { event, data } = webhookData;
+
+    console.log(
+      'Paystack webhook verified and received:',
+      event,
+      data?.reference
+    );
+
+    // Handle charge.success event
     if (event === 'charge.success' && data?.reference) {
       const reference = data.reference;
 
@@ -40,9 +72,20 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ status: 'already_completed' });
       }
 
+      // Verify amount matches
+      const expectedKobo = Math.round(order.totalAmount * 100);
+      const paidKobo = data.amount;
+
+      if (paidKobo !== expectedKobo) {
+        console.error(
+          `Webhook: Amount mismatch for order ${order.id}: expected ${expectedKobo}, got ${paidKobo}`
+        );
+        return NextResponse.json({ status: 'amount_mismatch' });
+      }
+
       console.log(`Webhook: Processing order ${order.id}`);
 
-      // FIXED: Get ticket selections with better fallback logic
+      // Get ticket selections with proper fallback
       let ticketSelections = [];
 
       // Try webhook metadata first
@@ -79,21 +122,23 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Complete order with proper ticket selections
-      let result;
-      if (ticketSelections.length > 0) {
-        result = await completeOrderWithSelections(
-          order.id,
-          ticketSelections,
-          reference
+      // Ensure we have valid ticket selections
+      if (!ticketSelections || ticketSelections.length === 0) {
+        console.error(
+          `Webhook: No valid ticket selections found for order: ${order.id}`
         );
-      } else {
-        console.warn(
-          'Webhook: No ticket selections found, this may cause issues'
-        );
-        // This should not happen with the fixes, but keeping as fallback
-        result = await completeOrder(order.id, reference);
+        return NextResponse.json({
+          status: 'no_ticket_selections',
+          orderId: order.id,
+        });
       }
+
+      // Complete order with specific ticket selections
+      const result = await completeOrderWithSelections(
+        order.id,
+        ticketSelections,
+        reference
+      );
 
       if (result.success) {
         console.log(`Webhook: Order ${order.id} completed successfully`);
@@ -109,6 +154,13 @@ export async function POST(request: NextRequest) {
           orderId: order.id,
         });
       }
+    }
+
+    // Handle other webhook events
+    if (event === 'charge.failed') {
+      await handleChargeFailed(data);
+    } else if (event === 'refund.processed') {
+      await handleRefundProcessed(data);
     } else {
       console.log(`Webhook: Unhandled event type: ${event}`);
     }
@@ -126,52 +178,15 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handleChargeSuccess(data: any) {
-  try {
-    const { reference, amount } = data;
-
-    const order = await prisma.order.findUnique({
-      where: { paystackId: reference },
-      include: { event: true, buyer: true },
-    });
-    if (!order) {
-      console.error(`Order not found for reference: ${reference}`);
-      return;
-    }
-
-    if (order.paymentStatus === 'COMPLETED') {
-      console.log(`Order ${order.id} already completed`);
-      return; // idempotent
-    }
-
-    // Safer amount check
-    const expectedKobo = Math.round(order.totalAmount * 100);
-    if (amount !== expectedKobo) {
-      console.error(
-        `Amount mismatch for order ${order.id}: expected ${expectedKobo}, got ${amount}`
-      );
-      return;
-    }
-
-    // Single call – completeOrder handles tickets, inventory, notifications, email
-    await completeOrder(order.id, reference);
-
-    console.log(`Order ${order.id} completed successfully`);
-  } catch (error) {
-    console.error('Error handling charge success:', error);
-  }
-}
-
 async function handleChargeFailed(data: any) {
   try {
     const { reference } = data;
 
-    // Find and update the order
     const order = await prisma.order.findUnique({
       where: { paystackId: reference },
     });
 
-    if (order) {
+    if (order && order.paymentStatus === 'PENDING') {
       await prisma.order.update({
         where: { id: order.id },
         data: { paymentStatus: 'FAILED' },
@@ -188,91 +203,46 @@ async function handleRefundProcessed(data: any) {
   try {
     const { transaction } = data;
 
-    // Find the order by Paystack transaction
     const order = await prisma.order.findUnique({
       where: { paystackId: transaction.reference },
+      include: { tickets: true },
     });
 
     if (order) {
-      await prisma.order.update({
-        where: { id: order.id },
-        data: {
-          paymentStatus: 'REFUNDED',
-          refundStatus: 'PROCESSED',
-        },
-      });
+      await prisma.$transaction(async (tx) => {
+        // Update order status
+        await tx.order.update({
+          where: { id: order.id },
+          data: {
+            paymentStatus: 'REFUNDED',
+            refundStatus: 'PROCESSED',
+          },
+        });
 
-      // Update associated tickets
-      await prisma.ticket.updateMany({
-        where: {
-          ticketType: {
-            eventId: order.eventId,
-          },
-          userId: order.buyerId,
-          purchasedAt: {
-            gte: new Date(order.createdAt.getTime() - 1000),
-            lte: new Date(order.createdAt.getTime() + 1000),
-          },
-        },
-        data: { status: 'REFUNDED' },
+        // Update tickets status
+        await tx.ticket.updateMany({
+          where: { orderId: order.id },
+          data: { status: 'REFUNDED' },
+        });
+
+        // Return ticket quantities to inventory
+        const ticketCounts = await tx.ticket.groupBy({
+          by: ['ticketTypeId'],
+          where: { orderId: order.id },
+          _count: true,
+        });
+
+        for (const count of ticketCounts) {
+          await tx.ticketType.update({
+            where: { id: count.ticketTypeId },
+            data: { quantity: { increment: count._count } },
+          });
+        }
       });
 
       console.log(`Refund processed for order ${order.id}`);
     }
   } catch (error) {
     console.error('Error handling refund processed:', error);
-  }
-}
-
-async function handleTransferSuccess(data: any) {
-  try {
-    // Handle organizer payouts
-    console.log('Transfer success:', data);
-  } catch (error) {
-    console.error('Error handling transfer success:', error);
-  }
-}
-
-async function sendTicketEmail(order: any) {
-  try {
-    // Get tickets for this order
-    const tickets = await prisma.ticket.findMany({
-      where: {
-        ticketType: {
-          eventId: order.eventId,
-        },
-        userId: order.buyerId,
-        purchasedAt: {
-          gte: new Date(order.createdAt.getTime() - 1000),
-          lte: new Date(order.createdAt.getTime() + 1000),
-        },
-      },
-      include: {
-        ticketType: {
-          include: {
-            event: {
-              include: {
-                venue: {
-                  include: {
-                    city: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (tickets.length === 0) return;
-
-    // Generate QR codes and send email
-    // This would integrate with your email service (e.g., SendGrid, Mailgun)
-
-    console.log(`Sending ${tickets.length} tickets to ${order.buyer.email}`);
-
-    // TODO: Implement actual email sending with QR codes
-  } catch (error) {
-    console.error('Error sending ticket email:', error);
   }
 }

@@ -1,4 +1,4 @@
-// app/api/payment/callback/route.ts - FIXED VERSION
+// app/api/payment/callback/route.ts 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { completeOrderWithSelections } from '@/actions/order.actions';
