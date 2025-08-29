@@ -1,4 +1,4 @@
-// src/app/api/orders/[orderId]/tickets/route.ts - Fixed version using your PDF generator
+// src/app/api/orders/[orderId]/tickets/route.ts -
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
@@ -14,9 +14,12 @@ export const runtime = 'nodejs';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { orderId: string } }
+  context: { params: Promise<{ orderId: string }> }
 ) {
   try {
+    // Await the params Promise
+    const { orderId } = await context.params;
+
     const headersList = await headers();
     const session = await auth.api.getSession({ headers: headersList });
 
@@ -25,7 +28,7 @@ export async function GET(
     }
 
     const order = await prisma.order.findUnique({
-      where: { id: params.orderId },
+      where: { id: orderId },
       include: {
         buyer: true,
         event: {
