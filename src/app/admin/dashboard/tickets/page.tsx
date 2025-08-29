@@ -58,13 +58,13 @@ export default async function AdminTickets() {
     <DashboardLayout session={session}>
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
+          {/* <div>
             <h1 className="text-2xl font-bold">Tickets Management</h1>
             <p className="text-muted-foreground">
               View and manage all tickets in the system. Track ticket sales and
               handle refunds.
             </p>
-          </div>
+          </div> */}
         </div>
         <AdminTicketsTable
           initialData={tickets}

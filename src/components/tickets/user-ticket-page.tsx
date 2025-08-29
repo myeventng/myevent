@@ -420,7 +420,7 @@ export function UserTicketsPage({ userId }: UserTicketsPageProps) {
                       </Button>
 
                       <Button variant="outline" size="sm" asChild>
-                        <Link href={`/tickets/${ticket.id}`}>
+                        <Link href={`/dashboard/tickets/${ticket.id}`}>
                           <QrCode className="w-4 h-4 mr-1" />
                           QR Code
                         </Link>
@@ -462,7 +462,7 @@ export function UserTicketsPage({ userId }: UserTicketsPageProps) {
                   </div>
 
                   {/* QR Code Section */}
-                  <div className="lg:w-48 bg-gray-50 p-6 flex flex-col items-center justify-center border-l">
+                  {/* <div className="lg:w-48 bg-gray-50 p-6 flex flex-col items-center justify-center border-l">
                     <div className="w-32 h-32 bg-white border-2 border-gray-200 rounded-lg flex items-center justify-center mb-4">
                       <QrCode className="w-16 h-16 text-gray-400" />
                     </div>
@@ -474,7 +474,7 @@ export function UserTicketsPage({ userId }: UserTicketsPageProps) {
                         Already Scanned
                       </Badge>
                     )}
-                  </div>
+                  </div> */}
                 </div>
 
                 {/* Event Timeline for upcoming events */}

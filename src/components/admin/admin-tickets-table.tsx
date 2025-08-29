@@ -219,6 +219,29 @@ export function AdminTicketsTable({
     }
   };
 
+  // Refresh tickets data
+  const refreshTickets = async () => {
+    setIsLoading(true);
+    try {
+      // You'll need to import or create a function to fetch tickets
+      // For now, I'll show the structure - replace with your actual API call
+      const response = await fetch('/api/admin/tickets');
+
+      if (response.ok) {
+        const freshData = await response.json();
+        setData(freshData.tickets || freshData); // Adjust based on your API response structure
+        toast.success('Tickets refreshed successfully');
+      } else {
+        throw new Error('Failed to fetch tickets');
+      }
+    } catch (error) {
+      console.error('Error refreshing tickets:', error);
+      toast.error('Failed to refresh tickets');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Export to CSV function
   const exportAllTicketsPDF = () => {
     try {

@@ -17,7 +17,7 @@ export default async function PaymentSuccess({
     : null;
 
   return (
-    <main className="mx-auto max-w-2xl py-16 px-4">
+    <main className="mx-auto max-w-2xl py-44 px-4">
       <h1 className="text-2xl font-bold mb-2">Payment Successful 🎉</h1>
       <p className="text-muted-foreground mb-6">
         {order ? (

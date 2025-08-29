@@ -7,7 +7,7 @@ export default async function PaymentError({
   const params = await searchParams;
 
   return (
-    <main className="mx-auto max-w-2xl py-16 px-4">
+    <main className="mx-auto max-w-2xl py-44 px-4">
       <h1 className="text-2xl font-bold mb-2">Payment Error</h1>
       <p className="text-muted-foreground mb-6">
         Something went wrong
