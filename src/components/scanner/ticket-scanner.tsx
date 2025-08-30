@@ -444,7 +444,7 @@ export function TicketScanner({
       <Card>
         <CardContent className="p-4">
           <div className="text-sm text-muted-foreground space-y-1">
-            <p>• Click "Start Scanner" to begin scanning</p>
+            <p>• Click &quot;Start Scanner&quot; to begin scanning</p>
             <p>• Position QR codes in the white target area</p>
             <p>
               • Scanner only accepts valid event ticket QR codes with JSON data
