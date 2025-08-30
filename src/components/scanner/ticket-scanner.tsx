@@ -917,8 +917,8 @@ export function TicketScanner({
         <CardContent>
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>
-              • <strong>QR Code Scanning:</strong> Click "Start QR Scanner" and
-              position QR codes in the target area
+              • <strong>QR Code Scanning:</strong> Click &quot;Start QR
+              Scanner&quot; and position QR codes in the target area
             </p>
             <p>
               • <strong>Automatic Detection:</strong> The scanner will
@@ -926,7 +926,7 @@ export function TicketScanner({
             </p>
             <p>
               • <strong>Manual Entry:</strong> Type ticket ID and press Enter or
-              click "Validate"
+              click &quot;Validate&quot;
             </p>
             <p>
               • <strong>Visual Feedback:</strong> Watch for green (success) or
@@ -937,8 +937,8 @@ export function TicketScanner({
               validated for the correct event
             </p>
             <p>
-              • <strong>Multiple Cameras:</strong> Use "Switch Camera" to toggle
-              between available cameras
+              • <strong>Multiple Cameras:</strong> Use &quot;Switch Camera&quot;
+              to toggle between available cameras
             </p>
             <p>
               • <strong>Browser Support:</strong> Works best on Chrome, Safari,
