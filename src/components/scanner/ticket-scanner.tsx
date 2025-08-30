@@ -635,7 +635,7 @@ export function TicketScanner({
                 <div className="mt-2 text-sm">
                   <p>Troubleshooting steps:</p>
                   <ul className="list-disc list-inside mt-1">
-                    <li>Ensure you're using HTTPS or localhost</li>
+                    <li>Ensure you&lsquo;re using HTTPS or localhost</li>
                     <li>Allow camera permissions in your browser</li>
                     <li>Close other apps that might be using the camera</li>
                     <li>Try refreshing the page</li>
