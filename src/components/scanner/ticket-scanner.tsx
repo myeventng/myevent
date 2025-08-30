@@ -83,52 +83,20 @@ export function TicketScanner({
 
   const checkCameraCapabilities = async () => {
     try {
-      // Check if navigator.mediaDevices is available
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setCameraError('Camera not supported on this device or browser');
         setHasPermission(false);
         return;
       }
 
-      // Check if running in secure context (HTTPS or localhost)
-      if (
-        location.protocol !== 'https:' &&
-        !location.hostname.includes('localhost') &&
-        location.hostname !== '127.0.0.1'
-      ) {
-        setCameraError('Camera requires HTTPS or localhost connection');
-        setHasPermission(false);
-        return;
-      }
-
-      // Query permissions if available
-      if ('permissions' in navigator) {
-        try {
-          const permission = await navigator.permissions.query({
-            name: 'camera' as PermissionName,
-          });
-          if (permission.state === 'denied') {
-            setCameraError(
-              'Camera permission denied. Please enable camera access in your browser settings.'
-            );
-            setHasPermission(false);
-            return;
-          }
-        } catch (e) {
-          // Permissions API might not be supported, continue anyway
-          console.log('Permissions API not fully supported');
-        }
-      }
-
       setHasPermission(true);
       setCameraError(null);
     } catch (error) {
       console.error('Camera capability check failed:', error);
-      setHasPermission(true); // Still try to access camera
+      setHasPermission(true);
     }
   };
 
-  // Play sound feedback
   const playSound = (type: 'success' | 'error') => {
     try {
       if (!audioContextRef.current) {
@@ -138,7 +106,6 @@ export function TicketScanner({
 
       const audioContext = audioContextRef.current;
 
-      // Resume audio context if it's suspended
       if (audioContext.state === 'suspended') {
         audioContext.resume();
       }
@@ -150,14 +117,12 @@ export function TicketScanner({
       gainNode.connect(audioContext.destination);
 
       if (type === 'success') {
-        // Success: Two ascending beeps
         oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
         oscillator.frequency.setValueAtTime(
           1000,
           audioContext.currentTime + 0.1
         );
       } else {
-        // Error: Single low beep
         oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
       }
 
@@ -174,32 +139,27 @@ export function TicketScanner({
     }
   };
 
-  // Trigger success animation
   const triggerSuccessAnimation = () => {
     setShowSuccessAnimation(true);
     setTimeout(() => setShowSuccessAnimation(false), 2000);
   };
 
-  // Trigger error animation
   const triggerErrorAnimation = () => {
     setShowErrorAnimation(true);
     setTimeout(() => setShowErrorAnimation(false), 2000);
   };
 
-  // Initialize camera with comprehensive error handling
   const startCamera = async () => {
     setCameraError(null);
     setIsVideoReady(false);
 
     try {
-      // Check permissions first
       if (hasPermission === false) {
         setCameraError('Camera permission denied or not available');
         toast.error('Camera permission denied or not available');
         return;
       }
 
-      // Stop any existing stream first
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
@@ -207,12 +167,12 @@ export function TicketScanner({
 
       console.log('Requesting camera access...');
 
-      // Try different camera configurations
+      // Simplified camera constraints for better device compatibility
       const constraints = {
         video: {
-          facingMode: { ideal: 'environment' }, // Prefer back camera
-          width: { ideal: 1280, min: 640 },
-          height: { ideal: 720, min: 480 },
+          facingMode: 'environment',
+          width: { min: 640, ideal: 1280 },
+          height: { min: 480, ideal: 720 },
         },
         audio: false,
       };
@@ -220,31 +180,19 @@ export function TicketScanner({
       let stream: MediaStream;
 
       try {
-        // First try with preferred settings
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (error) {
         console.log(
-          'Failed with preferred settings, trying basic settings...',
+          'Failed with environment camera, trying any camera...',
           error
         );
-
-        // Fallback to basic settings
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: true,
             audio: false,
           });
         } catch (fallbackError) {
-          console.log(
-            'Failed with basic settings, trying any available camera...',
-            fallbackError
-          );
-
-          // Last resort - try any camera
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user' }, // Front camera as last resort
-            audio: false,
-          });
+          throw fallbackError;
         }
       }
 
@@ -254,46 +202,37 @@ export function TicketScanner({
         throw new Error('Video element not available');
       }
 
-      // Set up video element
       const video = videoRef.current;
-
       video.srcObject = stream;
       streamRef.current = stream;
 
-      // Wait for video to be ready
-      video.onloadedmetadata = () => {
-        console.log('Video metadata loaded');
-        video
-          .play()
-          .then(() => {
-            console.log('Video playing successfully');
-            setIsVideoReady(true);
-            setIsScanning(true);
+      // Use a promise to handle video loading
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => {
+          console.log('Video metadata loaded');
+          video
+            .play()
+            .then(() => {
+              console.log('Video playing successfully');
+              setIsVideoReady(true);
+              setIsScanning(true);
+              setTimeout(() => {
+                scanIntervalRef.current = setInterval(scanQRCode, 500);
+              }, 1000);
+              toast.success('Camera started - Ready to scan QR codes!');
+              resolve();
+            })
+            .catch((playError) => {
+              console.error('Error playing video:', playError);
+              reject(playError);
+            });
+        };
 
-            // Start QR scanning loop after a short delay to ensure video is fully ready
-            setTimeout(() => {
-              scanIntervalRef.current = setInterval(scanQRCode, 500);
-            }, 1000);
-
-            toast.success('Camera started - Ready to scan QR codes!');
-          })
-          .catch((playError) => {
-            console.error('Error playing video:', playError);
-            setCameraError('Failed to start video playback');
-            toast.error('Failed to start video playback');
-          });
-      };
-
-      video.onerror = (error) => {
-        console.error('Video error:', error);
-        setCameraError('Video playback error');
-        toast.error('Video playback error');
-      };
-
-      // Handle video loading
-      video.oncanplay = () => {
-        console.log('Video can play');
-      };
+        video.onerror = (error) => {
+          console.error('Video error:', error);
+          reject(error);
+        };
+      });
     } catch (error: any) {
       console.error('Error accessing camera:', error);
 
@@ -307,8 +246,7 @@ export function TicketScanner({
       } else if (error.name === 'NotReadableError') {
         errorMessage = 'Camera is already in use by another application.';
       } else if (error.name === 'OverconstrainedError') {
-        errorMessage =
-          'Camera settings not supported. Trying with basic settings...';
+        errorMessage = 'Camera settings not supported.';
       } else if (error.name === 'SecurityError') {
         errorMessage = 'Camera access blocked by security settings.';
       }
@@ -319,7 +257,6 @@ export function TicketScanner({
     }
   };
 
-  // Stop camera with proper cleanup
   const stopCamera = () => {
     console.log('Stopping camera...');
 
@@ -346,7 +283,6 @@ export function TicketScanner({
     toast.info('Camera stopped');
   };
 
-  // Scan QR code from video
   const scanQRCode = async () => {
     if (
       !videoRef.current ||
@@ -360,7 +296,6 @@ export function TicketScanner({
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
 
-    // Ensure video is ready and has data
     if (
       !context ||
       video.readyState !== video.HAVE_ENOUGH_DATA ||
@@ -371,38 +306,30 @@ export function TicketScanner({
     }
 
     try {
-      // Set canvas dimensions to match video
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
 
-      // Draw current video frame to canvas
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // Get image data for QR code detection
       const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
 
-      // Scan for QR code
       const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
 
       if (qrCode && qrCode.data) {
         console.log('QR Code detected:', qrCode.data);
 
         try {
-          // Parse QR code data
           const qrData = JSON.parse(qrCode.data);
 
-          // Validate QR code format
           if (
             qrData.type === 'EVENT_TICKET' &&
             qrData.ticketId &&
             qrData.eventId
           ) {
-            // Check if this is the same ticket we just scanned (prevent duplicate scans)
             if (qrData.ticketId === lastScannedTicketId) {
               return;
             }
 
-            // Validate that this QR code is for the current event
             if (qrData.eventId !== eventId) {
               toast.error('This ticket is for a different event!');
               triggerErrorAnimation();
@@ -413,14 +340,11 @@ export function TicketScanner({
             setLastScannedTicketId(qrData.ticketId);
             await validateScannedTicket(qrData.ticketId);
 
-            // Clear the last scanned ID after a delay to allow re-scanning if needed
             setTimeout(() => setLastScannedTicketId(''), 3000);
           } else {
-            // QR code doesn't match our format, ignore silently
             console.log('QR code format not recognized:', qrData);
           }
         } catch (e) {
-          // Not a JSON QR code, might be a simple text ticket ID
           const ticketId = qrCode.data.trim();
           if (
             ticketId &&
@@ -439,7 +363,6 @@ export function TicketScanner({
     }
   };
 
-  // Validate scanned ticket
   const validateScannedTicket = async (ticketId: string) => {
     setIsProcessing(true);
 
@@ -454,19 +377,16 @@ export function TicketScanner({
       setScanCount((prev) => prev + 1);
       setLastScanTime(new Date());
 
-      // Emit custom event for TicketScannerPage to listen to
       const scanEvent = new CustomEvent('ticketScanned', {
         detail: scanResult,
       });
       window.dispatchEvent(scanEvent);
 
-      // Call original callback if provided (for backward compatibility)
       if (onScanComplete) {
         onScanComplete(scanResult);
       }
 
       if (scanResult.success) {
-        // Success feedback
         playSound('success');
         triggerSuccessAnimation();
         toast.success(
@@ -482,10 +402,8 @@ export function TicketScanner({
           { duration: 4000 }
         );
 
-        // Clear manual input on success
         setManualTicketId('');
       } else {
-        // Error feedback
         playSound('error');
         triggerErrorAnimation();
         toast.error(
@@ -509,7 +427,6 @@ export function TicketScanner({
       };
       setScanResult(errorResult);
 
-      // Error feedback
       playSound('error');
       triggerErrorAnimation();
       toast.error('Error validating ticket - Please try again');
@@ -518,7 +435,6 @@ export function TicketScanner({
     }
   };
 
-  // Handle manual ticket validation
   const handleManualValidation = async () => {
     if (!manualTicketId.trim()) {
       toast.error('Please enter a ticket ID');
@@ -527,7 +443,6 @@ export function TicketScanner({
     await validateScannedTicket(manualTicketId.trim());
   };
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopCamera();
@@ -632,15 +547,6 @@ export function TicketScanner({
               <AlertTriangle className="h-4 w-4 text-red-600" />
               <AlertDescription className="text-red-800">
                 <strong>Camera Error:</strong> {cameraError}
-                <div className="mt-2 text-sm">
-                  <p>Troubleshooting steps:</p>
-                  <ul className="list-disc list-inside mt-1">
-                    <li>Ensure you&lsquo;re using HTTPS or localhost</li>
-                    <li>Allow camera permissions in your browser</li>
-                    <li>Close other apps that might be using the camera</li>
-                    <li>Try refreshing the page</li>
-                  </ul>
-                </div>
               </AlertDescription>
             </Alert>
           )}
@@ -676,7 +582,6 @@ export function TicketScanner({
                 playsInline
                 muted
                 className="w-full h-64 bg-black rounded-lg object-cover"
-                style={{ transform: 'scaleX(-1)' }} // Mirror the video for better UX
               />
               <canvas ref={canvasRef} className="hidden" />
 
@@ -694,7 +599,6 @@ export function TicketScanner({
               {isVideoReady && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="relative">
-                    {/* QR Code targeting square */}
                     <div
                       className={`w-48 h-48 border-2 border-dashed rounded-lg relative transition-all duration-300 ${
                         isProcessing
@@ -702,13 +606,11 @@ export function TicketScanner({
                           : 'border-white bg-black/20'
                       }`}
                     >
-                      {/* Corner indicators */}
                       <div className="absolute top-0 left-0 w-8 h-8 border-l-4 border-t-4 border-white"></div>
                       <div className="absolute top-0 right-0 w-8 h-8 border-r-4 border-t-4 border-white"></div>
                       <div className="absolute bottom-0 left-0 w-8 h-8 border-l-4 border-b-4 border-white"></div>
                       <div className="absolute bottom-0 right-0 w-8 h-8 border-r-4 border-b-4 border-white"></div>
 
-                      {/* Center text */}
                       <div className="absolute inset-0 flex items-center justify-center">
                         <span className="text-white text-sm font-medium text-center px-2 bg-black/50 rounded">
                           {isProcessing
@@ -718,7 +620,6 @@ export function TicketScanner({
                       </div>
                     </div>
 
-                    {/* Scanning line animation */}
                     {!isProcessing && (
                       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white to-transparent animate-pulse"></div>
                     )}
@@ -952,10 +853,6 @@ export function TicketScanner({
             <p>
               • <strong>Event Validation:</strong> QR codes are automatically
               validated for the correct event
-            </p>
-            <p>
-              • <strong>Browser Requirements:</strong> Requires HTTPS connection
-              and camera permissions
             </p>
           </div>
         </CardContent>
