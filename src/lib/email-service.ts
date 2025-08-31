@@ -1,4 +1,4 @@
-// lib/email-service.ts
+// lib/email-service.ts - Fixed version
 import nodemailer from 'nodemailer';
 import QRCode from 'qrcode';
 import { TicketEmailTemplate } from '@/components/email/ticket-template';
@@ -13,6 +13,7 @@ import {
   WaitingListEmail,
   PayoutEmail,
 } from './notification-template';
+import { PDFTicketGenerator } from '@/utils/pdf-ticket-generator';
 
 // Create nodemailer transporter
 const transporter = nodemailer.createTransport({
@@ -63,39 +64,108 @@ class NodemailerEmailService implements EmailService {
         throw new Error('Missing event or venue information for ticket email');
       }
 
-      // Generate QR codes for each ticket
-      const ticketsWithQR = await Promise.all(
-        tickets.map(async (ticket) => {
-          let qrCodeData;
+      // Generate QR codes and prepare inline attachments
+      const ticketsWithQR = [];
+      const attachments = [];
+      let cid = 1;
 
-          // Use stored QR data if available, otherwise generate
-          if (ticket.qrCodeData) {
-            qrCodeData = ticket.qrCodeData;
-          } else {
-            qrCodeData = JSON.stringify({
-              type: 'EVENT_TICKET',
-              ticketId: ticket.ticketId,
-              eventId: event.id,
-              userId: ticket.userId,
-              timestamp: Date.now(),
-            });
-          }
+      for (const ticket of tickets) {
+        let qrCodeData;
 
-          const qrCodeDataURL = await QRCode.toDataURL(qrCodeData, {
-            width: 200,
-            margin: 2,
-            color: {
-              dark: '#000000',
-              light: '#FFFFFF',
-            },
+        // Use stored QR data if available, otherwise generate
+        if (ticket.qrCodeData) {
+          qrCodeData = ticket.qrCodeData;
+        } else {
+          qrCodeData = JSON.stringify({
+            type: 'EVENT_TICKET',
+            ticketId: ticket.ticketId,
+            eventId: event.id,
+            userId: ticket.userId,
+            orderId: order.id,
+            timestamp: Date.now(),
           });
+        }
 
-          return {
-            ...ticket,
-            qrCodeDataURL,
-          };
-        })
-      );
+        // Generate QR code as buffer for inline attachment
+        const qrCodeBuffer = await QRCode.toBuffer(qrCodeData, {
+          width: 200,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF',
+          },
+          errorCorrectionLevel: 'H', // High error correction for better scanning
+        });
+
+        const qrCodeCid = `qr-code-${ticket.ticketId}`;
+
+        // Add QR code as inline attachment
+        attachments.push({
+          filename: `qr-${ticket.ticketId}.png`,
+          content: qrCodeBuffer,
+          cid: qrCodeCid,
+          contentType: 'image/png',
+          contentDisposition: 'inline',
+        });
+
+        // Generate PDF ticket
+        const pdfGenerator = new PDFTicketGenerator();
+        const ticketData = {
+          ticketId: ticket.ticketId,
+          eventTitle: event.title,
+          eventDate: new Date(event.startDateTime).toLocaleString('en-NG', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          venue: `${venue.name}${venue.city ? `, ${venue.city.name}` : ''}`,
+          ticketType: ticket.ticketType.name,
+          price: new Intl.NumberFormat('en-NG', {
+            style: 'currency',
+            currency: 'NGN',
+          }).format(ticket.ticketType.price),
+          customerName: order.buyer.name,
+          customerEmail: order.buyer.email,
+          purchaseDate: new Date(ticket.purchasedAt).toLocaleDateString(
+            'en-NG'
+          ),
+          status: ticket.status || 'VALID',
+          qrCode: qrCodeData,
+          orderId: order.id,
+          quantity: order.quantity,
+          eventId: event.id,
+        };
+
+        await pdfGenerator.generateTicket(ticketData);
+
+        // Handle PDF buffer generation for server environment
+        let pdfBuffer: Buffer;
+        try {
+          pdfBuffer = pdfGenerator.getBuffer();
+        } catch {
+          // Fallback for environments where Buffer might not be available
+          const arrayBuffer = pdfGenerator.getArrayBuffer();
+          pdfBuffer = Buffer.from(arrayBuffer);
+        }
+
+        // Add PDF as attachment
+        attachments.push({
+          filename: `ticket-${ticket.ticketId}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        });
+
+        ticketsWithQR.push({
+          ...ticket,
+          qrCodeCid, // Use CID for inline image reference
+          qrCodeData: qrCodeData,
+        });
+
+        cid++;
+      }
 
       // Render the email template
       const emailHtml = await render(
@@ -110,18 +180,22 @@ class NodemailerEmailService implements EmailService {
         })
       );
 
-      await this.transporter.sendMail({
+      // Send email with attachments
+      const mailOptions: any = {
         from: `"${process.env.PLATFORM_NAME}" <${process.env.NODEMAILER_USER}>`,
         to: order.buyer.email,
         subject: `Your tickets for ${event.title}`,
         html: emailHtml,
+        attachments,
         headers: {
           'X-Entity-Ref-ID': order.id,
         },
-      });
+      };
+
+      await this.transporter.sendMail(mailOptions);
 
       console.log(
-        `Ticket email sent to ${order.buyer.email} for order ${order.id}`
+        `Ticket email sent to ${order.buyer.email} for order ${order.id} with ${tickets.length} PDF tickets and ${attachments.filter((a) => a.cid).length} QR codes`
       );
     } catch (error) {
       console.error('Error sending ticket email:', error);

@@ -1,4 +1,4 @@
-// utils/pdf-ticket-generator.ts
+// utils/pdf-ticket-generator.ts - Fixed for server-side email generation
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import QRCode from 'qrcode';
@@ -8,7 +8,7 @@ const COMPANY_CONFIG = {
   logo: '/logo.png',
   tagline: 'Your Gateway to Amazing Events',
   contact: {
-    phone: '+234 (0) 123 456 7890',
+    phone: '+234 (906) 635-5861',
     email: 'info@myevent.com.ng',
     website: 'www.myevent.com.ng',
     address: '49B Thuja Ville, NNPC Estate, Utako, Abuja',
@@ -58,41 +58,53 @@ const hexToRgb = (hex: string) => {
     b: parseInt(m[3], 16),
   };
 };
+
 const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
 
 /** Replace unsupported glyphs for core fonts */
 const normalizeText = (s: string) =>
   s.replace(/₦/g, 'NGN ').replace(/[^\x00-\x7F]/g, (c) => {
-    // simple ascii fallback
     const map: Record<string, string> = {
-      '–': '-',
-      '—': '-',
-      '’': "'",
-      '“': '"',
-      '”': '"',
+      '\u2013': '-',
+      '\u2014': '-',
+      '\u2018': "'",
+      '\u2019': "'",
+      '\u201C': '"',
+      '\u201D': '"',
     };
     return map[c] ?? '';
   });
 
-const loadImageAsDataURL = (src: string): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL('image/png'));
-      } catch (e) {
-        reject(e);
-      }
-    };
-    img.onerror = reject;
-    img.src = src;
-  });
+// Server-side compatible image loading (fallback for email generation)
+const loadImageAsBase64 = async (src: string): Promise<string> => {
+  try {
+    // In server environment, we'll skip logo loading and use fallback
+    if (typeof window === 'undefined') {
+      return Promise.reject('Server environment - no image loading');
+    }
+
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL('image/png'));
+        } catch (e) {
+          reject(e);
+        }
+      };
+      img.onerror = reject;
+      img.src = src;
+    });
+  } catch (error) {
+    return Promise.reject(error);
+  }
+};
 
 /* ===== PDF Ticket Generator ===== */
 export class PDFTicketGenerator {
@@ -103,7 +115,7 @@ export class PDFTicketGenerator {
 
   constructor() {
     this.ticketWidth = 2.125 * 25.4; // ~54mm
-    this.ticketHeight = 5.5 * 25.4; // ~140mm
+    this.ticketHeight = 7.0 * 25.4; // ~178mm
     this.doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
@@ -112,20 +124,20 @@ export class PDFTicketGenerator {
   }
 
   async generateTicket(ticketData: TicketData): Promise<void> {
-    await this.drawTicketBackground(); // keep gradient
-    await this.drawTopHeader(); // aligned name/tagline/logo
-    await this.drawStubBand(ticketData); // slim band (type | price)
-    await this.drawTicketId(ticketData.ticketId, 28); // keep monospace/bold
-    const afterContent = await this.drawContentCard(ticketData, 42); // white info card
-    await this.drawQRCode(ticketData, afterContent + 6); // centered QR card
-    this.drawFooter(); // 3-line footer
-    this.drawPerimeterAndPerforations(); // border + perforations
-    this.drawWatermark(ticketData.eventTitle); // subtle watermark
+    await this.drawTicketBackground();
+    await this.drawTopHeader();
+    await this.drawStubBand(ticketData);
+    await this.drawTicketId(ticketData.ticketId, 28);
+    const afterContent = await this.drawContentCard(ticketData, 42);
+    await this.drawQRCode(ticketData, afterContent + 6);
+    this.drawFooter();
+    this.drawPerimeterAndPerforations();
+    this.drawWatermark(ticketData.eventTitle);
   }
 
-  /** Background: smooth vertical gradient (no pinstripes) */
+  /** Background: smooth vertical gradient */
   private async drawTicketBackground(): Promise<void> {
-    const steps = 36;
+    const steps = 48;
     const h = this.ticketHeight / steps;
     const c0 = hexToRgb(COMPANY_CONFIG.colors.gradientStart);
     const c1 = hexToRgb(COMPANY_CONFIG.colors.gradientMid);
@@ -144,14 +156,14 @@ export class PDFTicketGenerator {
     }
   }
 
-  /** Top header: perfect center, logo aligned to right edge */
+  /** Top header with fallback for logo */
   private async drawTopHeader(): Promise<void> {
     const logoHeight = 10;
     const logoY = 3;
     const logoWidth = 20;
 
     try {
-      const dataURL = await loadImageAsDataURL(COMPANY_CONFIG.logo);
+      const dataURL = await loadImageAsBase64(COMPANY_CONFIG.logo);
       this.doc.addImage(
         dataURL,
         'PNG',
@@ -161,6 +173,7 @@ export class PDFTicketGenerator {
         logoHeight
       );
     } catch {
+      // Fallback - simple logo placeholder
       this.doc.setFillColor(245, 245, 255);
       this.doc.roundedRect(
         (this.ticketWidth - logoWidth) / 2,
@@ -178,7 +191,6 @@ export class PDFTicketGenerator {
       });
     }
 
-    // Company name & tagline below the logo
     const textY = logoY + logoHeight + 4;
     this.doc.setTextColor(255, 255, 255);
     this.doc.setFont('helvetica', 'bold');
@@ -195,7 +207,7 @@ export class PDFTicketGenerator {
     });
   }
 
-  /** Stub band (type | price): text baseline aligned */
+  /** Stub band */
   private async drawStubBand(ticket: TicketData): Promise<void> {
     const y = 18;
     const height = 8;
@@ -232,7 +244,7 @@ export class PDFTicketGenerator {
     );
   }
 
-  /** Ticket ID (monospace + bold, as requested) */
+  /** Ticket ID */
   private async drawTicketId(ticketId: string, yPos: number): Promise<void> {
     const { r, g, b } = hexToRgb(COMPANY_CONFIG.colors.secondary);
     this.doc.setFillColor(r, g, b);
@@ -247,14 +259,14 @@ export class PDFTicketGenerator {
     );
 
     this.doc.setTextColor(255, 255, 255);
-    this.doc.setFont('courier', 'bold'); // keep style
+    this.doc.setFont('courier', 'bold');
     this.doc.setFontSize(8.2);
     this.doc.text(normalizeText(ticketId), this.ticketWidth / 2, yPos, {
       align: 'center',
     });
   }
 
-  /** White content card with cleaner spacing (no inner divider line) */
+  /** Content card */
   private async drawContentCard(
     ticket: TicketData,
     yStart: number
@@ -280,7 +292,6 @@ export class PDFTicketGenerator {
     this.doc.text(titleLines, x + pad, y);
     y += titleLines.length * 4 + 2.5;
 
-    // Rows (no stroke lines)
     const labelStyle = () => {
       this.doc.setFont('helvetica', 'bold');
       this.doc.setFontSize(5.2);
@@ -292,7 +303,7 @@ export class PDFTicketGenerator {
     };
 
     const row = (label: string, value: string) => {
-      const lh = 4.8; // baseline rhythm
+      const lh = 4.8;
       labelStyle();
       this.doc.text(label, x + pad, y);
       valueStyle();
@@ -305,7 +316,7 @@ export class PDFTicketGenerator {
     row('VENUE', ticket.venue);
     row('ADMIT', `${ticket.customerName}  (${ticket.customerEmail})`);
 
-    // Status pill (aligned to left, no strokes)
+    // Status pill
     const pillY = y - 0.5;
     const pillText = (ticket.status?.toUpperCase() || 'VALID').slice(0, 18);
     const pillPadX = 2.8;
@@ -333,79 +344,86 @@ export class PDFTicketGenerator {
     return y + 2;
   }
 
-  /** QR Code centered with label (no extra strokes) */
+  /** QR Code - larger size for better scanning */
   private async drawQRCode(ticket: TicketData, yPos: number): Promise<number> {
-    const qrSize = 26;
+    const qrSize = 38;
     const qrX = (this.ticketWidth - qrSize) / 2;
 
     try {
-      const qrData = {
-        ticketId: ticket.ticketId,
-        eventId: ticket.eventId,
-        customerName: ticket.customerName,
-        eventTitle: ticket.eventTitle,
-        type: 'EVENT_TICKET',
-        timestamp: new Date().toISOString(),
-      };
+      const qrData =
+        ticket.qrCode ||
+        JSON.stringify({
+          ticketId: ticket.ticketId,
+          eventId: ticket.eventId,
+          customerName: ticket.customerName,
+          eventTitle: ticket.eventTitle,
+          type: 'EVENT_TICKET',
+          timestamp: new Date().toISOString(),
+        });
 
-      const qrCodeDataURL = await QRCode.toDataURL(JSON.stringify(qrData), {
-        width: 240,
+      // Generate QR code as data URL
+      const qrCodeDataURL = await QRCode.toDataURL(qrData, {
+        width: 400,
         margin: 1,
         color: { dark: '#000000', light: '#FFFFFF' },
-        errorCorrectionLevel: 'M',
+        errorCorrectionLevel: 'H',
       });
 
+      // White background card
       this.doc.setFillColor(255, 255, 255);
       this.doc.roundedRect(
-        qrX - 3,
-        yPos - 3,
-        qrSize + 6,
-        qrSize + 10,
+        qrX - 4,
+        yPos - 4,
+        qrSize + 8,
+        qrSize + 16,
         2,
         2,
         'F'
       );
+
       this.doc.addImage(qrCodeDataURL, 'PNG', qrX, yPos, qrSize, qrSize);
 
+      // QR instruction text
       this.doc.setTextColor(55, 65, 81);
       this.doc.setFont('helvetica', 'bold');
-      this.doc.setFontSize(5.2);
-      this.doc.text('SCAN AT ENTRY', this.ticketWidth / 2, yPos + qrSize + 5, {
+      this.doc.setFontSize(6.5);
+      this.doc.text('SCAN AT ENTRY', this.ticketWidth / 2, yPos + qrSize + 6, {
         align: 'center',
       });
 
       this.doc.setFont('helvetica', 'normal');
-      this.doc.setFontSize(3.6);
+      this.doc.setFontSize(4.2);
       this.doc.setTextColor(107, 114, 128);
       this.doc.text(
         'Keep the QR code visible. Do not fold.',
         this.ticketWidth / 2,
-        yPos + qrSize + 9,
+        yPos + qrSize + 11,
         {
           align: 'center',
         }
       );
 
-      return yPos + qrSize + 12;
-    } catch {
-      // Fallback block (no stroke pattern)
+      return yPos + qrSize + 16;
+    } catch (error) {
+      console.error('QR Code generation failed:', error);
+      // Fallback block
       this.doc.setFillColor(255, 255, 255);
       this.doc.rect(qrX, yPos, qrSize, qrSize, 'F');
       this.doc.setTextColor(55, 65, 81);
       this.doc.setFont('helvetica', 'bold');
-      this.doc.setFontSize(5.2);
-      this.doc.text('QR CODE', this.ticketWidth / 2, yPos + qrSize + 5, {
+      this.doc.setFontSize(6.5);
+      this.doc.text('QR CODE', this.ticketWidth / 2, yPos + qrSize + 6, {
         align: 'center',
       });
-      return yPos + qrSize + 10;
+      return yPos + qrSize + 12;
     }
   }
 
-  /** Footer: clean, centered */
+  /** Footer */
   private drawFooter(): void {
-    const y = this.ticketHeight - 12;
+    const y = this.ticketHeight - 14;
     this.doc.setFillColor(26, 26, 46);
-    this.doc.rect(0, y, this.ticketWidth, 12, 'F');
+    this.doc.rect(0, y, this.ticketWidth, 14, 'F');
 
     this.doc.setTextColor(255, 255, 255);
     this.doc.setFont('helvetica', 'normal');
@@ -413,21 +431,21 @@ export class PDFTicketGenerator {
     this.doc.text(
       COMPANY_CONFIG.contact.website,
       this.ticketWidth / 2,
-      y + 3.4,
+      y + 3.8,
       { align: 'center' }
     );
-    this.doc.text(COMPANY_CONFIG.contact.phone, this.ticketWidth / 2, y + 6.6, {
+    this.doc.text(COMPANY_CONFIG.contact.phone, this.ticketWidth / 2, y + 7.4, {
       align: 'center',
     });
     this.doc.text(
       COMPANY_CONFIG.social.instagram,
       this.ticketWidth / 2,
-      y + 9.8,
+      y + 11.0,
       { align: 'center' }
     );
   }
 
-  /** Border + perforations (kept) */
+  /** Border and perforations */
   private drawPerimeterAndPerforations(): void {
     this.doc.setDrawColor(209, 213, 219);
     this.doc.setLineWidth(0.5);
@@ -446,20 +464,19 @@ export class PDFTicketGenerator {
     for (let i = 5; i < this.ticketHeight - 5; i += 3.2)
       this.doc.circle(this.ticketWidth - 1, i, 0.45, 'F');
 
-    // Rotated “ADMIT ONE” text (not a stroke; keep or remove as you like)
     this.doc.setTextColor(229, 231, 235);
     this.doc.setFont('helvetica', 'bold');
     this.doc.setFontSize(4.2);
     this.doc.text('ADMIT ONE', 3.8, 18, { angle: -90 });
   }
 
-  /** Watermark: subtle diagonal title (no outlines) */
+  /** Watermark */
   private drawWatermark(title: string): void {
     const txt = normalizeText(title.toUpperCase().slice(0, 24));
     this.doc.setTextColor(255, 255, 255);
     this.doc.setFont('helvetica', 'bold');
     this.doc.setFontSize(13);
-    this.doc.text(txt, this.ticketWidth * 0.2, this.ticketHeight * 0.6, {
+    this.doc.text(txt, this.ticketWidth * 0.2, this.ticketHeight * 0.25, {
       angle: -35,
       align: 'left',
     });
@@ -468,8 +485,21 @@ export class PDFTicketGenerator {
   save(filename: string): void {
     this.doc.save(filename);
   }
+
+  // Updated to return ArrayBuffer for server-side email generation
   getBlob(): Blob {
     return this.doc.output('blob');
+  }
+
+  getArrayBuffer(): ArrayBuffer {
+    return this.doc.output('arraybuffer');
+  }
+
+  getBuffer(): Buffer {
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(this.doc.output('arraybuffer'));
+    }
+    throw new Error('Buffer is not available in this environment');
   }
 }
 
@@ -481,12 +511,11 @@ export const formatPrice = (price: number): string =>
 
 export const formatDateTime = (value: Date | string | number): string => {
   const d = value instanceof Date ? value : new Date(value);
-  // guard against invalid inputs
   if (Number.isNaN(d.getTime())) return '';
   return format(d, 'PPP p');
 };
 
-/* ===== Public API (unchanged) ===== */
+/* ===== Public API ===== */
 export const generateTicketPDF = async (
   ticket: any,
   filename?: string
