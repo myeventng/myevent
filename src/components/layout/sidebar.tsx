@@ -308,16 +308,16 @@ export function Sidebar({
           href: '/dashboard/tickets',
           icon: <List className="w-4 h-4" />,
         },
-        {
-          title: 'Upcoming',
-          href: '/dashboard/tickets/upcoming',
-          icon: <Calendar className="w-4 h-4" />,
-        },
-        {
-          title: 'Past Events',
-          href: '/dashboard/tickets/past',
-          icon: <Eye className="w-4 h-4" />,
-        },
+        // {
+        //   title: 'Upcoming',
+        //   href: '/dashboard/tickets/upcoming',
+        //   icon: <Calendar className="w-4 h-4" />,
+        // },
+        // {
+        //   title: 'Past Events',
+        //   href: '/dashboard/tickets/past',
+        //   icon: <Eye className="w-4 h-4" />,
+        // },
       ],
     },
     {
