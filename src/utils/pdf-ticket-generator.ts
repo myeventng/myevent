@@ -1,4 +1,4 @@
-// utils/pdf-ticket-generator.ts - Fixed for server-side email generation
+// utils/pdf-ticket-generator.ts -
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import QRCode from 'qrcode';

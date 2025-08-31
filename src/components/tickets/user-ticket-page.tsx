@@ -34,11 +34,13 @@ import {
   Eye,
   CalendarPlus,
   ChevronDown,
+  FileText,
 } from 'lucide-react';
 import { getUserTickets } from '@/actions/ticket.actions';
 import { createTicketNotification } from '@/actions/notification.actions';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { generateTicketPDF } from '@/utils/pdf-ticket-generator';
 
 interface UserTicketsPageProps {
   userId?: string;
@@ -51,6 +53,9 @@ export function UserTicketsPage({ userId }: UserTicketsPageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('date');
+  const [downloadingTickets, setDownloadingTickets] = useState<Set<string>>(
+    new Set()
+  );
 
   useEffect(() => {
     fetchTickets();
@@ -188,30 +193,93 @@ export function UserTicketsPage({ userId }: UserTicketsPageProps) {
     }
   };
 
-  const downloadTicket = (ticket: any) => {
-    // Generate a simple ticket download
-    const ticketData = {
-      ticketId: ticket.ticketId,
-      eventTitle: ticket.ticketType.event.title,
-      ticketType: ticket.ticketType.name,
-      price: ticket.ticketType.price,
-      eventDate: ticket.ticketType.event.startDateTime,
-      venue: ticket.ticketType.event.venue?.name,
-      status: ticket.status,
-    };
+  const downloadTicketPDF = async (ticket: any) => {
+    const ticketId = ticket.id;
 
-    const dataStr = JSON.stringify(ticketData, null, 2);
-    const dataUri =
-      'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+    // Prevent multiple downloads of the same ticket
+    if (downloadingTickets.has(ticketId)) {
+      return;
+    }
 
-    const exportFileDefaultName = `ticket-${ticket.ticketId}.json`;
+    setDownloadingTickets((prev) => new Set(prev).add(ticketId));
 
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
+    try {
+      await generateTicketPDF(
+        ticket,
+        `ticket_${ticket.ticketId}_${ticket.ticketType.event.title.replace(/[^a-z0-9]/gi, '_')}.pdf`
+      );
+      toast.success('Ticket PDF downloaded successfully');
+    } catch (error) {
+      console.error('Error generating ticket PDF:', error);
+      toast.error('Failed to generate ticket PDF');
 
-    toast.success('Ticket downloaded successfully');
+      // Fallback to JSON download
+      try {
+        const ticketData = {
+          ticketId: ticket.ticketId,
+          eventTitle: ticket.ticketType.event.title,
+          ticketType: ticket.ticketType.name,
+          price: ticket.ticketType.price,
+          eventDate: ticket.ticketType.event.startDateTime,
+          venue: ticket.ticketType.event.venue?.name,
+          status: ticket.status,
+        };
+
+        const dataStr = JSON.stringify(ticketData, null, 2);
+        const dataUri =
+          'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+
+        const exportFileDefaultName = `ticket-${ticket.ticketId}.json`;
+
+        const linkElement = document.createElement('a');
+        linkElement.setAttribute('href', dataUri);
+        linkElement.setAttribute('download', exportFileDefaultName);
+        linkElement.click();
+
+        toast.success('Ticket data downloaded (fallback format)');
+      } catch (fallbackError) {
+        console.error('Fallback download failed:', fallbackError);
+        toast.error('Failed to download ticket');
+      }
+    } finally {
+      setDownloadingTickets((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(ticketId);
+        return newSet;
+      });
+    }
+  };
+
+  const downloadAllTickets = async () => {
+    if (filteredTickets.length === 0) {
+      toast.error('No tickets to download');
+      return;
+    }
+
+    toast.loading('Generating PDF for all tickets...', { id: 'bulk-download' });
+
+    try {
+      for (let i = 0; i < filteredTickets.length; i++) {
+        const ticket = filteredTickets[i];
+        await generateTicketPDF(
+          ticket,
+          `ticket_${i + 1}_${ticket.ticketId}_${ticket.ticketType.event.title.replace(/[^a-z0-9]/gi, '_')}.pdf`
+        );
+
+        // Small delay between downloads to prevent overwhelming the browser
+        if (i < filteredTickets.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+
+      toast.success(
+        `Successfully downloaded ${filteredTickets.length} ticket PDFs`,
+        { id: 'bulk-download' }
+      );
+    } catch (error) {
+      console.error('Error downloading all tickets:', error);
+      toast.error('Failed to download all tickets', { id: 'bulk-download' });
+    }
   };
 
   // Calendar reminder functions
@@ -361,6 +429,16 @@ END:VCALENDAR`;
           <Badge variant="outline" className="px-3 py-1">
             {tickets.length} {tickets.length === 1 ? 'ticket' : 'tickets'}
           </Badge>
+          {filteredTickets.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={downloadAllTickets}
+              className="text-blue-600 border-blue-600 hover:bg-blue-50"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Download All PDFs
+            </Button>
+          )}
           <Button variant="outline" onClick={fetchTickets} disabled={isLoading}>
             <RefreshCw
               className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`}
@@ -536,10 +614,15 @@ END:VCALENDAR`;
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => downloadTicket(ticket)}
+                        onClick={() => downloadTicketPDF(ticket)}
+                        disabled={downloadingTickets.has(ticket.id)}
                       >
-                        <Download className="w-4 h-4 mr-1" />
-                        Download
+                        <Download
+                          className={`w-4 h-4 mr-1 ${downloadingTickets.has(ticket.id) ? 'animate-spin' : ''}`}
+                        />
+                        {downloadingTickets.has(ticket.id)
+                          ? 'Generating...'
+                          : 'Download PDF'}
                       </Button>
 
                       <Button variant="outline" size="sm" asChild>
@@ -557,18 +640,6 @@ END:VCALENDAR`;
                           View Event
                         </Link>
                       </Button>
-
-                      {/* {canRefundTicket(ticket) && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-red-600 border-red-600 hover:bg-red-50"
-                          onClick={() => handleRefundRequest(ticket.id)}
-                        >
-                          <AlertTriangle className="w-4 h-4 mr-1" />
-                          Request Refund
-                        </Button>
-                      )} */}
 
                       {/* Calendar Reminder Dropdown */}
                       {ticket.status === 'UNUSED' &&
@@ -627,21 +698,6 @@ END:VCALENDAR`;
                         )}
                     </div>
                   </div>
-
-                  {/* QR Code Section */}
-                  {/* <div className="lg:w-48 bg-gray-50 p-6 flex flex-col items-center justify-center border-l">
-                    <div className="w-32 h-32 bg-white border-2 border-gray-200 rounded-lg flex items-center justify-center mb-4">
-                      <QrCode className="w-16 h-16 text-gray-400" />
-                    </div>
-                    <p className="text-xs text-center text-muted-foreground">
-                      Scan this QR code at the event entrance
-                    </p>
-                    {ticket.status === 'USED' && (
-                      <Badge variant="outline" className="mt-2 text-xs">
-                        Already Scanned
-                      </Badge>
-                    )}
-                  </div> */}
                 </div>
 
                 {/* Event Timeline for upcoming events */}
