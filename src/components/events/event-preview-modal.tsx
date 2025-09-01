@@ -39,12 +39,12 @@ interface EventPreviewModalProps {
   onApprove?: (id: string) => void;
   onReject?: (id: string, reason?: string) => void;
   onToggleFeature?: (id: string) => void;
-  onMoveToPending?: (id: string) => void; // Added missing prop
+  onMoveToPending?: (id: string) => void;
   isUpdating: boolean;
   userRole: string;
   userSubRole: string;
   showFeatureActions?: boolean;
-  showRejectedActions?: boolean; // Added missing prop
+  showRejectedActions?: boolean;
 }
 
 export function EventPreviewModal({
@@ -54,12 +54,12 @@ export function EventPreviewModal({
   onApprove,
   onReject,
   onToggleFeature,
-  onMoveToPending, // Added missing prop to destructuring
+  onMoveToPending,
   isUpdating,
   userRole,
   userSubRole,
   showFeatureActions = false,
-  showRejectedActions = false, // Added missing prop to destructuring with default value
+  showRejectedActions = false,
 }: EventPreviewModalProps) {
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectionForm, setShowRejectionForm] = useState(false);

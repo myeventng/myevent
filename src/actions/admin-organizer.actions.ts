@@ -7,6 +7,7 @@ import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import { createNotification } from '@/actions/notification.actions';
 import { VerificationStatus } from '@/generated/prisma';
+import { getPlatformFeePercentage } from '@/actions/platform-settings.actions';
 
 type UserWithOrganizer = Prisma.UserGetPayload<{
   include: { organizerProfile: true };
@@ -88,7 +89,7 @@ interface OrganizerWithAnalytics {
   }>;
 }
 
-// Get all organizers with comprehensive analytics
+// Update the getOrganizersWithAnalytics function
 export async function getOrganizersWithAnalytics(): Promise<
   ActionResponse<OrganizerWithAnalytics[]>
 > {
@@ -105,6 +106,10 @@ export async function getOrganizersWithAnalytics(): Promise<
   }
 
   try {
+    // Get platform fee percentage from settings
+    const platformFeePercentage = await getPlatformFeePercentage();
+    const platformFeeDecimal = platformFeePercentage / 100;
+
     // Get all organizers with their profiles
     const organizers = await prisma.user.findMany({
       where: {
@@ -204,8 +209,8 @@ export async function getOrganizersWithAnalytics(): Promise<
               )
             : undefined;
 
-        // Revenue breakdown
-        const platformFees = totalRevenue * 0.05; // Assuming 5% platform fee
+        // Revenue breakdown - use dynamic platform fee
+        const platformFees = totalRevenue * platformFeeDecimal;
         const refunds = 0; // Would need to calculate from refunded orders
         const netEarnings = totalRevenue - platformFees - refunds;
 
@@ -283,7 +288,7 @@ export async function getOrganizersWithAnalytics(): Promise<
   }
 }
 
-// Get single organizer with detailed analytics
+// Also update the getOrganizerById function
 export async function getOrganizerById(
   organizerId: string
 ): Promise<ActionResponse<OrganizerWithAnalytics>> {
@@ -300,6 +305,10 @@ export async function getOrganizerById(
   }
 
   try {
+    // Get platform fee percentage from settings
+    const platformFeePercentage = await getPlatformFeePercentage();
+    const platformFeeDecimal = platformFeePercentage / 100;
+
     const organizer = await prisma.user.findUnique({
       where: {
         id: organizerId,
@@ -393,7 +402,8 @@ export async function getOrganizerById(
         ? new Date(Math.max(...events.map((e) => e.startDateTime.getTime())))
         : undefined;
 
-    const platformFees = totalRevenue * 0.05;
+    // Use dynamic platform fee
+    const platformFees = totalRevenue * platformFeeDecimal;
     const completedPayouts = organizer.payouts.filter(
       (p) => p.status === 'COMPLETED'
     );

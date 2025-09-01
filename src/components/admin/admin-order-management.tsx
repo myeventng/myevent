@@ -90,6 +90,7 @@ export function AdminOrderManagement({
   const [orders, setOrders] = useState<any[]>(initialOrders);
   const [filteredOrders, setFilteredOrders] = useState<any[]>(initialOrders);
   const [isLoading, setIsLoading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState<string>('all');
@@ -117,6 +118,118 @@ export function AdminOrderManagement({
       style: 'currency',
       currency: 'NGN',
     }).format(amount);
+  };
+
+  // Export filtered orders to CSV
+  const exportToCSV = () => {
+    setIsExporting(true);
+
+    try {
+      // Create CSV data from filtered orders
+      const csvData = filteredOrders.map((order) => ({
+        'Order ID': order.id,
+        'Paystack ID': order.paystackId,
+        'Customer Name': order.buyer.name,
+        'Customer Email': order.buyer.email,
+        'Event Title': order.event.title,
+        'Event Organizer': order.event.user?.name || 'Unknown',
+        Quantity: order.quantity,
+        'Total Amount (NGN)': order.totalAmount,
+        'Platform Fee (NGN)': order.platformFee || 0,
+        'Net Amount (NGN)': order.totalAmount - (order.platformFee || 0),
+        'Payment Status': order.paymentStatus,
+        'Refund Status': order.refundStatus || 'None',
+        'Payment Method': order.paymentMethod || 'Unknown',
+        Currency: order.currency || 'NGN',
+        'Purchase Notes': order.purchaseNotes || '',
+        'Order Date': format(new Date(order.createdAt), 'yyyy-MM-dd'),
+        'Order Time': format(new Date(order.createdAt), 'HH:mm:ss'),
+        'Order DateTime': format(
+          new Date(order.createdAt),
+          'yyyy-MM-dd HH:mm:ss'
+        ),
+        'Event Start Date': format(
+          new Date(order.event.startDateTime),
+          'yyyy-MM-dd'
+        ),
+        'Event Start Time': format(
+          new Date(order.event.startDateTime),
+          'HH:mm:ss'
+        ),
+        'Event Location': order.event.location || '',
+        'Event City': order.event.City?.name || '',
+        'Event Venue': order.event.venue?.name || '',
+        'Ticket Types':
+          order.tickets?.map((t: any) => t.ticketType?.name).join('; ') || '',
+        'Customer Phone': order.buyer.phone || '',
+        'Is Free Event': order.event.isFree ? 'Yes' : 'No',
+        'Event Category': order.event.category?.name || '',
+      }));
+
+      if (csvData.length === 0) {
+        toast.error('No orders to export');
+        return;
+      }
+
+      // Convert to CSV format
+      const headers = Object.keys(csvData[0]);
+      const csvContent = [
+        headers.join(','),
+        ...csvData.map((row) =>
+          headers
+            .map((header) => {
+              const value = row[header as keyof typeof row];
+              // Escape commas and quotes in cell values
+              const stringValue = String(value || '');
+              if (
+                stringValue.includes(',') ||
+                stringValue.includes('"') ||
+                stringValue.includes('\n')
+              ) {
+                return `"${stringValue.replace(/"/g, '""')}"`;
+              }
+              return stringValue;
+            })
+            .join(',')
+        ),
+      ].join('\n');
+
+      // Create and download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+
+      // Generate filename with current date and filter info
+      const now = new Date();
+      const dateStr = format(now, 'yyyy-MM-dd_HHmm');
+      let filename = `admin_orders_${dateStr}`;
+
+      // Add filter info to filename
+      if (statusFilter !== 'all') {
+        filename += `_${statusFilter}`;
+      }
+      if (dateRange !== 'all') {
+        filename += `_${dateRange}days`;
+      }
+      if (searchTerm) {
+        filename += '_filtered';
+      }
+
+      link.href = url;
+      link.download = `${filename}.csv`;
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.success(`Exported ${csvData.length} orders to CSV`);
+    } catch (error) {
+      console.error('Error exporting CSV:', error);
+      toast.error('Failed to export CSV file');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Get payment status badge
@@ -292,9 +405,15 @@ export function AdminOrderManagement({
             />
             Refresh
           </Button>
-          <Button variant="outline">
-            <Download className="w-4 h-4 mr-1" />
-            Export
+          <Button
+            variant="outline"
+            onClick={exportToCSV}
+            disabled={isExporting || filteredOrders.length === 0}
+          >
+            <Download
+              className={`w-4 h-4 mr-1 ${isExporting ? 'animate-spin' : ''}`}
+            />
+            {isExporting ? 'Exporting...' : 'Export CSV'}
           </Button>
         </div>
       </div>
@@ -426,6 +545,16 @@ export function AdminOrderManagement({
           </div>
         </CardContent>
       </Card>
+
+      {/* Export Info */}
+      {filteredOrders.length > 0 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            Showing {filteredOrders.length} of {orders.length} orders
+          </span>
+          <span>Export will include all filtered results</span>
+        </div>
+      )}
 
       {/* Orders Table */}
       <Card>

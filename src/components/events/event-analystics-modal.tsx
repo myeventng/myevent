@@ -33,10 +33,13 @@ import {
   CheckCircle,
   AlertCircle,
   Clock,
+  Settings,
+  Info,
 } from 'lucide-react';
 import { getEventTicketStats } from '@/actions/ticket.actions';
-import { getPlatformFeePercentage } from '@/actions/platform-settings.actions';
+import { getCachedSetting } from '@/lib/platform-settings';
 import { toast } from 'sonner';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface EventAnalyticsModalProps {
   event: any;
@@ -44,6 +47,17 @@ interface EventAnalyticsModalProps {
   onClose: () => void;
   userRole: string;
   userSubRole: string;
+}
+
+interface PlatformConfig {
+  currency: string;
+  defaultPlatformFeePercentage: number;
+  recentActivityHours: number;
+  analyticsRefreshIntervalMs: number;
+  showPlatformFeeBreakdown: boolean;
+  enableRevenueProjections: boolean;
+  dateFormat: string;
+  timeFormat: string;
 }
 
 export function EventAnalyticsModal({
@@ -55,7 +69,55 @@ export function EventAnalyticsModal({
 }: EventAnalyticsModalProps) {
   const [eventStats, setEventStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [platformFee, setPlatformFee] = useState<number>(5);
+  const [platformConfig, setPlatformConfig] = useState<PlatformConfig>({
+    currency: 'NGN',
+    defaultPlatformFeePercentage: 5,
+    recentActivityHours: 24,
+    analyticsRefreshIntervalMs: 30000,
+    showPlatformFeeBreakdown: true,
+    enableRevenueProjections: false,
+    dateFormat: 'PPP',
+    timeFormat: 'p',
+  });
+
+  // Load platform configuration
+  const loadPlatformConfig = async () => {
+    try {
+      const [
+        currency,
+        defaultFee,
+        activityHours,
+        refreshInterval,
+        showFeeBreakdown,
+        enableProjections,
+        dateFormat,
+        timeFormat,
+      ] = await Promise.all([
+        getCachedSetting('general.defaultCurrency'),
+        getCachedSetting('financial.defaultPlatformFeePercentage'),
+        getCachedSetting('analytics.recentActivityHours'),
+        getCachedSetting('analytics.refreshIntervalMs'),
+        getCachedSetting('analytics.showPlatformFeeBreakdown'),
+        getCachedSetting('analytics.enableRevenueProjections'),
+        getCachedSetting('general.dateFormat'),
+        getCachedSetting('general.timeFormat'),
+      ]);
+
+      setPlatformConfig({
+        currency: currency || 'NGN',
+        defaultPlatformFeePercentage: defaultFee || 5,
+        recentActivityHours: activityHours || 24,
+        analyticsRefreshIntervalMs: refreshInterval || 30000,
+        showPlatformFeeBreakdown: showFeeBreakdown !== false, // Default to true
+        enableRevenueProjections: enableProjections === true,
+        dateFormat: dateFormat || 'PPP',
+        timeFormat: timeFormat || 'p',
+      });
+    } catch (error) {
+      console.error('Error loading platform config:', error);
+      // Keep default values on error
+    }
+  };
 
   // Load event analytics
   const loadEventAnalytics = async () => {
@@ -63,19 +125,12 @@ export function EventAnalyticsModal({
 
     setIsLoading(true);
     try {
-      const [statsResponse, feeResponse] = await Promise.all([
-        getEventTicketStats(event.id),
-        getPlatformFeePercentage(),
-      ]);
+      const statsResponse = await getEventTicketStats(event.id);
 
       if (statsResponse.success) {
         setEventStats(statsResponse.data);
       } else {
         toast.error(statsResponse.message || 'Failed to load event analytics');
-      }
-
-      if (typeof feeResponse === 'number') {
-        setPlatformFee(feeResponse);
       }
     } catch (error) {
       console.error('Error loading event analytics:', error);
@@ -85,17 +140,61 @@ export function EventAnalyticsModal({
     }
   };
 
+  // Auto-refresh functionality
   useEffect(() => {
-    if (isOpen && event?.id) {
-      loadEventAnalytics();
+    if (!isOpen || !platformConfig.analyticsRefreshIntervalMs) return;
+
+    const interval = setInterval(() => {
+      if (eventStats && !isLoading) {
+        loadEventAnalytics();
+      }
+    }, platformConfig.analyticsRefreshIntervalMs);
+
+    return () => clearInterval(interval);
+  }, [
+    isOpen,
+    eventStats,
+    isLoading,
+    platformConfig.analyticsRefreshIntervalMs,
+  ]);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadPlatformConfig();
+      if (event?.id) {
+        loadEventAnalytics();
+      }
     }
   }, [isOpen, event?.id]);
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-NG', {
-      style: 'currency',
-      currency: 'NGN',
-    }).format(amount);
+    const currencyMap: Record<string, string> = {
+      NGN: 'en-NG',
+      USD: 'en-US',
+      GBP: 'en-GB',
+      EUR: 'en-EU',
+    };
+
+    return new Intl.NumberFormat(
+      currencyMap[platformConfig.currency] || 'en-NG',
+      {
+        style: 'currency',
+        currency: platformConfig.currency,
+      }
+    ).format(amount);
+  };
+
+  const formatDateTime = (date: Date | string) => {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return format(
+      dateObj,
+      `${platformConfig.dateFormat} ${platformConfig.timeFormat}`
+    );
+  };
+
+  const formatDate = (date: Date | string) => {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return format(dateObj, platformConfig.dateFormat);
   };
 
   const formatPercentage = (value: number) => {
@@ -130,6 +229,38 @@ export function EventAnalyticsModal({
     );
   };
 
+  const calculateRevenueProjection = () => {
+    if (!platformConfig.enableRevenueProjections || !eventStats) return null;
+
+    const eventDate = new Date(event.startDateTime);
+    const now = new Date();
+    const daysUntilEvent = Math.ceil(
+      (eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    if (daysUntilEvent <= 0) return null; // Event has passed
+
+    const currentSalesRate =
+      eventStats.overview.totalTickets / Math.max(1, Math.abs(daysUntilEvent));
+    const projectedTotalTickets = Math.round(
+      eventStats.overview.totalTickets + currentSalesRate * daysUntilEvent * 0.7
+    ); // 70% confidence
+    const avgTicketPrice =
+      eventStats.overview.totalTickets > 0
+        ? eventStats.revenue.totalRevenue / eventStats.overview.totalTickets
+        : 0;
+    const projectedRevenue = projectedTotalTickets * avgTicketPrice;
+
+    return {
+      daysUntilEvent,
+      projectedTotalTickets,
+      projectedRevenue,
+      currentSalesRate: Math.round(currentSalesRate * 100) / 100,
+    };
+  };
+
+  const revenueProjection = calculateRevenueProjection();
+
   if (!event) return null;
 
   return (
@@ -142,7 +273,7 @@ export function EventAnalyticsModal({
                 {event.title}
               </DialogTitle>
               <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                <span>{format(new Date(event.startDateTime), 'PPP p')}</span>
+                <span>{formatDateTime(event.startDateTime)}</span>
                 {getStatusBadge(event.publishedStatus)}
                 {event.featured && (
                   <Badge
@@ -170,6 +301,18 @@ export function EventAnalyticsModal({
           </div>
         </DialogHeader>
 
+        {/* Auto-refresh indicator */}
+        {platformConfig.analyticsRefreshIntervalMs > 0 && eventStats && (
+          <Alert className="mb-4">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Analytics refresh automatically every{' '}
+              {Math.round(platformConfig.analyticsRefreshIntervalMs / 1000)}{' '}
+              seconds
+            </AlertDescription>
+          </Alert>
+        )}
+
         {isLoading && !eventStats ? (
           <div className="flex items-center justify-center min-h-96">
             <div className="flex items-center gap-2">
@@ -180,10 +323,13 @@ export function EventAnalyticsModal({
         ) : eventStats ? (
           <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
             <Tabs defaultValue="overview" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="sales">Sales & Revenue</TabsTrigger>
                 <TabsTrigger value="tickets">Ticket Performance</TabsTrigger>
+                {platformConfig.enableRevenueProjections && (
+                  <TabsTrigger value="projections">Projections</TabsTrigger>
+                )}
               </TabsList>
 
               {/* Overview Tab */}
@@ -280,10 +426,7 @@ export function EventAnalyticsModal({
                         <div className="flex justify-between items-center">
                           <span className="text-sm">Event Date</span>
                           <span className="font-medium">
-                            {format(
-                              new Date(event.startDateTime),
-                              'MMM d, yyyy'
-                            )}
+                            {formatDate(event.startDateTime)}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
@@ -302,7 +445,8 @@ export function EventAnalyticsModal({
                       <div className="space-y-3">
                         <div className="flex justify-between items-center">
                           <span className="text-sm">
-                            Recent Check-ins (24h)
+                            Recent Check-ins (
+                            {platformConfig.recentActivityHours}h)
                           </span>
                           <span className="font-medium">
                             {eventStats.recentValidations}
@@ -360,14 +504,21 @@ export function EventAnalyticsModal({
                           {formatCurrency(eventStats.revenue.netRevenue)}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center text-orange-600">
-                        <span className="text-sm">
-                          Platform Fee ({formatPercentage(platformFee)})
-                        </span>
-                        <span className="font-medium">
-                          -{formatCurrency(eventStats.revenue.platformFee)}
-                        </span>
-                      </div>
+                      {platformConfig.showPlatformFeeBreakdown && (
+                        <div className="flex justify-between items-center text-orange-600">
+                          <span className="text-sm">
+                            Platform Fee (
+                            {formatPercentage(
+                              eventStats.revenue.platformFeePercentage ||
+                                platformConfig.defaultPlatformFeePercentage
+                            )}
+                            )
+                          </span>
+                          <span className="font-medium">
+                            -{formatCurrency(eventStats.revenue.platformFee)}
+                          </span>
+                        </div>
+                      )}
                       <div className="border-t pt-4">
                         <div className="flex justify-between items-center font-bold text-green-600 text-lg">
                           <span>Your Earnings</span>
@@ -431,33 +582,45 @@ export function EventAnalyticsModal({
                     </CardContent>
                   </Card>
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Fee Breakdown</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        <div className="flex justify-between">
-                          <span className="text-sm">Platform Fee Rate</span>
-                          <span className="font-medium">
-                            {formatPercentage(platformFee)}
-                          </span>
+                  {platformConfig.showPlatformFeeBreakdown && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base flex items-center gap-2">
+                          Fee Breakdown
+                          <Settings className="h-4 w-4 text-muted-foreground" />
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          <div className="flex justify-between">
+                            <span className="text-sm">Platform Fee Rate</span>
+                            <span className="font-medium">
+                              {formatPercentage(
+                                eventStats.revenue.platformFeePercentage ||
+                                  platformConfig.defaultPlatformFeePercentage
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm">Fee Amount</span>
+                            <span className="font-medium text-orange-600">
+                              {formatCurrency(eventStats.revenue.platformFee)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm">Your Retention</span>
+                            <span className="font-medium text-green-600">
+                              {formatPercentage(
+                                100 -
+                                  (eventStats.revenue.platformFeePercentage ||
+                                    platformConfig.defaultPlatformFeePercentage)
+                              )}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm">Fee Amount</span>
-                          <span className="font-medium text-orange-600">
-                            {formatCurrency(eventStats.revenue.platformFee)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-sm">Your Retention</span>
-                          <span className="font-medium text-green-600">
-                            {formatPercentage(100 - platformFee)}
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
               </TabsContent>
 
@@ -486,6 +649,14 @@ export function EventAnalyticsModal({
                             <div className="grid grid-cols-4 gap-4 text-sm mb-3">
                               <div>
                                 <span className="text-muted-foreground">
+                                  Available
+                                </span>
+                                <div className="font-medium">
+                                  {ticketType.remaining}
+                                </div>
+                              </div>
+                              <div>
+                                <span className="text-muted-foreground">
                                   Sold
                                 </span>
                                 <div className="font-medium">
@@ -498,14 +669,6 @@ export function EventAnalyticsModal({
                                 </span>
                                 <div className="font-medium">
                                   {ticketType.used}
-                                </div>
-                              </div>
-                              <div>
-                                <span className="text-muted-foreground">
-                                  Available
-                                </span>
-                                <div className="font-medium">
-                                  {ticketType.remaining}
                                 </div>
                               </div>
                               <div>
@@ -566,6 +729,64 @@ export function EventAnalyticsModal({
                   </CardContent>
                 </Card>
               </TabsContent>
+
+              {/* Revenue Projections Tab */}
+              {platformConfig.enableRevenueProjections && revenueProjection && (
+                <TabsContent value="projections" className="space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5" />
+                        Revenue Projections
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="text-center p-4 border rounded-lg">
+                          <div className="text-2xl font-bold text-blue-600">
+                            {revenueProjection.daysUntilEvent}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Days Until Event
+                          </div>
+                        </div>
+                        <div className="text-center p-4 border rounded-lg">
+                          <div className="text-2xl font-bold text-green-600">
+                            {revenueProjection.projectedTotalTickets}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Projected Total Tickets
+                          </div>
+                        </div>
+                        <div className="text-center p-4 border rounded-lg">
+                          <div className="text-2xl font-bold text-purple-600">
+                            {formatCurrency(revenueProjection.projectedRevenue)}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Projected Revenue
+                          </div>
+                        </div>
+                        <div className="text-center p-4 border rounded-lg">
+                          <div className="text-2xl font-bold text-orange-600">
+                            {revenueProjection.currentSalesRate}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            Sales/Day
+                          </div>
+                        </div>
+                      </div>
+
+                      <Alert>
+                        <Info className="h-4 w-4" />
+                        <AlertDescription>
+                          Projections are estimates based on current sales
+                          trends and should be used as guidance only.
+                        </AlertDescription>
+                      </Alert>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              )}
             </Tabs>
           </div>
         ) : (

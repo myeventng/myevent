@@ -1,4 +1,4 @@
-// src/components/admin/order-detail-modal.tsx - Enhanced version
+// src/components/admin/order-detail-modal.tsx
 'use client';
 
 import { useState } from 'react';

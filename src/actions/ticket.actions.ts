@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
-// import { TicketStatus } from '@/generated/prisma';
+import { getCachedSetting } from '@/lib/platform-settings'; // Import your platform settings helper
 
 interface TicketTypeInput {
   name: string;
@@ -23,6 +23,47 @@ interface ActionResponse<T> {
   data?: T;
   error?: string;
   alreadyUsed?: boolean;
+}
+
+// Helper function to get platform fee percentage
+async function getPlatformFeePercentage(): Promise<number> {
+  const defaultFee = await getCachedSetting(
+    'financial.defaultPlatformFeePercentage'
+  );
+  return defaultFee || 5; // Default 5% if not set
+}
+
+// Helper function to get custom platform fee for specific organizer
+async function getOrganizerPlatformFee(organizerId: string): Promise<number> {
+  try {
+    const organizerProfile = await prisma.organizerProfile.findUnique({
+      where: { userId: organizerId },
+      select: { customPlatformFee: true },
+    });
+
+    if (organizerProfile?.customPlatformFee) {
+      return organizerProfile.customPlatformFee;
+    }
+
+    // Fall back to default platform fee
+    return await getPlatformFeePercentage();
+  } catch (error) {
+    console.error('Error fetching organizer platform fee:', error);
+    return await getPlatformFeePercentage();
+  }
+}
+
+// Helper function to get validation window settings
+async function getValidationWindows() {
+  const [earlyEntry, lateEntry] = await Promise.all([
+    getCachedSetting('events.earlyEntryHours'),
+    getCachedSetting('events.lateEntryHours'),
+  ]);
+
+  return {
+    earlyEntryHours: earlyEntry || 1, // Default 1 hour before
+    lateEntryHours: lateEntry || 2, // Default 2 hours after
+  };
 }
 
 // Validate ticket for event entry
@@ -117,27 +158,33 @@ export async function validateTicket(
       };
     }
 
-    // Check if event has started (allow entry from 1 hour before start time)
+    // Get validation window settings from platform settings
+    const { earlyEntryHours, lateEntryHours } = await getValidationWindows();
+
+    // Check if event has started (allow entry from configured hours before start time)
     const eventStart = new Date(ticket.ticketType.event.startDateTime);
-    const oneHourBefore = new Date(eventStart.getTime() - 60 * 60 * 1000);
+    const earlyEntryTime = new Date(
+      eventStart.getTime() - earlyEntryHours * 60 * 60 * 1000
+    );
     const now = new Date();
 
-    if (now < oneHourBefore) {
+    if (now < earlyEntryTime) {
       return {
         success: false,
-        message:
-          'Event has not started yet. Entry allowed 1 hour before start time.',
+        message: `Event has not started yet. Entry allowed ${earlyEntryHours} hour(s) before start time.`,
       };
     }
 
-    // Check if event has ended (allow entry until 2 hours after end time)
+    // Check if event has ended (allow entry until configured hours after end time)
     const eventEnd = new Date(ticket.ticketType.event.endDateTime);
-    const twoHoursAfter = new Date(eventEnd.getTime() + 2 * 60 * 60 * 1000);
+    const lateEntryTime = new Date(
+      eventEnd.getTime() + lateEntryHours * 60 * 60 * 1000
+    );
 
-    if (now > twoHoursAfter) {
+    if (now > lateEntryTime) {
       return {
         success: false,
-        message: 'Event has ended and entry is no longer allowed.',
+        message: `Event has ended and entry is no longer allowed after ${lateEntryHours} hour(s) post-event.`,
       };
     }
 
@@ -147,7 +194,10 @@ export async function validateTicket(
     if (!wasAlreadyUsed) {
       await prisma.ticket.update({
         where: { id: ticket.id },
-        data: { status: 'USED' },
+        data: {
+          status: 'USED',
+          usedAt: new Date(),
+        },
       });
 
       // Log the validation
@@ -173,7 +223,7 @@ export async function validateTicket(
       data: {
         id: ticket.id,
         ticketId: ticket.ticketId,
-        status: wasAlreadyUsed ? 'USED' : 'USED',
+        status: 'USED',
         user: ticket.user,
         ticketType: {
           name: ticket.ticketType.name,
@@ -318,6 +368,7 @@ export async function getEventTicketStats(
       where: { id: eventId },
       include: {
         ticketTypes: true,
+        user: true,
       },
     });
 
@@ -394,8 +445,12 @@ export async function getEventTicketStats(
 
     const netRevenue = totalRevenue - totalRefunded;
 
-    // Calculate platform fee (5% default)
-    const platformFee = Math.round(netRevenue * 0.05);
+    // Get platform fee from settings (either custom for organizer or default)
+    const platformFeePercentage = event.userId
+      ? await getOrganizerPlatformFee(event.userId)
+      : await getPlatformFeePercentage();
+
+    const platformFee = Math.round(netRevenue * (platformFeePercentage / 100));
     const organizerRevenue = netRevenue - platformFee;
 
     // Get ticket type breakdown
@@ -427,7 +482,7 @@ export async function getEventTicketStats(
           id: ticketType.id,
           name: ticketType.name,
           price: ticketType.price,
-          totalQuantity: ticketType.quantity + sold, // Original quantity + sold
+          totalQuantity: ticketType.quantity + sold,
           sold,
           used,
           remaining: ticketType.quantity,
@@ -455,13 +510,14 @@ export async function getEventTicketStats(
           netRevenue,
           platformFee,
           organizerRevenue,
+          platformFeePercentage,
         },
         ticketTypes: ticketTypeStats,
         recentValidations: await prisma.ticketValidation.count({
           where: {
             eventId,
             validatedAt: {
-              gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // Last 24 hours
+              gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
             },
           },
         }),
@@ -505,6 +561,11 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
         },
       },
     });
+
+    // Get organizer's custom platform fee or default
+    const platformFeePercentage = await getOrganizerPlatformFee(
+      session.user.id
+    );
 
     // Calculate overall statistics
     let totalRevenue = 0;
@@ -555,7 +616,7 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
     );
 
     const netRevenue = totalRevenue - totalRefunded;
-    const platformFee = Math.round(netRevenue * 0.05); // 5% platform fee
+    const platformFee = Math.round(netRevenue * (platformFeePercentage / 100));
     const organizerEarnings = netRevenue - platformFee;
 
     return {
@@ -570,6 +631,7 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
           netRevenue,
           platformFee,
           organizerEarnings,
+          platformFeePercentage,
         },
         events: eventStats.sort(
           (a, b) =>
@@ -974,8 +1036,6 @@ export async function getTicketById(id: string): Promise<ActionResponse<any>> {
   }
 }
 
-// Add this function to your ticket-actions.ts file
-
 export async function getAdminTickets(): Promise<ActionResponse<any[]>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
@@ -1295,6 +1355,9 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
   }
 
   try {
+    // Get platform fee percentage from settings
+    const platformFeePercentage = await getPlatformFeePercentage();
+
     // Get ticket status breakdown
     const ticketStats = await prisma.ticket.groupBy({
       by: ['status'],
@@ -1323,20 +1386,22 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
       _count: true,
     });
 
-    // Calculate platform fees (assuming 5% fee)
+    // Calculate platform fees using settings-based percentage
     const totalRevenue = revenueStats._sum.totalAmount || 0;
     const totalRefunded = refundStats._sum.totalAmount || 0;
     const netRevenue = totalRevenue - totalRefunded;
-    const platformFees = Math.round(netRevenue * 0.05);
+    const platformFees = Math.round(netRevenue * (platformFeePercentage / 100));
 
-    // Get recent activity (last 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // Get recent activity from settings (default to 30 days)
+    const activityDays =
+      (await getCachedSetting('analytics.recentActivityDays')) || 30;
+    const recentActivityDate = new Date();
+    recentActivityDate.setDate(recentActivityDate.getDate() - activityDays);
 
     const recentActivity = await prisma.ticket.count({
       where: {
         purchasedAt: {
-          gte: thirtyDaysAgo,
+          gte: recentActivityDate,
         },
       },
     });
@@ -1404,7 +1469,9 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
           totalRefunded,
           netRevenue,
           platformFees,
+          platformFeePercentage,
           recentActivity,
+          recentActivityDays: activityDays,
         },
         ticketsByStatus: ticketStats.reduce(
           (acc, stat) => {
