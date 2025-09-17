@@ -6,12 +6,18 @@ import { z } from 'zod';
 import { Card, CardContent } from '@/components/ui/card';
 import { updateEvent } from '@/actions/event.actions';
 import {
+  updateVotingContest,
+  createContestant,
+  createVotePackage,
+  getContestResults,
+} from '@/actions/voting-contest.actions';
+import {
   getTicketTypesByEvent,
   createTicketType,
   updateTicketType,
   deleteTicketType,
 } from '@/actions/ticket.actions';
-import { AgeRestriction, DressCode } from '@/generated/prisma';
+import { AgeRestriction, DressCode, EventType } from '@/generated/prisma';
 import { toast } from 'sonner';
 
 // Step components
@@ -20,49 +26,69 @@ import { EventLocationDetails } from './event-location-details';
 import { EventSchedule } from './event-schedule';
 import { EventMediaUpload } from './event-media-upload';
 import { EventTickets } from './event-tickets';
+import { VotingContestSetup } from './voting-contest-setup';
+import { ContestantManagement } from './contestant-management';
 import { EventPreview } from './event-preview';
 
-// Define the schema for form validation
-const eventSchema = z.object({
-  // Basic Info
+// Base schema for all events
+const baseEventSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
   categoryId: z.string().optional(),
   tagIds: z.array(z.string()).default([]),
-  age: z.nativeEnum(AgeRestriction).optional(),
-  dressCode: z.nativeEnum(DressCode).optional(),
-  isFree: z.boolean().default(false),
-  idRequired: z.boolean().default(false),
-  attendeeLimit: z.number().optional(),
   url: z.string().url().optional().or(z.literal('')),
-
-  // Location
   venueId: z.string().min(1, 'Venue is required'),
   cityId: z.string().optional(),
   location: z.string().optional(),
-
-  // Schedule
   startDateTime: z.date(),
   endDateTime: z.date(),
   lateEntry: z.date().optional(),
-
-  // Media
   coverImageUrl: z.string().min(1, 'Cover image is required'),
   imageUrls: z.array(z.string()).default([]),
   embeddedVideoUrl: z.string().optional().or(z.literal('')),
 });
 
-type EventFormValues = z.infer<typeof eventSchema>;
+// Extended schema for standard events
+const standardEventSchema = baseEventSchema.extend({
+  age: z.nativeEnum(AgeRestriction).optional(),
+  dressCode: z.nativeEnum(DressCode).optional(),
+  isFree: z.boolean().default(false),
+  idRequired: z.boolean().default(false),
+  attendeeLimit: z.number().optional(),
+});
 
-// Define the steps for the form
-const steps = [
-  { id: 'basic-info', title: 'Basic Info' },
-  { id: 'location', title: 'Location' },
-  { id: 'schedule', title: 'Schedule' },
-  { id: 'media', title: 'Media' },
-  { id: 'tickets', title: 'Tickets' },
-  { id: 'preview', title: 'Preview' },
-];
+// Schema for voting contest events
+const votingContestEventSchema = baseEventSchema.extend({
+  isFree: z.literal(true).default(true),
+});
+
+type StandardEventFormValues = z.infer<typeof standardEventSchema>;
+type VotingContestEventFormValues = z.infer<typeof votingContestEventSchema>;
+
+// Define the steps for different event types
+const getStepsForEventType = (eventType: EventType) => {
+  const baseSteps = [
+    { id: 'basic-info', title: 'Basic Info' },
+    { id: 'location', title: 'Location' },
+    { id: 'schedule', title: 'Schedule' },
+    { id: 'media', title: 'Media' },
+  ];
+
+  if (eventType === EventType.VOTING_CONTEST) {
+    return [
+      ...baseSteps,
+      { id: 'voting-setup', title: 'Voting Setup' },
+      { id: 'contestants', title: 'Contestants' },
+      { id: 'preview', title: 'Preview' },
+    ];
+  } else {
+    return [
+      ...baseSteps,
+      { id: 'tickets', title: 'Tickets' },
+      { id: 'preview', title: 'Preview' },
+    ];
+  }
+};
 
 interface EditEventFormProps {
   initialData: any;
@@ -79,10 +105,15 @@ export function EditEventForm({
 }: EditEventFormProps) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
-  const [formData, setFormData] = useState<Partial<EventFormValues>>({});
+  const [formData, setFormData] = useState<any>({});
   const [ticketTypes, setTicketTypes] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  const isVotingContest = initialData?.eventType === EventType.VOTING_CONTEST;
+  const steps = getStepsForEventType(
+    initialData?.eventType || EventType.STANDARD
+  );
 
   // Initialize form data from initialData
   useEffect(() => {
@@ -94,16 +125,12 @@ export function EditEventForm({
         ? new Date(initialData.lateEntry)
         : undefined;
 
-      const initialFormData: Partial<EventFormValues> = {
+      const baseFormData = {
+        eventType: initialData.eventType || EventType.STANDARD,
         title: initialData.title || '',
         description: initialData.description || '',
         categoryId: initialData.categoryId || undefined,
         tagIds: initialData.tags?.map((tag: any) => tag.id) || [],
-        age: initialData.age || undefined,
-        dressCode: initialData.dressCode || undefined,
-        isFree: initialData.isFree || false,
-        idRequired: initialData.idRequired || false,
-        attendeeLimit: initialData.attendeeLimit || undefined,
         url: initialData.url || '',
         venueId: initialData.venueId || '',
         cityId: initialData.cityId || undefined,
@@ -116,35 +143,91 @@ export function EditEventForm({
         embeddedVideoUrl: initialData.embeddedVideoUrl || '',
       };
 
-      setFormData(initialFormData);
+      if (isVotingContest) {
+        setFormData({
+          ...baseFormData,
+          isFree: true, // Voting contests are always "free" events
+        });
+      } else {
+        setFormData({
+          ...baseFormData,
+          age: initialData.age || undefined,
+          dressCode: initialData.dressCode || undefined,
+          isFree: initialData.isFree || false,
+          idRequired: initialData.idRequired || false,
+          attendeeLimit: initialData.attendeeLimit || undefined,
+        });
+      }
     }
-  }, [initialData]);
+  }, [initialData, isVotingContest]);
 
-  // Fetch existing ticket types
+  // Fetch existing data based on event type
   useEffect(() => {
-    const fetchTicketTypes = async () => {
+    const fetchData = async () => {
       if (initialData?.id) {
         try {
           setIsLoading(true);
-          const response = await getTicketTypesByEvent(initialData.id);
-          if (response.success && response.data) {
-            setTicketTypes(response.data);
+
+          if (isVotingContest) {
+            // Fetch voting contest data
+            const contestResults = await getContestResults(
+              initialData.votingContest?.id
+            );
+            if (contestResults.success && contestResults.data) {
+              const contestData = contestResults.data.contest;
+              const contestants = contestResults.data.results.map(
+                (result: any) => ({
+                  id: result.id,
+                  name: result.name,
+                  bio: result.bio,
+                  imageUrl: result.imageUrl,
+                  contestNumber: result.contestNumber,
+                  instagramUrl: result.socialLinks?.instagram,
+                  twitterUrl: result.socialLinks?.twitter,
+                  facebookUrl: result.socialLinks?.facebook,
+                  status: 'ACTIVE',
+                })
+              );
+
+              setFormData((prev: any) => ({
+                ...prev,
+                votingContest: {
+                  votingType: contestData.votingType,
+                  votePackagesEnabled: contestData.votePackagesEnabled,
+                  maxVotesPerUser: initialData.votingContest?.maxVotesPerUser,
+                  allowMultipleVotes:
+                    initialData.votingContest?.allowMultipleVotes,
+                  showLiveResults: contestData.showLiveResults,
+                  showVoterNames: initialData.votingContest?.showVoterNames,
+                  votePackages: contestResults.data.votePackages || [],
+                },
+                contestants,
+              }));
+            }
+          } else {
+            // Fetch ticket types for standard events
+            const response = await getTicketTypesByEvent(initialData.id);
+            if (response.success && response.data) {
+              setTicketTypes(response.data);
+            }
           }
         } catch (error) {
-          console.error('Error fetching ticket types:', error);
-          toast.error('Failed to load ticket types');
+          console.error('Error fetching data:', error);
+          toast.error(
+            `Failed to load ${isVotingContest ? 'contest' : 'ticket'} data`
+          );
         } finally {
           setIsLoading(false);
         }
       }
     };
 
-    fetchTicketTypes();
-  }, [initialData?.id]);
+    fetchData();
+  }, [initialData?.id, isVotingContest]);
 
-  // Helper to update form data - ensure no undefined values
-  const updateFormData = (data: Partial<EventFormValues>) => {
-    setFormData((prev) => {
+  // Helper to update form data
+  const updateFormData = (data: any) => {
+    setFormData((prev: any) => {
       const updated = { ...prev, ...data };
 
       // Ensure arrays are never undefined
@@ -179,8 +262,13 @@ export function EditEventForm({
     try {
       setIsSubmitting(true);
 
-      // Validate the form data
-      const validatedData = eventSchema.parse(formData);
+      // Validate based on event type
+      let validatedData;
+      if (isVotingContest) {
+        validatedData = votingContestEventSchema.parse(formData);
+      } else {
+        validatedData = standardEventSchema.parse(formData);
+      }
 
       // Update the event
       const result = await updateEvent({
@@ -190,48 +278,139 @@ export function EditEventForm({
       });
 
       if (result.success && result.data) {
-        // Handle ticket types - compare with existing ones
-        const existingTicketIds = ticketTypes
-          .filter((t) => !t.id?.startsWith('temp-'))
-          .map((t) => t.id);
-
-        const newTicketTypes = ticketTypes.filter((t) =>
-          t.id?.startsWith('temp-')
-        );
-        const updatedTicketTypes = ticketTypes.filter(
-          (t) => !t.id?.startsWith('temp-') && existingTicketIds.includes(t.id)
-        );
-
-        // Create new ticket types
-        if (newTicketTypes.length > 0) {
-          const createPromises = newTicketTypes.map(async (ticketType) => {
-            return createTicketType({
-              name: ticketType.name,
-              price: ticketType.price,
-              quantity: ticketType.quantity,
-              eventId: initialData.id,
+        if (isVotingContest) {
+          // Update voting contest
+          if (formData.votingContest && initialData.votingContest?.id) {
+            const contestResult = await updateVotingContest({
+              contestId: initialData.votingContest.id,
+              ...formData.votingContest,
             });
-          });
 
-          await Promise.all(createPromises);
+            if (!contestResult.success) {
+              toast.error(
+                contestResult.message || 'Failed to update voting contest'
+              );
+              return;
+            }
+
+            // Handle contestants - this is simplified for editing
+            // In a real implementation, you'd want to handle updates/deletions more carefully
+            if (formData.contestants && formData.contestants.length > 0) {
+              const newContestants = formData.contestants.filter((c: any) =>
+                c.id?.startsWith('temp-')
+              );
+
+              if (newContestants.length > 0) {
+                const contestantPromises = newContestants.map(
+                  async (contestant: any) => {
+                    return createContestant({
+                      contestId: initialData.votingContest.id,
+                      name: contestant.name,
+                      bio: contestant.bio,
+                      imageUrl: contestant.imageUrl,
+                      contestNumber: contestant.contestNumber,
+                      instagramUrl: contestant.instagramUrl,
+                      twitterUrl: contestant.twitterUrl,
+                      facebookUrl: contestant.facebookUrl,
+                    });
+                  }
+                );
+
+                const contestantResults = await Promise.all(contestantPromises);
+                const failedContestants = contestantResults.filter(
+                  (r) => !r.success
+                );
+
+                if (failedContestants.length > 0) {
+                  toast.error(
+                    `Contest updated but ${failedContestants.length} new contestant(s) failed to create`
+                  );
+                }
+              }
+            }
+
+            // Handle vote packages - simplified approach
+            if (
+              formData.votingContest.votePackagesEnabled &&
+              formData.votingContest.votePackages?.length > 0
+            ) {
+              const newPackages = formData.votingContest.votePackages.filter(
+                (p: any) => p.id?.startsWith('temp-')
+              );
+
+              if (newPackages.length > 0) {
+                const packagePromises = newPackages.map(async (pkg: any) => {
+                  return createVotePackage({
+                    contestId: initialData.votingContest.id,
+                    name: pkg.name,
+                    description: pkg.description,
+                    voteCount: pkg.voteCount,
+                    price: pkg.price,
+                    sortOrder: pkg.sortOrder || 0,
+                  });
+                });
+
+                const packageResults = await Promise.all(packagePromises);
+                const failedPackages = packageResults.filter((r) => !r.success);
+
+                if (failedPackages.length > 0) {
+                  toast.error(
+                    `Contest updated but ${failedPackages.length} new vote package(s) failed to create`
+                  );
+                }
+              }
+            }
+          }
+        } else {
+          // Handle ticket types for standard events
+          const existingTicketIds = ticketTypes
+            .filter((t) => !t.id?.startsWith('temp-'))
+            .map((t) => t.id);
+
+          const newTicketTypes = ticketTypes.filter((t) =>
+            t.id?.startsWith('temp-')
+          );
+          const updatedTicketTypes = ticketTypes.filter(
+            (t) =>
+              !t.id?.startsWith('temp-') && existingTicketIds.includes(t.id)
+          );
+
+          // Create new ticket types
+          if (newTicketTypes.length > 0) {
+            const createPromises = newTicketTypes.map(async (ticketType) => {
+              return createTicketType({
+                name: ticketType.name,
+                price: ticketType.price,
+                quantity: ticketType.quantity,
+                eventId: initialData.id,
+              });
+            });
+
+            await Promise.all(createPromises);
+          }
+
+          // Update existing ticket types
+          if (updatedTicketTypes.length > 0) {
+            const updatePromises = updatedTicketTypes.map(
+              async (ticketType) => {
+                return updateTicketType({
+                  id: ticketType.id,
+                  name: ticketType.name,
+                  price: ticketType.price,
+                  quantity: ticketType.quantity,
+                  eventId: initialData.id,
+                });
+              }
+            );
+
+            await Promise.all(updatePromises);
+          }
         }
 
-        // Update existing ticket types
-        if (updatedTicketTypes.length > 0) {
-          const updatePromises = updatedTicketTypes.map(async (ticketType) => {
-            return updateTicketType({
-              id: ticketType.id,
-              name: ticketType.name,
-              price: ticketType.price,
-              quantity: ticketType.quantity,
-              eventId: initialData.id,
-            });
-          });
-
-          await Promise.all(updatePromises);
-        }
-
-        toast.success(result.message || 'Event updated successfully');
+        toast.success(
+          result.message ||
+            `${isVotingContest ? 'Contest' : 'Event'} updated successfully`
+        );
         const redirectPath =
           userRole === 'ADMIN' && ['STAFF', 'SUPER_ADMIN'].includes(userSubRole)
             ? '/admin/dashboard/events'
@@ -239,7 +418,10 @@ export function EditEventForm({
 
         router.push(redirectPath);
       } else {
-        toast.error(result.message || 'Failed to update event');
+        toast.error(
+          result.message ||
+            `Failed to update ${isVotingContest ? 'contest' : 'event'}`
+        );
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -263,7 +445,9 @@ export function EditEventForm({
         <div className="flex items-center justify-center py-8">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4 text-muted-foreground">Loading event data...</p>
+            <p className="mt-4 text-muted-foreground">
+              Loading {isVotingContest ? 'contest' : 'event'} data...
+            </p>
           </div>
         </div>
       );
@@ -306,20 +490,56 @@ export function EditEventForm({
           />
         );
       case 4:
-        return (
-          <EventTickets
-            formData={formData}
-            ticketTypes={ticketTypes}
-            setTicketTypes={setTicketTypes}
-            onNext={handleNext}
-            onPrevious={handlePrevious}
-          />
-        );
+        if (isVotingContest) {
+          return (
+            <VotingContestSetup
+              formData={formData}
+              updateFormData={updateFormData}
+              onNext={handleNext}
+              onPrevious={handlePrevious}
+            />
+          );
+        } else {
+          return (
+            <EventTickets
+              formData={formData}
+              ticketTypes={ticketTypes}
+              setTicketTypes={setTicketTypes}
+              onNext={handleNext}
+              onPrevious={handlePrevious}
+            />
+          );
+        }
       case 5:
+        if (isVotingContest) {
+          return (
+            <ContestantManagement
+              formData={formData}
+              updateFormData={updateFormData}
+              onNext={handleNext}
+              onPrevious={handlePrevious}
+            />
+          );
+        } else {
+          return (
+            <EventPreview
+              formData={formData}
+              ticketTypes={ticketTypes}
+              onPrevious={handlePrevious}
+              onSubmit={handleSubmit}
+              isSubmitting={isSubmitting}
+              isEditing={isEditing}
+              userRole={userRole}
+              userSubRole={userSubRole}
+            />
+          );
+        }
+      case 6:
+        // This will be the preview step for voting contests
         return (
           <EventPreview
             formData={formData}
-            ticketTypes={ticketTypes}
+            ticketTypes={isVotingContest ? [] : ticketTypes}
             onPrevious={handlePrevious}
             onSubmit={handleSubmit}
             isSubmitting={isSubmitting}
@@ -336,23 +556,26 @@ export function EditEventForm({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Edit Event</h1>
+        <h1 className="text-2xl font-bold">
+          Edit {isVotingContest ? 'Voting Contest' : 'Event'}
+        </h1>
         <p className="text-muted-foreground">
-          Update your event details using our step-by-step process.
+          Update your {isVotingContest ? 'contest' : 'event'} details using our
+          step-by-step process.
         </p>
       </div>
 
       {/* Steps indicator */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center mb-8 overflow-x-auto">
         {steps.map((step, index) => (
-          <div key={step.id} className="flex items-center">
+          <div key={step.id} className="flex items-center flex-shrink-0">
             <div
               className={`rounded-full h-10 w-10 flex items-center justify-center ${
                 index < currentStep
                   ? 'bg-green-500 text-white'
                   : index === currentStep
-                  ? 'bg-primary text-white'
-                  : 'bg-gray-200 text-gray-700'
+                    ? 'bg-primary text-white'
+                    : 'bg-gray-200 text-gray-700'
               }`}
             >
               {index < currentStep ? '✓' : index + 1}

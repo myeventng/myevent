@@ -237,7 +237,7 @@ export default async function BecomeEventHostPage() {
 
             <div className="grid gap-8 md:grid-cols-3">
               <TestimonialCard
-                name="Sarah Johnson"
+                name="Ada Johnson"
                 role="Workshop Host"
                 image="/api/placeholder/64/64"
                 quote="MyEvent helped me turn my weekend workshops into a full-time business. I've sold over 500 tickets in 6 months!"

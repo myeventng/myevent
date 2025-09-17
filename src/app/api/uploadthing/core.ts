@@ -58,6 +58,20 @@ export const ourFileRouter = {
       return { uploadedBy: metadata.userId, url: file.url };
     }),
 
+  contestantImage: f({ image: { maxFileSize: '2MB', maxFileCount: 1 } })
+    .middleware(async () => {
+      const headersList = await headers();
+      const session = await auth.api.getSession({
+        headers: headersList,
+      });
+      const user = session?.user;
+      if (!user) throw new Error('Unauthorized');
+      return { userId: user.id };
+    })
+    .onUploadComplete(async ({ metadata, file }) => {
+      return { uploadedBy: metadata.userId, url: file.url };
+    }),
+
   venueImage: f({ image: { maxFileSize: '4MB', maxFileCount: 5 } })
     .middleware(async () => {
       const headersList = await headers();

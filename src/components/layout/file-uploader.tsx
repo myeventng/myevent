@@ -16,7 +16,8 @@ type UploadEndpoint =
   | 'eventCover'
   | 'profileImage'
   | 'blogImage'
-  | 'venueImage';
+  | 'venueImage'
+  | 'contestantImage';
 
 interface FileUploaderProps {
   onFieldChange: (urls: string | string[]) => void;
@@ -47,8 +48,8 @@ export const FileUploader = ({
   const imageUrlArray = Array.isArray(imageUrls)
     ? imageUrls
     : imageUrls
-    ? [imageUrls]
-    : [];
+      ? [imageUrls]
+      : [];
 
   // Debug logs to track props and state changes
   // useEffect(() => {
@@ -97,7 +98,7 @@ export const FileUploader = ({
       // For multiple image mode, append to existing URLs
       else {
         const newUrls = [...imageUrlArray, ...uploadedUrls];
-        // console.log('[FileUploader] Multiple image mode - all URLs:', newUrls);
+        console.log('[FileUploader] Multiple image mode - all URLs:', newUrls);
         onFieldChange(newUrls);
       }
 

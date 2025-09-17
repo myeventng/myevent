@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, type FieldValues } from 'react-hook-form';
-import { AgeRestriction, DressCode } from '@/generated/prisma';
+import { AgeRestriction, DressCode, EventType } from '@/generated/prisma';
 import { Button } from '@/components/ui/button';
 import {
   Form,
@@ -29,10 +29,10 @@ import { getCategories } from '@/actions/category-actions';
 import { getTags, createTag } from '@/actions/tag.actions';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, Vote, Calendar } from 'lucide-react';
 
-// Form schema - let TypeScript infer the type
-const formSchema = z.object({
+// Create different schemas based on event type
+const standardEventSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
   categoryId: z.string().optional(),
@@ -45,8 +45,18 @@ const formSchema = z.object({
   url: z.string().url().optional().or(z.literal('')),
 });
 
-// Infer the type from the schema
-type FormValues = z.infer<typeof formSchema>;
+const votingContestSchema = z.object({
+  title: z.string().min(3, 'Title must be at least 3 characters'),
+  description: z.string().min(10, 'Description must be at least 10 characters'),
+  categoryId: z.string().optional(),
+  tagIds: z.array(z.string()).default([]),
+  url: z.string().url().optional().or(z.literal('')),
+  // Voting contests don't need age restrictions, dress codes, attendance limits, etc.
+});
+
+type StandardFormValues = z.infer<typeof standardEventSchema>;
+type VotingFormValues = z.infer<typeof votingContestSchema>;
+type FormValues = StandardFormValues | VotingFormValues;
 
 interface EventBasicInfoProps {
   formData: any;
@@ -74,20 +84,28 @@ export function EventBasicInfo({
     formData.tagIds || []
   );
 
+  const isVotingContest = formData.eventType === EventType.VOTING_CONTEST;
+  const isStandardEvent = formData.eventType === EventType.STANDARD;
+
+  // Use appropriate schema based on event type
+  const schema = isVotingContest ? votingContestSchema : standardEventSchema;
+
   // Type assertion to fix the compatibility issue
   const form = useForm<FormValues & FieldValues>({
-    resolver: zodResolver(formSchema) as any,
+    resolver: zodResolver(schema) as any,
     defaultValues: {
       title: formData.title || '',
       description: formData.description || '',
       categoryId: formData.categoryId || '',
       tagIds: formData.tagIds || [],
-      age: formData.age || undefined,
-      dressCode: formData.dressCode || undefined,
-      isFree: formData.isFree || false,
-      idRequired: formData.idRequired || false,
-      attendeeLimit: formData.attendeeLimit || undefined,
       url: formData.url || '',
+      ...(isStandardEvent && {
+        age: formData.age || undefined,
+        dressCode: formData.dressCode || undefined,
+        isFree: formData.isFree || false,
+        idRequired: formData.idRequired || false,
+        attendeeLimit: formData.attendeeLimit || undefined,
+      }),
     },
   });
 
@@ -126,8 +144,12 @@ export function EventBasicInfo({
       ...values,
       categoryId: values.categoryId === '' ? undefined : values.categoryId,
       url: values.url === '' ? undefined : values.url,
-      attendeeLimit:
-        values.attendeeLimit === 0 ? undefined : values.attendeeLimit,
+      ...(isStandardEvent && {
+        attendeeLimit:
+          (values as StandardFormValues).attendeeLimit === 0
+            ? undefined
+            : (values as StandardFormValues).attendeeLimit,
+      }),
     };
 
     updateFormData(cleanedValues);
@@ -194,11 +216,40 @@ export function EventBasicInfo({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold">Event Details</h2>
+        <div className="flex items-center gap-3 mb-2">
+          {isVotingContest ? (
+            <Vote className="h-6 w-6 text-primary" />
+          ) : (
+            <Calendar className="h-6 w-6 text-primary" />
+          )}
+          <h2 className="text-2xl font-bold">
+            {isVotingContest ? 'Voting Contest Details' : 'Event Details'}
+          </h2>
+        </div>
         <p className="text-muted-foreground">
-          Start by providing the basic information about your event.
+          {isVotingContest
+            ? 'Provide the basic information for your voting contest.'
+            : 'Start by providing the basic information about your event.'}
         </p>
       </div>
+
+      {isVotingContest && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <Vote className="h-5 w-5 text-blue-600 mt-0.5" />
+            <div>
+              <h3 className="font-medium text-blue-900">
+                Voting Contest Event
+              </h3>
+              <p className="text-sm text-blue-700 mt-1">
+                You're creating a voting contest. This will be an online event
+                where users can vote for contestants. Additional voting settings
+                will be configured in later steps.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -207,12 +258,23 @@ export function EventBasicInfo({
             name="title"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Event Title</FormLabel>
+                <FormLabel>
+                  {isVotingContest ? 'Contest Title' : 'Event Title'}
+                </FormLabel>
                 <FormControl>
-                  <Input placeholder="Enter event title" {...field} />
+                  <Input
+                    placeholder={
+                      isVotingContest
+                        ? 'e.g., Miss Universe Nigeria 2024'
+                        : 'Enter event title'
+                    }
+                    {...field}
+                  />
                 </FormControl>
                 <FormDescription>
-                  The title should be catchy and descriptive.
+                  {isVotingContest
+                    ? 'The title should clearly describe your contest.'
+                    : 'The title should be catchy and descriptive.'}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -224,16 +286,26 @@ export function EventBasicInfo({
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Event Description</FormLabel>
+                <FormLabel>
+                  {isVotingContest
+                    ? 'Contest Description'
+                    : 'Event Description'}
+                </FormLabel>
                 <FormControl>
                   <Textarea
-                    placeholder="Describe your event..."
+                    placeholder={
+                      isVotingContest
+                        ? 'Describe your contest, voting rules, prizes, and other important information...'
+                        : 'Describe your event...'
+                    }
                     className="min-h-32"
                     {...field}
                   />
                 </FormControl>
                 <FormDescription>
-                  Provide a detailed description of your event.
+                  {isVotingContest
+                    ? 'Provide details about the contest, contestants, voting rules, and prizes.'
+                    : 'Provide a detailed description of your event.'}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -266,102 +338,109 @@ export function EventBasicInfo({
                     </SelectContent>
                   </Select>
                   <FormDescription>
-                    Categorize your event to help attendees find it.
+                    {isVotingContest
+                      ? 'Categorize your contest to help voters find it.'
+                      : 'Categorize your event to help attendees find it.'}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="age"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Age Restriction</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value || ''}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select age restriction" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {Object.values(AgeRestriction).map((age) => (
-                        <SelectItem key={age} value={age}>
-                          {age.replace('_', ' ')}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>
-                    Set age restrictions for your event if applicable.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Only show these fields for standard events */}
+            {isStandardEvent && (
+              <>
+                <FormField
+                  control={form.control}
+                  name="age"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Age Restriction</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || ''}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select age restriction" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {Object.values(AgeRestriction).map((age) => (
+                            <SelectItem key={age} value={age}>
+                              {age.replace('_', ' ')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        Set age restrictions for your event if applicable.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <FormField
-              control={form.control}
-              name="dressCode"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Dress Code</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value || ''}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select dress code" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {Object.values(DressCode).map((code) => (
-                        <SelectItem key={code} value={code}>
-                          {code.replace('_', ' ')}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>
-                    Set a dress code for your event if applicable.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={form.control}
+                  name="dressCode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Dress Code</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || ''}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select dress code" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {Object.values(DressCode).map((code) => (
+                            <SelectItem key={code} value={code}>
+                              {code.replace('_', ' ')}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        Set a dress code for your event if applicable.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-            <FormField
-              control={form.control}
-              name="attendeeLimit"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Attendee Limit</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      placeholder="e.g., 100"
-                      {...field}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        field.onChange(
-                          value === '' ? undefined : parseInt(value, 10)
-                        );
-                      }}
-                      value={field.value === undefined ? '' : field.value}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Maximum number of attendees (leave empty for unlimited).
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                <FormField
+                  control={form.control}
+                  name="attendeeLimit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Attendee Limit</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="e.g., 100"
+                          {...field}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            field.onChange(
+                              value === '' ? undefined : parseInt(value, 10)
+                            );
+                          }}
+                          value={field.value === undefined ? '' : field.value}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Maximum number of attendees (leave empty for unlimited).
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </>
+            )}
           </div>
 
           <FormField
@@ -369,12 +448,18 @@ export function EventBasicInfo({
             name="url"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Event Website URL</FormLabel>
+                <FormLabel>
+                  {isVotingContest
+                    ? 'Contest Website URL'
+                    : 'Event Website URL'}
+                </FormLabel>
                 <FormControl>
                   <Input placeholder="https://..." {...field} />
                 </FormControl>
                 <FormDescription>
-                  Optional website for your event.
+                  {isVotingContest
+                    ? 'Optional website for your contest.'
+                    : 'Optional website for your event.'}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -385,8 +470,9 @@ export function EventBasicInfo({
             <div>
               <FormLabel htmlFor="tags">Tags (Optional)</FormLabel>
               <FormDescription>
-                Select tags that describe your event to help attendees discover
-                it. You can skip this step and add tags later.
+                {isVotingContest
+                  ? 'Select tags that describe your contest to help voters discover it.'
+                  : 'Select tags that describe your event to help attendees discover it.'}
               </FormDescription>
             </div>
 
@@ -396,7 +482,6 @@ export function EventBasicInfo({
               ) : (
                 <>
                   {tags.map((tag) => {
-                    // Use selectedTags state instead of form.getValues for immediate feedback
                     const isSelected = selectedTags.includes(tag.id);
                     return (
                       <Badge
@@ -416,19 +501,11 @@ export function EventBasicInfo({
                       </Badge>
                     );
                   })}
-                  {selectedTags.length === 0 &&
-                    !isLoading &&
-                    tags.length > 0 && (
-                      <div className="text-sm text-muted-foreground italic">
-                        No tags selected. You can add tags now or skip this step
-                        and add them later.
-                      </div>
-                    )}
                 </>
               )}
             </div>
 
-            {/* Quick Tag Creation for Organizers */}
+            {/* Quick Tag Creation */}
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -451,7 +528,7 @@ export function EventBasicInfo({
                   <div>
                     <label className="text-sm font-medium">Tag Name</label>
                     <Input
-                      placeholder="e.g., Music, Tech, Food"
+                      placeholder="e.g., Beauty Contest, Music"
                       value={newTagName}
                       onChange={(e) => setNewTagName(e.target.value)}
                     />
@@ -517,49 +594,52 @@ export function EventBasicInfo({
             )}
           </div>
 
-          <div className="flex items-center space-x-8">
-            <FormField
-              control={form.control}
-              name="isFree"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                  <FormControl>
-                    <Checkbox
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel>Free Event</FormLabel>
-                    <FormDescription>
-                      Check if this is a free event.
-                    </FormDescription>
-                  </div>
-                </FormItem>
-              )}
-            />
+          {/* Only show these checkboxes for standard events */}
+          {isStandardEvent && (
+            <div className="flex items-center space-x-8">
+              <FormField
+                control={form.control}
+                name="isFree"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>Free Event</FormLabel>
+                      <FormDescription>
+                        Check if this is a free event.
+                      </FormDescription>
+                    </div>
+                  </FormItem>
+                )}
+              />
 
-            <FormField
-              control={form.control}
-              name="idRequired"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                  <FormControl>
-                    <Checkbox
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel>ID Required</FormLabel>
-                    <FormDescription>
-                      Check if attendees need to bring ID.
-                    </FormDescription>
-                  </div>
-                </FormItem>
-              )}
-            />
-          </div>
+              <FormField
+                control={form.control}
+                name="idRequired"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>ID Required</FormLabel>
+                      <FormDescription>
+                        Check if attendees need to bring ID.
+                      </FormDescription>
+                    </div>
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
 
           <div className="flex justify-end">
             <Button type="submit">Next Step</Button>

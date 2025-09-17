@@ -8,6 +8,31 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+//vote
+enum EventType {
+  STANDARD
+  VOTING_CONTEST
+  INVITE
+}
+
+enum VotingType {
+  FREE
+  PAID
+}
+
+enum ContestantStatus {
+  ACTIVE
+  DISQUALIFIED
+  WITHDRAWN
+}
+
+enum VoteStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
 // Enums
 enum NotificationType {
   EVENT_SUBMITTED
@@ -24,6 +49,11 @@ enum NotificationType {
   VENUE_SUBMITTED
   VENUE_APPROVED
   VENUE_REJECTED
+  VOTE_PURCHASED
+  VOTING_STARTED
+  VOTING_ENDED
+  CONTEST_WINNER_ANNOUNCED
+  CONTESTANT_DISQUALIFIED
   SYSTEM_UPDATE
   PAYMENT_RECEIVED
   USER_REGISTERED
@@ -166,8 +196,10 @@ model Notification {
   orderId String?
   order   Order?  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  venueId String?
-  venue   Venue?  @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  venueId     String?
+  venue       Venue?     @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  VoteOrder   VoteOrder? @relation(fields: [voteOrderId], references: [id])
+  voteOrderId String?
 
   @@index([userId, status])
   @@index([isAdminNotification, status])
@@ -380,6 +412,8 @@ model User {
   payouts          Payout[]           @relation("UserPayouts")
   auditLogs        AuditLog[] // Relation to AuditLog
   PushSubscription PushSubscription?
+  voteOrders       VoteOrder[]
+  votes            Vote[]
 
   @@map("users")
 }
@@ -514,6 +548,148 @@ model Venue {
   @@index([cityId])
 }
 
+model VotingContest {
+  id      String @id @default(cuid())
+  eventId String @unique
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  votingType VotingType @default(FREE)
+
+  // Vote package settings
+  votePackagesEnabled Boolean @default(false)
+
+  // Voting rules
+  maxVotesPerUser    Int? // null means unlimited
+  allowMultipleVotes Boolean   @default(true) // Can vote for multiple contestants
+  votingStartDate    DateTime?
+  votingEndDate      DateTime?
+
+  // Results settings
+  showLiveResults Boolean @default(true)
+  showVoterNames  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contestants  Contestant[]
+  votePackages VotePackage[]
+  votes        Vote[]
+  VoteOrder    VoteOrder[]
+
+  @@index([eventId])
+  @@index([votingType])
+}
+
+// NEW: Vote Package model (for paid voting with different vote quantities)
+model VotePackage {
+  id        String        @id @default(cuid())
+  contestId String
+  contest   VotingContest @relation(fields: [contestId], references: [id], onDelete: Cascade)
+
+  name        String // e.g., "5 Votes", "20 Votes", "100 Votes"
+  description String?
+  voteCount   Int // Number of votes in this package
+  price       Float // Price for this package
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  voteOrders VoteOrder[]
+
+  @@index([contestId])
+  @@index([isActive])
+}
+
+model Contestant {
+  id        String        @id @default(cuid())
+  contestId String
+  contest   VotingContest @relation(fields: [contestId], references: [id], onDelete: Cascade)
+
+  name          String
+  bio           String?
+  imageUrl      String?
+  contestNumber String // e.g., "001", "002" for display
+
+  status ContestantStatus @default(ACTIVE)
+
+  // Social media links
+  instagramUrl String?
+  twitterUrl   String?
+  facebookUrl  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  votes Vote[]
+
+  @@unique([contestId, contestNumber])
+  @@index([contestId])
+  @@index([status])
+}
+
+model VoteOrder {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  contestId     String
+  contest       VotingContest @relation(fields: [contestId], references: [id])
+  votePackageId String?
+  votePackage   VotePackage?  @relation(fields: [votePackageId], references: [id])
+
+  // Payment details
+  paystackId    String        @unique
+  totalAmount   Float
+  platformFee   Float         @default(0)
+  voteCount     Int // Number of votes purchased
+  paymentStatus PaymentStatus @default(PENDING)
+  paymentMethod String?
+  currency      String        @default("NGN")
+
+  // Vote tracking
+  votesUsed      Int       @default(0)
+  votesRemaining Int // voteCount - votesUsed
+  expiresAt      DateTime? // When unused votes expire
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  votes         Vote[]
+  notifications Notification[]
+
+  @@index([userId])
+  @@index([contestId])
+  @@index([paymentStatus])
+}
+
+model Vote {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+  contestId    String
+  contest      VotingContest @relation(fields: [contestId], references: [id])
+  contestantId String
+  contestant   Contestant    @relation(fields: [contestantId], references: [id])
+  voteOrderId  String? // Only for paid votes
+  voteOrder    VoteOrder?    @relation(fields: [voteOrderId], references: [id])
+
+  voteType  VotingType // FREE or PAID
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  // Prevent duplicate free votes per user per contestant
+  @@unique([userId, contestantId, voteType])
+  @@index([userId])
+  @@index([contestId])
+  @@index([contestantId])
+  @@index([voteType])
+  @@index([createdAt])
+}
+
 model Event {
   id               String          @id @default(cuid())
   slug             String?
@@ -554,6 +730,11 @@ model Event {
   isCancelled     Boolean?        @default(false)
   publishedStatus PublishedStatus @default(DRAFT)
   Notification    Notification[]
+
+  eventType EventType @default(STANDARD)
+
+  // Fields for voting contests
+  votingContest VotingContest?
 
   @@index([title])
   @@index([publishedStatus])

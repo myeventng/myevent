@@ -21,14 +21,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-// import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { getVenues } from '@/actions/venue-actions';
 import { getUserVenues } from '@/actions/venue-actions';
 import { toast } from 'sonner';
 import { getUserOrganizerProfile } from '@/actions/organizer.actions';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, Globe, MapPin, Vote } from 'lucide-react';
 import { CreateVenueModal } from './create-venue-modal';
+import { EventType } from '@/generated/prisma';
 
 // Form schema for this step
 const formSchema = z.object({
@@ -57,6 +57,9 @@ export function EventLocationDetails({
   const [isOrganizer, setIsOrganizer] = useState(false);
   const [selectedVenue, setSelectedVenue] = useState<any>(null);
   const [showCreateVenue, setShowCreateVenue] = useState(false);
+
+  const isVotingContest = formData.eventType === EventType.VOTING_CONTEST;
+  const isStandardEvent = formData.eventType === EventType.STANDARD;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -104,14 +107,41 @@ export function EventLocationDetails({
             }
           });
 
+          // Add online venue option for voting contests
+          if (isVotingContest) {
+            venueMap.set('online', {
+              id: 'online',
+              name: 'Online Event',
+              address: 'Virtual/Online',
+              city: { name: 'Online', state: 'Virtual' },
+              isOwned: false,
+              isOnline: true,
+            });
+          }
+
           setVenues(Array.from(venueMap.values()));
         } else {
           // Otherwise, get all venues (for admin users)
           venuesResponse = await getVenues();
           if (venuesResponse.success && venuesResponse.data) {
-            setVenues(
-              venuesResponse.data.map((venue) => ({ ...venue, isOwned: false }))
-            );
+            const allVenues = venuesResponse.data.map((venue) => ({
+              ...venue,
+              isOwned: false,
+            }));
+
+            // Add online venue option for voting contests
+            if (isVotingContest) {
+              allVenues.unshift({
+                id: 'online',
+                name: 'Online Event',
+                address: 'Virtual/Online',
+                city: { name: 'Online', state: 'Virtual' },
+                isOwned: false,
+                isOnline: true,
+              });
+            }
+
+            setVenues(allVenues);
           }
         }
 
@@ -133,7 +163,17 @@ export function EventLocationDetails({
     };
 
     fetchData();
-  }, [formData.venueId]);
+  }, [formData.venueId, isVotingContest]);
+
+  // Auto-select online venue for voting contests if none selected
+  useEffect(() => {
+    if (isVotingContest && !formData.venueId && venues.length > 0) {
+      const onlineVenue = venues.find((v) => v.id === 'online');
+      if (onlineVenue) {
+        handleVenueChange('online');
+      }
+    }
+  }, [isVotingContest, formData.venueId, venues]);
 
   // Update selected venue when venueId changes
   const handleVenueChange = (venueId: string) => {
@@ -159,7 +199,12 @@ export function EventLocationDetails({
   const onSubmit = (values: FormValues) => {
     // Find the selected venue to get its city ID
     const venue = venues.find((venue) => venue.id === values.venueId);
-    const cityId = venue?.cityId || venue?.city?.id;
+    let cityId = venue?.cityId || venue?.city?.id;
+
+    // For online venues, set cityId to null
+    if (venue?.isOnline) {
+      cityId = undefined;
+    }
 
     updateFormData({
       ...values,
@@ -172,11 +217,39 @@ export function EventLocationDetails({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold">Event Location</h2>
+        <div className="flex items-center gap-3 mb-2">
+          {isVotingContest ? (
+            <Vote className="h-6 w-6 text-primary" />
+          ) : (
+            <MapPin className="h-6 w-6 text-primary" />
+          )}
+          <h2 className="text-2xl font-bold">
+            {isVotingContest ? 'Contest Location' : 'Event Location'}
+          </h2>
+        </div>
         <p className="text-muted-foreground">
-          Select the venue for your event or create a new one.
+          {isVotingContest
+            ? 'Voting contests are conducted online, but you can add additional location details if needed.'
+            : 'Select the venue for your event or create a new one.'}
         </p>
       </div>
+
+      {isVotingContest && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <Globe className="h-5 w-5 text-blue-600 mt-0.5" />
+            <div>
+              <h3 className="font-medium text-blue-900">Online Event</h3>
+              <p className="text-sm text-blue-700 mt-1">
+                Voting contests are conducted online. The "Online Event" venue
+                has been automatically selected for you. You can provide
+                additional details about the contest in the location field below
+                if needed.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -185,55 +258,74 @@ export function EventLocationDetails({
             name="venueId"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Venue</FormLabel>
+                <FormLabel>
+                  {isVotingContest ? 'Event Type' : 'Venue'}
+                </FormLabel>
                 <div className="space-y-3">
                   <Select
                     onValueChange={(value) => handleVenueChange(value)}
                     defaultValue={field.value}
-                    disabled={isLoading}
+                    disabled={
+                      isLoading || (isVotingContest && field.value === 'online')
+                    }
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a venue" />
+                        <SelectValue
+                          placeholder={
+                            isVotingContest
+                              ? 'Online Event (Auto-selected)'
+                              : 'Select a venue'
+                          }
+                        />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       {venues.map((venue) => (
                         <SelectItem key={venue.id} value={venue.id}>
                           <div className="flex items-center gap-2">
+                            {venue.isOnline && (
+                              <Globe className="h-4 w-4 text-blue-600" />
+                            )}
                             <span>{venue.name}</span>
-                            {venue.isOwned && (
+                            {venue.isOwned && !venue.isOnline && (
                               <span className="text-xs bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
                                 Owned
                               </span>
                             )}
-                            <span className="text-muted-foreground">
-                              - {venue.city?.name}
-                            </span>
+                            {!venue.isOnline && (
+                              <span className="text-muted-foreground">
+                                - {venue.city?.name}
+                              </span>
+                            )}
                           </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
 
-                  {/* Quick Venue Creation */}
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowCreateVenue(true)}
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Create New Venue
-                    </Button>
-                    <span className="text-sm text-muted-foreground">
-                      Can&apos;t find your venue? Create one!
-                    </span>
-                  </div>
+                  {/* Quick Venue Creation - Only for standard events */}
+                  {isStandardEvent && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowCreateVenue(true)}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Create New Venue
+                      </Button>
+                      <span className="text-sm text-muted-foreground">
+                        Can&apos;t find your venue? Create one!
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <FormDescription>
-                  Select the venue where your event will take place.
+                  {isVotingContest
+                    ? "Voting contests are conducted online and don't require a physical venue."
+                    : 'Select the venue where your event will take place.'}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -243,22 +335,29 @@ export function EventLocationDetails({
           {selectedVenue && (
             <div className="border rounded-md p-4 bg-muted/20">
               <h3 className="font-medium mb-2 flex items-center gap-2">
-                Venue Details:
+                {selectedVenue.isOnline ? 'Event Type:' : 'Venue Details:'}
                 {selectedVenue.isOwned && (
                   <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
                     Your Venue
+                  </span>
+                )}
+                {selectedVenue.isOnline && (
+                  <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded">
+                    Online
                   </span>
                 )}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
                   <p>
-                    <strong>Address:</strong> {selectedVenue.address}
+                    <strong>Location:</strong> {selectedVenue.address}
                   </p>
-                  <p>
-                    <strong>City:</strong> {selectedVenue.city?.name},{' '}
-                    {selectedVenue.city?.state}
-                  </p>
+                  {!selectedVenue.isOnline && (
+                    <p>
+                      <strong>City:</strong> {selectedVenue.city?.name},{' '}
+                      {selectedVenue.city?.state}
+                    </p>
+                  )}
                 </div>
                 <div>
                   {selectedVenue.capacity && (
@@ -274,7 +373,7 @@ export function EventLocationDetails({
                   )}
                 </div>
               </div>
-              {selectedVenue.description && (
+              {selectedVenue.description && !selectedVenue.isOnline && (
                 <div className="mt-3 pt-3 border-t">
                   <p className="text-sm">{selectedVenue.description}</p>
                 </div>
@@ -287,17 +386,25 @@ export function EventLocationDetails({
             name="location"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Additional Location Details</FormLabel>
+                <FormLabel>
+                  {isVotingContest
+                    ? 'Additional Contest Information'
+                    : 'Additional Location Details'}
+                </FormLabel>
                 <FormControl>
                   <Textarea
-                    placeholder="Provide any additional location information..."
+                    placeholder={
+                      isVotingContest
+                        ? 'Provide any additional information about the contest platform, voting instructions, or other relevant details...'
+                        : 'Provide any additional location information...'
+                    }
                     {...field}
                   />
                 </FormControl>
                 <FormDescription>
-                  Provide specific details about the location, such as entry
-                  information, parking instructions, or specific room/area
-                  within the venue.
+                  {isVotingContest
+                    ? 'Provide specific details about how the voting will work, any special instructions for voters, or other important contest information.'
+                    : 'Provide specific details about the location, such as entry information, parking instructions, or specific room/area within the venue.'}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -313,12 +420,14 @@ export function EventLocationDetails({
         </form>
       </Form>
 
-      {/* Create Venue Modal */}
-      <CreateVenueModal
-        isOpen={showCreateVenue}
-        onClose={() => setShowCreateVenue(false)}
-        onVenueCreated={handleVenueCreated}
-      />
+      {/* Create Venue Modal - Only show for standard events */}
+      {isStandardEvent && (
+        <CreateVenueModal
+          isOpen={showCreateVenue}
+          onClose={() => setShowCreateVenue(false)}
+          onVenueCreated={handleVenueCreated}
+        />
+      )}
     </div>
   );
 }
