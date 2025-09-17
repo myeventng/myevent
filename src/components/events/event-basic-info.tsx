@@ -242,9 +242,9 @@ export function EventBasicInfo({
                 Voting Contest Event
               </h3>
               <p className="text-sm text-blue-700 mt-1">
-                You're creating a voting contest. This will be an online event
-                where users can vote for contestants. Additional voting settings
-                will be configured in later steps.
+                You&apos;re creating a voting contest. This will be an online
+                event where users can vote for contestants. Additional voting
+                settings will be configured in later steps.
               </p>
             </div>
           </div>

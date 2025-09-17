@@ -241,10 +241,10 @@ export function EventLocationDetails({
             <div>
               <h3 className="font-medium text-blue-900">Online Event</h3>
               <p className="text-sm text-blue-700 mt-1">
-                Voting contests are conducted online. The "Online Event" venue
-                has been automatically selected for you. You can provide
-                additional details about the contest in the location field below
-                if needed.
+                Voting contests are conducted online. The &quot;Online
+                Event&quot; venue has been automatically selected for you. You
+                can provide additional details about the contest in the location
+                field below if needed.
               </p>
             </div>
           </div>

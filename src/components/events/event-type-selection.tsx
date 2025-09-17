@@ -234,7 +234,7 @@ export function EventTypeSelection({
                     Voting Contest Event
                   </h3>
                   <p className="text-sm text-blue-700 mt-1">
-                    You're creating a voting contest. This type of event is
+                    You&apos;re creating a voting contest. This type of event is
                     conducted online and allows users to vote for contestants.
                     You can set up free voting, paid voting with vote packages,
                     or a combination of both.
