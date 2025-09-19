@@ -14,7 +14,10 @@ import {
   ChevronsRight,
   Trash2,
   BarChart3,
-  AlertTriangle, // New icon for hard delete
+  AlertTriangle,
+  Vote,
+  Users,
+  Calendar,
 } from 'lucide-react';
 import {
   useReactTable,
@@ -60,12 +63,13 @@ import {
   publishEvent,
   toggleEventFeatured,
   deleteEvent,
-  hardDeleteEvent, // Import the new hard delete function
+  hardDeleteEvent,
 } from '@/actions/event.actions';
 import { toast } from 'sonner';
-import { PublishedStatus } from '@/generated/prisma';
+import { PublishedStatus, EventType } from '@/generated/prisma';
 import { EventPreviewModal } from '../events/event-preview-modal';
 import { EventAnalyticsModal } from '@/components/events/event-analystics-modal';
+import { VotingContestAnalyticsModal } from '@/components/events/voting-contest-analytics-modal';
 import { HardDeleteConfirmationDialog } from '@/components/admin/hard-delete-confirmation-dialog';
 
 interface AdminEventsTableProps {
@@ -89,6 +93,8 @@ export function AdminEventsTable({
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
+  const [showVotingAnalyticsModal, setShowVotingAnalyticsModal] =
+    useState(false);
 
   // Check if user is SUPER_ADMIN
   const isSuperAdmin = userRole === 'ADMIN' && userSubRole === 'SUPER_ADMIN';
@@ -132,6 +138,35 @@ export function AdminEventsTable({
         return (
           <Badge variant="outline" className="bg-red-100 text-red-800">
             Rejected
+          </Badge>
+        );
+      default:
+        return <Badge variant="outline">Unknown</Badge>;
+    }
+  };
+
+  // Get event type badge
+  const getEventTypeBadge = (eventType: EventType) => {
+    switch (eventType) {
+      case 'STANDARD':
+        return (
+          <Badge variant="outline" className="bg-blue-100 text-blue-800">
+            <Calendar className="h-3 w-3 mr-1" />
+            Standard
+          </Badge>
+        );
+      case 'VOTING_CONTEST':
+        return (
+          <Badge variant="outline" className="bg-purple-100 text-purple-800">
+            <Vote className="h-3 w-3 mr-1" />
+            Voting Contest
+          </Badge>
+        );
+      case 'INVITE':
+        return (
+          <Badge variant="outline" className="bg-green-100 text-green-800">
+            <Users className="h-3 w-3 mr-1" />
+            Invite Only
           </Badge>
         );
       default:
@@ -268,10 +303,16 @@ export function AdminEventsTable({
     setShowPreviewModal(true);
   };
 
-  // Handle event analytics
+  // Handle event analytics (for standard events)
   const handleAnalyticsEvent = (event: any) => {
     setSelectedEvent(event);
     setShowAnalyticsModal(true);
+  };
+
+  // Handle voting contest analytics
+  const handleVotingAnalyticsEvent = (event: any) => {
+    setSelectedEvent(event);
+    setShowVotingAnalyticsModal(true);
   };
 
   // Table columns definition
@@ -290,12 +331,13 @@ export function AdminEventsTable({
             <div className="text-sm text-muted-foreground">
               {formatDateTime(event.startDateTime)}
             </div>
-            <div className="mt-1">
+            <div className="mt-1 flex flex-wrap gap-1">
               {getStatusBadge(event.publishedStatus, isCancelled)}
+              {getEventTypeBadge(event.eventType)}
               {event.featured && (
                 <Badge
                   variant="outline"
-                  className="ml-2 bg-purple-100 text-purple-800"
+                  className="bg-purple-100 text-purple-800"
                 >
                   Featured
                 </Badge>
@@ -304,6 +346,12 @@ export function AdminEventsTable({
           </div>
         );
       },
+    },
+    {
+      id: 'eventType',
+      header: 'Type',
+      accessorFn: (row) => row.eventType,
+      cell: ({ row }) => getEventTypeBadge(row.original.eventType),
     },
     {
       id: 'category',
@@ -360,25 +408,42 @@ export function AdminEventsTable({
     },
     {
       id: 'tickets',
-      header: 'Tickets',
+      header: 'Tickets/Contestants',
       accessorFn: (row) => row.ticketTypes?.length || 0,
       cell: ({ row }) => {
-        const ticketTypes = row.original.ticketTypes || [];
-        const totalTickets = ticketTypes.reduce(
-          (sum: number, type: any) => sum + type.quantity,
-          0
-        );
+        const event = row.original;
 
-        return (
-          <div>
+        if (event.eventType === 'VOTING_CONTEST') {
+          const contestantCount = event.votingContest?.contestants?.length || 0;
+          const votesCount = event.votingContest?._count?.votes || 0;
+          return (
             <div>
-              {ticketTypes.length} type{ticketTypes.length !== 1 ? 's' : ''}
+              <div>
+                {contestantCount} contestant{contestantCount !== 1 ? 's' : ''}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {votesCount} votes
+              </div>
             </div>
-            <div className="text-sm text-muted-foreground">
-              {totalTickets} available
+          );
+        } else {
+          const ticketTypes = event.ticketTypes || [];
+          const totalTickets = ticketTypes.reduce(
+            (sum: number, type: any) => sum + type.quantity,
+            0
+          );
+
+          return (
+            <div>
+              <div>
+                {ticketTypes.length} type{ticketTypes.length !== 1 ? 's' : ''}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {totalTickets} available
+              </div>
             </div>
-          </div>
-        );
+          );
+        }
       },
     },
     {
@@ -411,13 +476,25 @@ export function AdminEventsTable({
               <Eye className="h-4 w-4" />
             </Button>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleAnalyticsEvent(event)}
-            >
-              <BarChart3 className="h-4 w-4" />
-            </Button>
+            {event.eventType === 'VOTING_CONTEST' ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleVotingAnalyticsEvent(event)}
+                title="Voting Analytics"
+              >
+                <Vote className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleAnalyticsEvent(event)}
+                title="Event Analytics"
+              >
+                <BarChart3 className="h-4 w-4" />
+              </Button>
+            )}
 
             <Button variant="ghost" size="sm" asChild>
               <Link href={`/admin/dashboard/events/${event.id}/edit`}>
@@ -554,6 +631,28 @@ export function AdminEventsTable({
             onChange={(e) => setGlobalFilter(e.target.value)}
             className="max-w-sm"
           />
+
+          {/* Event Type Filter */}
+          <Select
+            value={
+              (table.getColumn('eventType')?.getFilterValue() as string) || ''
+            }
+            onValueChange={(value) => {
+              table.getColumn('eventType')?.setFilterValue(value || undefined);
+            }}
+          >
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Filter by type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All Types</SelectItem>
+              <SelectItem value="STANDARD">Standard</SelectItem>
+              <SelectItem value="VOTING_CONTEST">Voting Contest</SelectItem>
+              <SelectItem value="INVITE">Invite Only</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Status Filter */}
           <Select
             value={
               (table
@@ -570,9 +669,7 @@ export function AdminEventsTable({
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem disabled value="placeholder">
-                All Statuses
-              </SelectItem>
+              <SelectItem value="">All Statuses</SelectItem>
               <SelectItem value="PUBLISHED">Published</SelectItem>
               <SelectItem value="PENDING_REVIEW">Pending Review</SelectItem>
               <SelectItem value="DRAFT">Draft</SelectItem>
@@ -759,6 +856,20 @@ export function AdminEventsTable({
           isOpen={showAnalyticsModal}
           onClose={() => {
             setShowAnalyticsModal(false);
+            setSelectedEvent(null);
+          }}
+          userRole={userRole}
+          userSubRole={userSubRole}
+        />
+      )}
+
+      {/* Voting Contest Analytics Modal */}
+      {selectedEvent && (
+        <VotingContestAnalyticsModal
+          event={selectedEvent}
+          isOpen={showVotingAnalyticsModal}
+          onClose={() => {
+            setShowVotingAnalyticsModal(false);
             setSelectedEvent(null);
           }}
           userRole={userRole}
