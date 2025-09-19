@@ -501,8 +501,8 @@ export function VotingContestSetup({
                       <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
                       <p>No vote packages created yet.</p>
                       <p className="text-sm">
-                        Click "Add Package" to create your first package, or
-                        users will pay the default price above.
+                        Click &quot;Add Package&quot; to create your first
+                        package, or users will pay the default price above.
                       </p>
                     </div>
                   ) : (
