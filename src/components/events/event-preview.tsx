@@ -196,8 +196,8 @@ export function EventPreview({
                 </h4>
                 <p className="text-sm text-blue-800 mt-1">
                   Voting contests require admin approval before being published.
-                  Your contest will be submitted for review and you'll be
-                  notified once it's approved.
+                  Your contest will be submitted for review and you&apos;ll be
+                  notified once it&apos;s approved.
                 </p>
               </div>
             </div>
