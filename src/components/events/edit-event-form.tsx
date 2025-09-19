@@ -19,6 +19,7 @@ import {
 } from '@/actions/ticket.actions';
 import { AgeRestriction, DressCode, EventType } from '@/generated/prisma';
 import { toast } from 'sonner';
+import { VotingType } from '@/generated/prisma';
 
 // Step components
 import { EventBasicInfo } from './event-basic-info';
@@ -147,7 +148,7 @@ export function EditEventForm({
         setFormData({
           ...baseFormData,
           isFree: true, // Voting contests are always "free" events
-          // FIX: Initialize voting contest data properly
+          // FIX: Properly initialize voting contest data
           votingContest: initialData.votingContest
             ? {
                 votingType: initialData.votingContest.votingType,
@@ -171,7 +172,16 @@ export function EditEventForm({
                   : undefined,
                 votePackages: [], // Will be loaded separately
               }
-            : undefined,
+            : {
+                // Default voting contest structure
+                votingType: VotingType.FREE,
+                votePackagesEnabled: false,
+                allowGuestVoting: false,
+                allowMultipleVotes: true,
+                showLiveResults: true,
+                showVoterNames: false,
+                votePackages: [],
+              },
           contestants: [], // Will be loaded separately
         });
       } else {
@@ -211,16 +221,24 @@ export function EditEventForm({
                   instagramUrl: result.socialLinks?.instagram || '',
                   twitterUrl: result.socialLinks?.twitter || '',
                   facebookUrl: result.socialLinks?.facebook || '',
-                  status: 'ACTIVE',
+                  status: result.status || 'ACTIVE',
                 })
               );
 
-              // FIX: Update form data with fetched contest data
+              // FIX: Update form data with proper merging
               setFormData((prev: any) => ({
                 ...prev,
                 votingContest: {
                   ...prev.votingContest,
+                  ...contestData,
                   votePackages: contestResults.data.votePackages || [],
+                  // Ensure dates are properly handled
+                  votingStartDate: contestData.votingStartDate
+                    ? new Date(contestData.votingStartDate)
+                    : prev.votingContest?.votingStartDate,
+                  votingEndDate: contestData.votingEndDate
+                    ? new Date(contestData.votingEndDate)
+                    : prev.votingContest?.votingEndDate,
                 },
                 contestants,
               }));
@@ -245,7 +263,6 @@ export function EditEventForm({
 
     fetchData();
   }, [initialData?.id, isVotingContest, initialData.votingContest?.id]);
-
   // Helper to update form data
   const updateFormData = (data: any) => {
     setFormData((prev: any) => {
@@ -325,8 +342,12 @@ export function EditEventForm({
               return;
             }
 
-            // FIX: Handle new contestants properly
-            if (formData.contestants && formData.contestants.length > 0) {
+            // FIX: Handle new contestants properly with better validation
+            if (
+              formData.contestants &&
+              Array.isArray(formData.contestants) &&
+              formData.contestants.length > 0
+            ) {
               const newContestants = formData.contestants.filter(
                 (c: any) => c.id?.startsWith('temp-contestant-') || !c.id
               );
@@ -334,6 +355,15 @@ export function EditEventForm({
               if (newContestants.length > 0) {
                 const contestantPromises = newContestants.map(
                   async (contestant: any) => {
+                    // Validate contestant data before creating
+                    if (!contestant.name || !contestant.contestNumber) {
+                      console.warn('Skipping invalid contestant:', contestant);
+                      return {
+                        success: false,
+                        message: 'Invalid contestant data',
+                      };
+                    }
+
                     return createContestant({
                       contestId: initialData.votingContest.id,
                       name: contestant.name,
@@ -347,9 +377,12 @@ export function EditEventForm({
                   }
                 );
 
-                const contestantResults = await Promise.all(contestantPromises);
+                const contestantResults =
+                  await Promise.allSettled(contestantPromises);
                 const failedContestants = contestantResults.filter(
-                  (r) => !r.success
+                  (result) =>
+                    result.status === 'rejected' ||
+                    (result.status === 'fulfilled' && !result.value.success)
                 );
 
                 if (failedContestants.length > 0) {
@@ -360,7 +393,7 @@ export function EditEventForm({
               }
             }
 
-            // FIX: Handle new vote packages properly
+            // FIX: Handle new vote packages properly with better validation
             if (
               formData.votingContest.votePackagesEnabled &&
               formData.votingContest.votePackages?.length > 0
@@ -371,18 +404,29 @@ export function EditEventForm({
 
               if (newPackages.length > 0) {
                 const packagePromises = newPackages.map(async (pkg: any) => {
+                  // Validate package data before creating
+                  if (!pkg.name || !pkg.voteCount || pkg.price === undefined) {
+                    console.warn('Skipping invalid vote package:', pkg);
+                    return { success: false, message: 'Invalid package data' };
+                  }
+
                   return createVotePackage({
                     contestId: initialData.votingContest.id,
                     name: pkg.name,
                     description: pkg.description || '',
-                    voteCount: pkg.voteCount,
-                    price: pkg.price,
-                    sortOrder: pkg.sortOrder || 0,
+                    voteCount: parseInt(pkg.voteCount, 10),
+                    price: parseFloat(pkg.price),
+                    sortOrder: parseInt(pkg.sortOrder, 10) || 0,
                   });
                 });
 
-                const packageResults = await Promise.all(packagePromises);
-                const failedPackages = packageResults.filter((r) => !r.success);
+                const packageResults =
+                  await Promise.allSettled(packagePromises);
+                const failedPackages = packageResults.filter(
+                  (result) =>
+                    result.status === 'rejected' ||
+                    (result.status === 'fulfilled' && !result.value.success)
+                );
 
                 if (failedPackages.length > 0) {
                   toast.error(
@@ -396,7 +440,7 @@ export function EditEventForm({
             return;
           }
         } else {
-          // Handle ticket types for standard events (existing logic)
+          // Handle ticket types for standard events (existing logic remains the same)
           const existingTicketIds = ticketTypes
             .filter((t) => !t.id?.startsWith('temp-'))
             .map((t) => t.id);
@@ -420,7 +464,7 @@ export function EditEventForm({
               });
             });
 
-            await Promise.all(createPromises);
+            await Promise.allSettled(createPromises);
           }
 
           // Update existing ticket types
@@ -437,7 +481,7 @@ export function EditEventForm({
               }
             );
 
-            await Promise.all(updatePromises);
+            await Promise.allSettled(updatePromises);
           }
         }
 

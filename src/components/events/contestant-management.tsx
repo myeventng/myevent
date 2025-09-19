@@ -59,17 +59,33 @@ import { toast } from 'sonner';
 import Image from 'next/image';
 import { ContestantStatus } from '@/generated/prisma';
 
-// Schema for contestant - make status required to match the expected type
+// Fixed schema with proper validation and defaults
 const contestantSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(2, 'Name must be at least 2 characters'),
-  bio: z.string().min(10, 'Bio must be at least 10 characters'),
+  bio: z
+    .string()
+    .min(10, 'Bio must be at least 10 characters')
+    .optional()
+    .or(z.literal('')),
   imageUrl: z.string().min(1, 'Profile image is required'),
   contestNumber: z.string().min(1, 'Contest number is required'),
-  instagramUrl: z.string().url().optional().or(z.literal('')),
-  twitterUrl: z.string().url().optional().or(z.literal('')),
-  facebookUrl: z.string().url().optional().or(z.literal('')),
-  status: z.nativeEnum(ContestantStatus), // Remove .default() to make it required
+  instagramUrl: z
+    .string()
+    .url('Invalid Instagram URL')
+    .optional()
+    .or(z.literal('')),
+  twitterUrl: z
+    .string()
+    .url('Invalid Twitter URL')
+    .optional()
+    .or(z.literal('')),
+  facebookUrl: z
+    .string()
+    .url('Invalid Facebook URL')
+    .optional()
+    .or(z.literal('')),
+  status: z.nativeEnum(ContestantStatus),
 });
 
 type ContestantValues = z.infer<typeof contestantSchema>;
@@ -87,9 +103,11 @@ export function ContestantManagement({
   onNext,
   onPrevious,
 }: ContestantManagementProps) {
-  const [contestants, setContestants] = useState<ContestantValues[]>(
-    formData.contestants || []
-  );
+  // Initialize contestants with proper fallback
+  const [contestants, setContestants] = useState<ContestantValues[]>(() => {
+    return formData.contestants || [];
+  });
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
@@ -107,7 +125,7 @@ export function ContestantManagement({
       instagramUrl: '',
       twitterUrl: '',
       facebookUrl: '',
-      status: ContestantStatus.ACTIVE, // Explicitly set the default value here
+      status: ContestantStatus.ACTIVE,
     },
   });
 
@@ -120,17 +138,46 @@ export function ContestantManagement({
     return String(maxNumber + 1).padStart(3, '0'); // e.g., "001", "002"
   };
 
-  // Handle contestant submission
-  const onSubmitContestant = (values: ContestantValues) => {
+  // Handle contestant submission with better validation
+  const onSubmitContestant = async (values: ContestantValues) => {
     try {
-      if (!values.id) {
-        values.id = `temp-contestant-${Date.now()}`;
+      // Clean up empty strings to undefined for optional fields
+      const cleanedValues = {
+        ...values,
+        bio: values.bio?.trim() || '',
+        instagramUrl: values.instagramUrl?.trim() || '',
+        twitterUrl: values.twitterUrl?.trim() || '',
+        facebookUrl: values.facebookUrl?.trim() || '',
+      };
+
+      // Validate URLs if provided
+      if (
+        cleanedValues.instagramUrl &&
+        !cleanedValues.instagramUrl.startsWith('http')
+      ) {
+        cleanedValues.instagramUrl = `https://${cleanedValues.instagramUrl}`;
+      }
+      if (
+        cleanedValues.twitterUrl &&
+        !cleanedValues.twitterUrl.startsWith('http')
+      ) {
+        cleanedValues.twitterUrl = `https://${cleanedValues.twitterUrl}`;
+      }
+      if (
+        cleanedValues.facebookUrl &&
+        !cleanedValues.facebookUrl.startsWith('http')
+      ) {
+        cleanedValues.facebookUrl = `https://${cleanedValues.facebookUrl}`;
+      }
+
+      if (!cleanedValues.id) {
+        cleanedValues.id = `temp-contestant-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
       }
 
       // Check for duplicate contest numbers
       const isDuplicate = contestants.some(
         (c, index) =>
-          c.contestNumber === values.contestNumber &&
+          c.contestNumber === cleanedValues.contestNumber &&
           (isEditMode ? index !== editIndex : true)
       );
 
@@ -143,11 +190,11 @@ export function ContestantManagement({
 
       if (isEditMode && editIndex !== null) {
         const updatedContestants = [...contestants];
-        updatedContestants[editIndex] = values;
+        updatedContestants[editIndex] = cleanedValues;
         setContestants(updatedContestants);
         toast.success('Contestant updated successfully');
       } else {
-        setContestants([...contestants, values]);
+        setContestants([...contestants, cleanedValues]);
         toast.success('Contestant added successfully');
       }
 
@@ -159,7 +206,7 @@ export function ContestantManagement({
     }
   };
 
-  // Reset form
+  // Reset form with proper defaults
   const resetForm = () => {
     form.reset({
       name: '',
@@ -169,7 +216,7 @@ export function ContestantManagement({
       instagramUrl: '',
       twitterUrl: '',
       facebookUrl: '',
-      status: ContestantStatus.ACTIVE, // Explicitly set the default value
+      status: ContestantStatus.ACTIVE,
     });
     setImageFiles([]);
     setIsEditMode(false);
@@ -180,55 +227,80 @@ export function ContestantManagement({
   const handleDeleteContestant = () => {
     if (deleteIndex !== null) {
       const updatedContestants = [...contestants];
-      updatedContestants.splice(deleteIndex, 1);
+      const deletedContestant = updatedContestants.splice(deleteIndex, 1)[0];
       setContestants(updatedContestants);
       setIsDeleteDialogOpen(false);
       setDeleteIndex(null);
-      toast.success('Contestant removed');
+      toast.success(
+        `${deletedContestant.name} has been removed from the contest`
+      );
     }
   };
 
-  // Handle edit contestant
+  // Handle edit contestant with proper data loading
   const handleEditContestant = (index: number) => {
     const contestant = contestants[index];
     setIsEditMode(true);
     setEditIndex(index);
-    form.reset(contestant);
+
+    // Reset form with contestant data
+    form.reset({
+      ...contestant,
+      bio: contestant.bio || '',
+      instagramUrl: contestant.instagramUrl || '',
+      twitterUrl: contestant.twitterUrl || '',
+      facebookUrl: contestant.facebookUrl || '',
+      status: contestant.status || ContestantStatus.ACTIVE,
+    });
+
     setIsDialogOpen(true);
   };
 
-  // Handle next step
+  // Handle next step with validation
   const handleNext = () => {
     if (contestants.length === 0) {
       toast.error('Please add at least one contestant before proceeding.');
       return;
     }
 
-    // FIX: Ensure contestants data is properly structured
+    // Ensure all contestants have required data
+    const invalidContestants = contestants.filter(
+      (contestant) =>
+        !contestant.name || !contestant.imageUrl || !contestant.contestNumber
+    );
+
+    if (invalidContestants.length > 0) {
+      toast.error(
+        'All contestants must have a name, image, and contest number.'
+      );
+      return;
+    }
+
+    // Update form data with proper structure
     updateFormData({
       contestants: contestants.map((contestant) => ({
         ...contestant,
-        // Ensure all required fields have default values
+        // Ensure all fields have proper defaults
         bio: contestant.bio || '',
         imageUrl: contestant.imageUrl || '',
         instagramUrl: contestant.instagramUrl || '',
         twitterUrl: contestant.twitterUrl || '',
         facebookUrl: contestant.facebookUrl || '',
-        status: contestant.status || 'ACTIVE',
+        status: contestant.status || ContestantStatus.ACTIVE,
       })),
     });
 
     onNext();
   };
 
-  // Also fix the form initialization
+  // Sync contestants when form data changes
   useEffect(() => {
     if (formData.contestants && Array.isArray(formData.contestants)) {
       setContestants(formData.contestants);
     }
   }, [formData.contestants]);
 
-  // Open add contestant dialog
+  // Open add contestant dialog with proper initialization
   const handleAddContestant = () => {
     resetForm();
     setIsDialogOpen(true);
@@ -282,15 +354,21 @@ export function ContestantManagement({
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {contestants.map((contestant, index) => (
-                <Card key={contestant.id} className="overflow-hidden">
+                <Card key={contestant.id || index} className="overflow-hidden">
                   <div className="relative">
                     {contestant.imageUrl ? (
                       <div className="relative h-48 w-full">
                         <Image
                           src={contestant.imageUrl}
-                          alt={contestant.name}
+                          alt={contestant.name || 'Contestant'}
                           fill
                           className="object-cover"
+                          onError={(e) => {
+                            console.error(
+                              'Image failed to load:',
+                              contestant.imageUrl
+                            );
+                          }}
                         />
                         <div className="absolute top-2 left-2">
                           <Badge variant="secondary" className="font-mono">
@@ -310,16 +388,21 @@ export function ContestantManagement({
                         </div>
                       </div>
                     ) : (
-                      <div className="h-48 bg-muted flex items-center justify-center">
-                        <ImageIcon className="h-12 w-12 text-muted-foreground" />
+                      <div className="h-48 bg-muted flex flex-col items-center justify-center">
+                        <ImageIcon className="h-12 w-12 text-muted-foreground mb-2" />
+                        <p className="text-sm text-muted-foreground">
+                          No image
+                        </p>
                       </div>
                     )}
                   </div>
 
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">{contestant.name}</CardTitle>
+                    <CardTitle className="text-lg">
+                      {contestant.name || 'Unnamed Contestant'}
+                    </CardTitle>
                     <CardDescription className="line-clamp-2">
-                      {contestant.bio}
+                      {contestant.bio || 'No bio provided'}
                     </CardDescription>
                   </CardHeader>
 
@@ -341,6 +424,13 @@ export function ContestantManagement({
                           <Facebook className="h-3 w-3 text-blue-700" />
                         </div>
                       )}
+                      {!contestant.instagramUrl &&
+                        !contestant.twitterUrl &&
+                        !contestant.facebookUrl && (
+                          <span className="text-xs text-muted-foreground">
+                            No social links
+                          </span>
+                        )}
                     </div>
 
                     {/* Action Buttons */}
@@ -378,7 +468,9 @@ export function ContestantManagement({
         <Button type="button" variant="outline" onClick={onPrevious}>
           Previous
         </Button>
-        <Button onClick={handleNext}>Next</Button>
+        <Button onClick={handleNext} disabled={contestants.length === 0}>
+          {contestants.length === 0 ? 'Add contestants to continue' : 'Next'}
+        </Button>
       </div>
 
       {/* Add/Edit Contestant Dialog */}
@@ -389,8 +481,8 @@ export function ContestantManagement({
               {isEditMode ? 'Edit Contestant' : 'Add Contestant'}
             </DialogTitle>
             <DialogDescription>
-              Fill in the contestant&apos;s information. All fields are required
-              except social media links.
+              Fill in the contestant's information. Name, contest number, and
+              profile image are required.
             </DialogDescription>
           </DialogHeader>
 
@@ -409,7 +501,9 @@ export function ContestantManagement({
                     name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Full Name</FormLabel>
+                        <FormLabel>
+                          Full Name <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
                           <Input placeholder="e.g., Jane Ahmed" {...field} />
                         </FormControl>
@@ -423,12 +517,15 @@ export function ContestantManagement({
                     name="contestNumber"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Contest Number</FormLabel>
+                        <FormLabel>
+                          Contest Number <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
                           <Input placeholder="e.g., 001" {...field} />
                         </FormControl>
                         <FormDescription>
-                          Unique identifier for this contestant
+                          Unique identifier for this contestant (auto-generated
+                          if empty)
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -460,7 +557,9 @@ export function ContestantManagement({
 
               {/* Profile Image */}
               <div className="space-y-4">
-                <h3 className="text-lg font-medium">Profile Image</h3>
+                <h3 className="text-lg font-medium">
+                  Profile Image <span className="text-red-500">*</span>
+                </h3>
 
                 <FormField
                   control={form.control}
@@ -502,7 +601,7 @@ export function ContestantManagement({
                         </FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="https://instagram.com/username"
+                            placeholder="https://instagram.com/username or instagram.com/username"
                             {...field}
                           />
                         </FormControl>
@@ -522,7 +621,7 @@ export function ContestantManagement({
                         </FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="https://twitter.com/username"
+                            placeholder="https://twitter.com/username or twitter.com/username"
                             {...field}
                           />
                         </FormControl>
@@ -542,7 +641,7 @@ export function ContestantManagement({
                         </FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="https://facebook.com/profile"
+                            placeholder="https://facebook.com/profile or facebook.com/profile"
                             {...field}
                           />
                         </FormControl>
@@ -579,8 +678,9 @@ export function ContestantManagement({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Contestant</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove this contestant from the contest?
-              This action cannot be undone.
+              Are you sure you want to remove{' '}
+              {contestants[deleteIndex || 0]?.name || 'this contestant'} from
+              the contest? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
