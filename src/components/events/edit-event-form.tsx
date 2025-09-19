@@ -45,7 +45,7 @@ const baseEventSchema = z.object({
   lateEntry: z.date().optional(),
   coverImageUrl: z.string().min(1, 'Cover image is required'),
   imageUrls: z.array(z.string()).default([]),
-  embeddedVideoUrl: z.string().optional().or(z.literal('')),
+  embeddedVideoUrl: z.string().url().optional().or(z.literal('')),
 });
 
 // Extended schema for standard events
@@ -168,10 +168,10 @@ export function EditEventForm({
         try {
           setIsLoading(true);
 
-          if (isVotingContest) {
+          if (isVotingContest && initialData.votingContest?.id) {
             // Fetch voting contest data
             const contestResults = await getContestResults(
-              initialData.votingContest?.id
+              initialData.votingContest.id
             );
             if (contestResults.success && contestResults.data) {
               const contestData = contestResults.data.contest;
@@ -182,9 +182,9 @@ export function EditEventForm({
                   bio: result.bio,
                   imageUrl: result.imageUrl,
                   contestNumber: result.contestNumber,
-                  instagramUrl: result.socialLinks?.instagram,
-                  twitterUrl: result.socialLinks?.twitter,
-                  facebookUrl: result.socialLinks?.facebook,
+                  instagramUrl: result.socialLinks?.instagram || '',
+                  twitterUrl: result.socialLinks?.twitter || '',
+                  facebookUrl: result.socialLinks?.facebook || '',
                   status: 'ACTIVE',
                 })
               );
@@ -194,11 +194,12 @@ export function EditEventForm({
                 votingContest: {
                   votingType: contestData.votingType,
                   votePackagesEnabled: contestData.votePackagesEnabled,
-                  maxVotesPerUser: initialData.votingContest?.maxVotesPerUser,
-                  allowMultipleVotes:
-                    initialData.votingContest?.allowMultipleVotes,
+                  defaultVotePrice: contestData.defaultVotePrice,
+                  allowGuestVoting: contestData.allowGuestVoting,
+                  maxVotesPerUser: contestData.maxVotesPerUser,
+                  allowMultipleVotes: contestData.allowMultipleVotes,
                   showLiveResults: contestData.showLiveResults,
-                  showVoterNames: initialData.votingContest?.showVoterNames,
+                  showVoterNames: contestData.showVoterNames,
                   votePackages: contestResults.data.votePackages || [],
                 },
                 contestants,
@@ -223,7 +224,7 @@ export function EditEventForm({
     };
 
     fetchData();
-  }, [initialData?.id, isVotingContest]);
+  }, [initialData?.id, isVotingContest, initialData.votingContest?.id]);
 
   // Helper to update form data
   const updateFormData = (data: any) => {
@@ -270,12 +271,16 @@ export function EditEventForm({
         validatedData = standardEventSchema.parse(formData);
       }
 
-      // Update the event
-      const result = await updateEvent({
+      // IMPORTANT: Include eventType in the update data
+      const eventUpdateData = {
         id: initialData.id,
         ...validatedData,
+        eventType: initialData.eventType, // Preserve the original eventType
         publishedStatus: publishStatus,
-      });
+      };
+
+      // Update the event
+      const result = await updateEvent(eventUpdateData);
 
       if (result.success && result.data) {
         if (isVotingContest) {
@@ -411,6 +416,7 @@ export function EditEventForm({
           result.message ||
             `${isVotingContest ? 'Contest' : 'Event'} updated successfully`
         );
+
         const redirectPath =
           userRole === 'ADMIN' && ['STAFF', 'SUPER_ADMIN'].includes(userSubRole)
             ? '/admin/dashboard/events'
