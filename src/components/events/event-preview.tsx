@@ -18,6 +18,8 @@ import {
   DollarSign,
   Package,
   Globe,
+  UserCheck,
+  AlertCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -46,6 +48,9 @@ interface EventPreviewProps {
   userRole?: string;
   userSubRole?: string;
 }
+
+// Platform fee percentage - could be moved to constants
+const PLATFORM_FEE_PERCENTAGE = 5;
 
 export function EventPreview({
   formData,
@@ -98,10 +103,13 @@ export function EventPreview({
 
         // Fetch venue
         if (formData.venueId) {
-          if (formData.venueId === 'online') {
+          if (
+            formData.venueId === 'online-venue-id' ||
+            formData.venueId === 'online'
+          ) {
             // Handle online venue
             setVenue({
-              id: 'online',
+              id: 'online-venue-id',
               name: 'Online Event',
               address: 'Virtual/Online',
               city: { name: 'Online', state: 'Virtual' },
@@ -123,6 +131,11 @@ export function EventPreview({
 
     fetchData();
   }, []);
+
+  // Calculate platform fee
+  const calculatePlatformFee = (amount: number) => {
+    return (amount * PLATFORM_FEE_PERCENTAGE) / 100;
+  };
 
   // Format price as currency
   const formatPrice = (price: number) => {
@@ -146,6 +159,8 @@ export function EventPreview({
   // Get voting contest data
   const votingContest = formData.votingContest || {};
   const votePackages = votingContest.votePackages || [];
+  const hasDefaultPrice =
+    votingContest.defaultVotePrice && votingContest.defaultVotePrice > 0;
 
   // Check if user can publish directly
   const canPublishDirectly =
@@ -167,8 +182,27 @@ export function EventPreview({
         <p className="text-muted-foreground">
           {isEditing
             ? `Review your updated ${isVotingContest ? 'contest' : 'event'} details before saving.`
-            : `Review your ${isVotingContest ? 'contest' : 'event'} details before submitting.`}
+            : `Review your ${isVotingContest ? 'contest' : 'event'} details before submitting for review.`}
         </p>
+
+        {/* Admin Review Notice for Voting Contests */}
+        {isVotingContest && !canPublishDirectly && (
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-blue-900">
+                  Admin Review Required
+                </h4>
+                <p className="text-sm text-blue-800 mt-1">
+                  Voting contests require admin approval before being published.
+                  Your contest will be submitted for review and you'll be
+                  notified once it's approved.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -275,11 +309,28 @@ export function EventPreview({
                         ? 'Paid Voting'
                         : 'Free Voting'}
                     </p>
-                    {votingContest.votePackagesEnabled && (
-                      <p className="text-sm text-blue-600">
-                        {votePackages.length} vote package
-                        {votePackages.length !== 1 ? 's' : ''} available
+                    {votingContest.allowGuestVoting && (
+                      <p className="text-sm text-purple-600">
+                        Guest voting allowed (no account required)
                       </p>
+                    )}
+                    {votingContest.votingType === 'PAID' && (
+                      <div className="mt-2">
+                        {votingContest.votePackagesEnabled &&
+                        votePackages.length > 0 ? (
+                          <p className="text-sm text-blue-600">
+                            {votePackages.length} vote package
+                            {votePackages.length !== 1 ? 's' : ''} available
+                          </p>
+                        ) : (
+                          hasDefaultPrice && (
+                            <p className="text-sm text-green-600">
+                              Single vote:{' '}
+                              {formatPrice(votingContest.defaultVotePrice)}
+                            </p>
+                          )
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -361,33 +412,45 @@ export function EventPreview({
               {/* Voting contest specific fields */}
               {isVotingContest && (
                 <>
-                  {votingContest.maxVotesPerUser && (
-                    <div className="flex items-start gap-3">
-                      <User className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-medium">Vote Limit</p>
-                        <p className="text-muted-foreground">
-                          {votingContest.maxVotesPerUser} votes per user
-                        </p>
+                  {votingContest.maxVotesPerUser &&
+                    !votingContest.allowGuestVoting && (
+                      <div className="flex items-start gap-3">
+                        <User className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-medium">Vote Limit</p>
+                          <p className="text-muted-foreground">
+                            {votingContest.maxVotesPerUser} votes per user
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
                   <div className="flex items-start gap-3">
                     <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
                     <div>
                       <p className="font-medium">Contest Rules</p>
                       <div className="text-sm text-muted-foreground space-y-1">
-                        <p>
-                          {votingContest.allowMultipleVotes
-                            ? 'Multiple votes allowed per user'
-                            : 'One vote per contestant per user'}
-                        </p>
+                        {votingContest.allowGuestVoting ? (
+                          <p>Guest voting enabled - no account required</p>
+                        ) : (
+                          <p>
+                            {votingContest.allowMultipleVotes
+                              ? 'Multiple votes allowed per user'
+                              : 'One vote per contestant per user'}
+                          </p>
+                        )}
                         <p>
                           {votingContest.showLiveResults
                             ? 'Live results visible'
                             : 'Results hidden until contest ends'}
                         </p>
+                        {!votingContest.allowGuestVoting && (
+                          <p>
+                            {votingContest.showVoterNames
+                              ? 'Voter names will be displayed'
+                              : 'Voter names will be private'}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -400,7 +463,7 @@ export function EventPreview({
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               {isVotingContest ? (
-                <TabsTrigger value="voting">Voting</TabsTrigger>
+                <TabsTrigger value="voting">Voting & Pricing</TabsTrigger>
               ) : (
                 <TabsTrigger value="tickets">Tickets</TabsTrigger>
               )}
@@ -443,6 +506,142 @@ export function EventPreview({
                 </h3>
 
                 <div className="space-y-6">
+                  {/* Voting Pricing Information */}
+                  {votingContest.votingType === 'PAID' && (
+                    <div className="space-y-4">
+                      <h4 className="font-medium">Pricing Information</h4>
+
+                      {/* Default Vote Price */}
+                      {hasDefaultPrice &&
+                        (!votingContest.votePackagesEnabled ||
+                          votePackages.length === 0) && (
+                          <Card className="p-4 bg-green-50 border-green-200">
+                            <div className="flex items-center gap-3 mb-2">
+                              <DollarSign className="h-5 w-5 text-green-600" />
+                              <h5 className="font-medium text-green-900">
+                                Single Vote Pricing
+                              </h5>
+                            </div>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span>Vote Price:</span>
+                                <span className="font-medium">
+                                  {formatPrice(votingContest.defaultVotePrice)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-blue-600">
+                                <span>
+                                  Platform Fee ({PLATFORM_FEE_PERCENTAGE}%):
+                                </span>
+                                <span>
+                                  -
+                                  {formatPrice(
+                                    calculatePlatformFee(
+                                      votingContest.defaultVotePrice
+                                    )
+                                  )}
+                                </span>
+                              </div>
+                              <div className="flex justify-between font-medium text-green-700 border-t pt-2">
+                                <span>Your Earnings per Vote:</span>
+                                <span>
+                                  {formatPrice(
+                                    votingContest.defaultVotePrice -
+                                      calculatePlatformFee(
+                                        votingContest.defaultVotePrice
+                                      )
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          </Card>
+                        )}
+
+                      {/* Vote Packages */}
+                      {votingContest.votePackagesEnabled &&
+                        votePackages.length > 0 && (
+                          <div className="space-y-4">
+                            <h4 className="font-medium">Vote Packages</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {votePackages.map((pkg: any, index: number) => (
+                                <Card key={index} className="relative">
+                                  <CardHeader className="pb-2">
+                                    <CardTitle className="text-base flex items-center justify-between">
+                                      {pkg.name}
+                                      <Badge variant="secondary">
+                                        {pkg.voteCount} votes
+                                      </Badge>
+                                    </CardTitle>
+                                    <CardDescription className="text-lg font-medium text-primary">
+                                      {formatPrice(pkg.price)}
+                                    </CardDescription>
+                                  </CardHeader>
+                                  <CardContent>
+                                    {pkg.description && (
+                                      <p className="text-sm text-muted-foreground mb-3">
+                                        {pkg.description}
+                                      </p>
+                                    )}
+                                    <div className="space-y-1 text-xs">
+                                      <div className="flex justify-between text-blue-600">
+                                        <span>
+                                          Platform Fee (
+                                          {PLATFORM_FEE_PERCENTAGE}%):
+                                        </span>
+                                        <span>
+                                          -
+                                          {formatPrice(
+                                            calculatePlatformFee(pkg.price)
+                                          )}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between font-medium text-green-600">
+                                        <span>Your Earnings:</span>
+                                        <span>
+                                          {formatPrice(
+                                            pkg.price -
+                                              calculatePlatformFee(pkg.price)
+                                          )}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between text-muted-foreground">
+                                        <span>Per Vote:</span>
+                                        <span>
+                                          {formatPrice(
+                                            (pkg.price -
+                                              calculatePlatformFee(pkg.price)) /
+                                              pkg.voteCount
+                                          )}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                      {/* Platform Fee Information */}
+                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <h5 className="font-medium text-blue-900 mb-2">
+                          Platform Fee Structure
+                        </h5>
+                        <div className="text-sm text-blue-800 space-y-1">
+                          <p>
+                            • Platform fee: {PLATFORM_FEE_PERCENTAGE}% of all
+                            vote sales
+                          </p>
+                          <p>• Fees are automatically deducted from payments</p>
+                          <p>
+                            • Payouts are processed weekly to your registered
+                            account
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Contestants */}
                   {formData.contestants && formData.contestants.length > 0 && (
                     <div>
@@ -509,71 +708,56 @@ export function EventPreview({
 
                   {/* Voting Information */}
                   <div className="p-4 border rounded-lg">
-                    <h4 className="font-medium mb-2">Voting Type</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {votingContest.votingType === 'PAID'
-                        ? 'This is a paid voting contest. Users need to purchase votes to participate.'
-                        : 'This is a free voting contest. Users can vote without payment.'}
-                    </p>
-                  </div>
-
-                  {votingContest.votePackagesEnabled &&
-                    votePackages.length > 0 && (
-                      <div className="space-y-4">
-                        <h4 className="font-medium">Vote Packages</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {votePackages.map((pkg: any, index: number) => (
-                            <Card key={index}>
-                              <CardHeader className="pb-2">
-                                <CardTitle className="text-base">
-                                  {pkg.name}
-                                </CardTitle>
-                                <CardDescription>
-                                  {formatPrice(pkg.price)}
-                                </CardDescription>
-                              </CardHeader>
-                              <CardContent>
-                                <p className="text-sm text-muted-foreground">
-                                  {pkg.voteCount} votes
-                                </p>
-                                {pkg.description && (
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    {pkg.description}
-                                  </p>
-                                )}
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                  <div className="p-4 border rounded-lg bg-blue-50">
-                    <h4 className="font-medium mb-2 text-blue-900">
-                      Contest Rules
-                    </h4>
-                    <div className="text-sm text-blue-800 space-y-1">
-                      {votingContest.maxVotesPerUser && (
-                        <p>
-                          • Maximum {votingContest.maxVotesPerUser} votes per
-                          user
-                        </p>
-                      )}
-                      <p>
-                        •{' '}
-                        {votingContest.allowMultipleVotes
-                          ? 'Users can vote for multiple contestants'
-                          : 'Users can only vote for one contestant'}
+                    <h4 className="font-medium mb-2">Voting Access & Rules</h4>
+                    <div className="text-sm text-muted-foreground space-y-2">
+                      <p className="flex items-center gap-2">
+                        {votingContest.allowGuestVoting ? (
+                          <>
+                            <UserCheck className="h-4 w-4 text-green-600" />
+                            <span className="text-green-600 font-medium">
+                              Guest voting enabled
+                            </span>
+                            - No account required to vote
+                          </>
+                        ) : (
+                          <>
+                            <User className="h-4 w-4 text-blue-600" />
+                            <span className="text-blue-600 font-medium">
+                              Account required
+                            </span>
+                            - Users must sign in to vote
+                          </>
+                        )}
                       </p>
+
+                      {!votingContest.allowGuestVoting && (
+                        <>
+                          <p>
+                            {votingContest.allowMultipleVotes
+                              ? '• Users can vote for multiple contestants'
+                              : '• Users can only vote for one contestant'}
+                          </p>
+                          {votingContest.maxVotesPerUser && (
+                            <p>
+                              • Maximum {votingContest.maxVotesPerUser} votes
+                              per user
+                            </p>
+                          )}
+                        </>
+                      )}
+
                       <p>
-                        •{' '}
                         {votingContest.showLiveResults
-                          ? 'Live results will be visible during voting'
-                          : 'Results will be hidden until voting ends'}
+                          ? '• Live results visible during voting'
+                          : '• Results hidden until voting ends'}
                       </p>
-                      {votingContest.showVoterNames && (
-                        <p>• Voter names will be displayed for transparency</p>
-                      )}
+
+                      {!votingContest.allowGuestVoting &&
+                        votingContest.showVoterNames && (
+                          <p>
+                            • Voter names will be displayed for transparency
+                          </p>
+                        )}
                     </div>
                   </div>
                 </div>

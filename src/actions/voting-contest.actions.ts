@@ -16,14 +16,20 @@ interface ActionResponse<T> {
 }
 
 // Cast a free vote - COMPLETED
+// Cast a free vote - UPDATED with guest voting support
 export async function castFreeVote(
-  contestantId: string
+  contestantId: string,
+  guestIdentifier?: string // For guest voting
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({ headers: headersList });
 
-  if (!session) {
-    return { success: false, message: 'Please log in to vote' };
+  // For guest voting, we need either a session or a guest identifier
+  if (!session && !guestIdentifier) {
+    return {
+      success: false,
+      message: 'Authentication required or provide guest identifier',
+    };
   }
 
   try {
@@ -65,108 +71,332 @@ export async function castFreeVote(
       return { success: false, message: 'Voting has ended' };
     }
 
-    // Check if user has already voted for this contestant (for free votes)
-    const existingVote = await prisma.vote.findUnique({
-      where: {
-        userId_contestantId_voteType: {
-          userId: session.user.id,
+    const userId = session?.user?.id;
+
+    // Handle guest voting vs authenticated voting differently
+    if (contest.allowGuestVoting && !userId) {
+      // Guest voting - check by IP address and guest identifier
+      const forwardedFor = headersList.get('x-forwarded-for');
+      const ipAddress = forwardedFor
+        ? forwardedFor.split(',')[0]
+        : headersList.get('x-real-ip') || 'unknown';
+
+      // Check if this IP/guest combination has already voted for this contestant
+      const existingVote = await prisma.vote.findFirst({
+        where: {
+          contestId: contest.id,
           contestantId: contestantId,
-          voteType: VotingType.FREE,
+          ipAddress: ipAddress,
+          userId: null, // Guest votes have no userId
         },
-      },
-    });
+      });
 
-    if (existingVote) {
-      return {
-        success: false,
-        message: 'You have already voted for this contestant',
-      };
-    }
+      if (existingVote) {
+        return {
+          success: false,
+          message: 'You have already voted for this contestant',
+        };
+      }
 
-    // Check if multiple votes are allowed
-    if (!contest.allowMultipleVotes) {
+      // For guest voting, we typically don't allow multiple votes
+      // Check if this guest has voted in the contest already
       const hasVotedInContest = await prisma.vote.findFirst({
         where: {
-          userId: session.user.id,
           contestId: contest.id,
-          voteType: VotingType.FREE,
+          ipAddress: ipAddress,
+          userId: null,
         },
       });
 
       if (hasVotedInContest) {
         return {
           success: false,
-          message: 'You can only vote for one contestant in this contest',
+          message: 'You can only vote once in this contest',
         };
       }
-    }
 
-    // Check vote limit per user
-    if (contest.maxVotesPerUser) {
-      const userVoteCount = await prisma.vote.count({
-        where: {
-          userId: session.user.id,
+      // Cast guest vote
+      const vote = await prisma.vote.create({
+        data: {
+          userId: null, // No user for guest votes
           contestId: contest.id,
+          contestantId: contestantId,
+          voteType: VotingType.FREE,
+          ipAddress,
+          userAgent: headersList.get('user-agent') || 'unknown',
+        },
+      });
+
+      // Create notification for the contest owner (no voter name for guests)
+      await createNotification({
+        type: 'VOTE_PURCHASED',
+        title: 'New Vote Cast',
+        message: `A guest voter voted for ${contestant.name} in ${contest.event.title}`,
+        userId: contest.event.userId || undefined,
+        metadata: {
+          contestantId,
+          contestantName: contestant.name,
+          isGuest: true,
+          eventId: contest.eventId,
+        },
+      });
+
+      revalidatePath(`/events/${contest.event.slug || contest.eventId}`);
+      revalidatePath(`/voting/${contest.id}`);
+
+      return {
+        success: true,
+        message: `Vote cast successfully for ${contestant.name}!`,
+        data: vote,
+      };
+    } else if (userId) {
+      // Authenticated voting - check for existing vote using separate queries
+      const existingVote = await prisma.vote.findFirst({
+        where: {
+          userId: userId,
+          contestantId: contestantId,
           voteType: VotingType.FREE,
         },
       });
 
-      if (userVoteCount >= contest.maxVotesPerUser) {
+      if (existingVote) {
         return {
           success: false,
-          message: `You have reached the maximum of ${contest.maxVotesPerUser} votes`,
+          message: 'You have already voted for this contestant',
         };
       }
+
+      // Check if multiple votes are allowed
+      if (!contest.allowMultipleVotes) {
+        const hasVotedInContest = await prisma.vote.findFirst({
+          where: {
+            userId: userId,
+            contestId: contest.id,
+            voteType: VotingType.FREE,
+          },
+        });
+
+        if (hasVotedInContest) {
+          return {
+            success: false,
+            message: 'You can only vote for one contestant in this contest',
+          };
+        }
+      }
+
+      // Check vote limit per user
+      if (contest.maxVotesPerUser) {
+        const userVoteCount = await prisma.vote.count({
+          where: {
+            userId: userId,
+            contestId: contest.id,
+            voteType: VotingType.FREE,
+          },
+        });
+
+        if (userVoteCount >= contest.maxVotesPerUser) {
+          return {
+            success: false,
+            message: `You have reached the maximum of ${contest.maxVotesPerUser} votes`,
+          };
+        }
+      }
+
+      // Get user's IP address
+      const forwardedFor = headersList.get('x-forwarded-for');
+      const ipAddress = forwardedFor
+        ? forwardedFor.split(',')[0]
+        : headersList.get('x-real-ip') || 'unknown';
+      const userAgent = headersList.get('user-agent') || 'unknown';
+
+      // Cast the vote
+      const vote = await prisma.vote.create({
+        data: {
+          userId: userId,
+          contestId: contest.id,
+          contestantId: contestantId,
+          voteType: VotingType.FREE,
+          ipAddress,
+          userAgent,
+        },
+      });
+
+      // Create notification for the contest owner
+      await createNotification({
+        type: 'VOTE_PURCHASED',
+        title: 'New Vote Cast',
+        message: `${session.user.name} voted for ${contestant.name} in ${contest.event.title}`,
+        userId: contest.event.userId || undefined,
+        metadata: {
+          contestantId,
+          voterName: session.user.name,
+          contestantName: contestant.name,
+          eventId: contest.eventId,
+        },
+      });
+
+      revalidatePath(`/events/${contest.event.slug || contest.eventId}`);
+      revalidatePath(`/voting/${contest.id}`);
+
+      return {
+        success: true,
+        message: `Vote cast successfully for ${contestant.name}!`,
+        data: vote,
+      };
+    } else {
+      return { success: false, message: 'Unable to process vote' };
     }
-
-    // Get user's IP address
-    const forwardedFor = headersList.get('x-forwarded-for');
-    const ipAddress = forwardedFor
-      ? forwardedFor.split(',')[0]
-      : headersList.get('x-real-ip') || 'unknown';
-    const userAgent = headersList.get('user-agent') || 'unknown';
-
-    // Cast the vote
-    const vote = await prisma.vote.create({
-      data: {
-        userId: session.user.id,
-        contestId: contest.id,
-        contestantId: contestantId,
-        voteType: VotingType.FREE,
-        ipAddress,
-        userAgent,
-      },
-    });
-
-    // Create notification for the contest owner
-    await createNotification({
-      type: 'VOTE_PURCHASED',
-      title: 'New Vote Cast',
-      message: `${session.user.name} voted for ${contestant.name} in ${contest.event.title}`,
-      userId: contest.event.userId || undefined, // Handle null case
-      metadata: {
-        contestantId,
-        voterName: session.user.name,
-        contestantName: contestant.name,
-        eventId: contest.eventId, // Move eventId to metadata
-      },
-    });
-
-    revalidatePath(`/events/${contest.event.slug || contest.eventId}`);
-    revalidatePath(`/voting/${contest.id}`);
-
-    return {
-      success: true,
-      message: `Vote cast successfully for ${contestant.name}!`,
-      data: vote,
-    };
   } catch (error) {
     console.error('Error casting free vote:', error);
     return { success: false, message: 'Failed to cast vote' };
   }
 }
 
-// Get contest results with voting statistics - NEW FUNCTION
+// Updated interface - removed redundant fields that exist in parent Event model
+export async function createVotingContest(data: {
+  eventId: string;
+  votingType: VotingType;
+  votePackagesEnabled?: boolean;
+  defaultVotePrice?: number;
+  allowGuestVoting?: boolean;
+  maxVotesPerUser?: number;
+  allowMultipleVotes?: boolean;
+  showLiveResults?: boolean;
+  showVoterNames?: boolean;
+}): Promise<ActionResponse<any>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({ headers: headersList });
+
+  if (!session) {
+    return { success: false, message: 'Not authenticated' };
+  }
+
+  try {
+    // Check if user owns the event or is admin
+    const event = await prisma.event.findUnique({
+      where: { id: data.eventId },
+      select: {
+        userId: true,
+        eventType: true,
+        startDateTime: true,
+        endDateTime: true,
+      },
+    });
+
+    if (!event) {
+      return { success: false, message: 'Event not found' };
+    }
+
+    const isAdmin = session.user.role === 'ADMIN';
+    const isOwner = event.userId === session.user.id;
+
+    if (!isAdmin && !isOwner) {
+      return { success: false, message: 'Not authorized' };
+    }
+
+    if (event.eventType !== EventType.VOTING_CONTEST) {
+      return { success: false, message: 'Event must be a voting contest type' };
+    }
+
+    // Create voting contest with new fields
+    const votingContest = await prisma.votingContest.create({
+      data: {
+        eventId: data.eventId,
+        votingType: data.votingType,
+        votePackagesEnabled: data.votePackagesEnabled || false,
+        defaultVotePrice: data.defaultVotePrice,
+        allowGuestVoting: data.allowGuestVoting || false,
+        maxVotesPerUser: data.maxVotesPerUser,
+        allowMultipleVotes: data.allowMultipleVotes !== false,
+        // Use event's start/end dates as default voting window
+        votingStartDate: event.startDateTime,
+        votingEndDate: event.endDateTime,
+        showLiveResults: data.showLiveResults !== false,
+        showVoterNames: data.showVoterNames || false,
+      },
+    });
+
+    revalidatePath(`/dashboard/events/${data.eventId}`);
+    return {
+      success: true,
+      message: 'Voting contest created successfully',
+      data: votingContest,
+    };
+  } catch (error) {
+    console.error('Error creating voting contest:', error);
+    return { success: false, message: 'Failed to create voting contest' };
+  }
+}
+
+// Updated interface - using event-based scheduling
+export async function updateVotingContest(data: {
+  contestId: string;
+  votingType?: VotingType;
+  votePackagesEnabled?: boolean;
+  defaultVotePrice?: number;
+  allowGuestVoting?: boolean;
+  maxVotesPerUser?: number;
+  allowMultipleVotes?: boolean;
+  showLiveResults?: boolean;
+  showVoterNames?: boolean;
+}): Promise<ActionResponse<any>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({ headers: headersList });
+
+  if (!session) {
+    return { success: false, message: 'Not authenticated' };
+  }
+
+  try {
+    // Check permissions
+    const contest = await prisma.votingContest.findUnique({
+      where: { id: data.contestId },
+      include: {
+        event: {
+          select: {
+            userId: true,
+            startDateTime: true,
+            endDateTime: true,
+          },
+        },
+      },
+    });
+
+    if (!contest) {
+      return { success: false, message: 'Contest not found' };
+    }
+
+    const isAdmin = session.user.role === 'ADMIN';
+    const isOwner = contest.event.userId === session.user.id;
+
+    if (!isAdmin && !isOwner) {
+      return { success: false, message: 'Not authorized' };
+    }
+
+    // Update contest with new fields
+    const updatedContest = await prisma.votingContest.update({
+      where: { id: data.contestId },
+      data: {
+        ...data,
+        // Keep voting window in sync with event dates
+        votingStartDate: contest.event.startDateTime,
+        votingEndDate: contest.event.endDateTime,
+      },
+    });
+
+    revalidatePath(`/dashboard/events/${contest.eventId}`);
+    return {
+      success: true,
+      message: 'Voting contest updated successfully',
+      data: updatedContest,
+    };
+  } catch (error) {
+    console.error('Error updating voting contest:', error);
+    return { success: false, message: 'Failed to update voting contest' };
+  }
+}
+
+// Rest of the existing functions remain the same...
 export async function getContestResults(
   contestId: string
 ): Promise<ActionResponse<any>> {
@@ -253,8 +483,8 @@ export async function getContestResults(
           facebook: contestant.facebookUrl,
         },
         voteCount,
-        percentage: Math.round(percentage * 100) / 100, // Round to 2 decimal places
-        rank: 0, // Will be calculated after sorting
+        percentage: Math.round(percentage * 100) / 100,
+        rank: 0,
       };
     });
 
@@ -288,10 +518,13 @@ export async function getContestResults(
       return acc;
     }, {});
 
-    // Get top voters (for paid contests)
+    // Get top voters (exclude guest votes and show voter names only if enabled)
     const topVoters = await prisma.vote.groupBy({
       by: ['userId'],
-      where: { contestId },
+      where: {
+        contestId,
+        userId: { not: null }, // Exclude guest votes
+      },
       _count: {
         id: true,
       },
@@ -303,29 +536,34 @@ export async function getContestResults(
       take: 10,
     });
 
-    // Get user details for top voters
-    const voterDetails = await prisma.user.findMany({
-      where: {
-        id: {
-          in: topVoters.map((voter) => voter.userId),
+    // Get user details for top voters (only if showVoterNames is enabled)
+    let topVotersWithDetails: any[] = [];
+    if (contest.showVoterNames) {
+      const voterDetails = await prisma.user.findMany({
+        where: {
+          id: {
+            in: topVoters
+              .map((voter) => voter.userId)
+              .filter((id): id is string => id !== null),
+          },
         },
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
-    });
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      });
 
-    const topVotersWithDetails = topVoters.map((voter) => {
-      const user = voterDetails.find((u) => u.id === voter.userId);
-      return {
-        userId: voter.userId,
-        name: user?.name || 'Unknown',
-        email: user?.email || '',
-        voteCount: voter._count.id,
-      };
-    });
+      topVotersWithDetails = topVoters.map((voter) => {
+        const user = voterDetails.find((u) => u.id === voter.userId);
+        return {
+          userId: voter.userId,
+          name: user?.name || 'Unknown',
+          email: user?.email || '',
+          voteCount: voter._count.id,
+        };
+      });
+    }
 
     // Calculate revenue (for paid contests)
     let totalRevenue = 0;
@@ -347,6 +585,14 @@ export async function getContestResults(
       platformFee = voteOrders._sum.platformFee || 0;
     }
 
+    // Count guest votes
+    const guestVoteCount = await prisma.vote.count({
+      where: {
+        contestId,
+        userId: null,
+      },
+    });
+
     return {
       success: true,
       data: {
@@ -354,6 +600,8 @@ export async function getContestResults(
           id: contest.id,
           votingType: contest.votingType,
           votePackagesEnabled: contest.votePackagesEnabled,
+          defaultVotePrice: contest.defaultVotePrice,
+          allowGuestVoting: contest.allowGuestVoting,
           showLiveResults: contest.showLiveResults,
           showVoterNames: contest.showVoterNames,
           allowMultipleVotes: contest.allowMultipleVotes,
@@ -366,6 +614,8 @@ export async function getContestResults(
         votePackages: contest.votePackages,
         statistics: {
           totalVotes,
+          guestVotes: guestVoteCount,
+          registeredVotes: totalVotes - guestVoteCount,
           totalContestants: contest.contestants.length,
           totalRevenue,
           platformFee,
@@ -373,274 +623,12 @@ export async function getContestResults(
         },
         votingActivity,
         topVoters: topVotersWithDetails,
-        recentVotes: contest.votes.slice(0, 50), // Last 50 votes
+        recentVotes: contest.votes.slice(0, 50),
       },
     };
   } catch (error) {
     console.error('Error getting contest results:', error);
     return { success: false, message: 'Failed to get contest results' };
-  }
-}
-
-// Get contest results for public viewing (limited data)
-export async function getPublicContestResults(
-  contestId: string
-): Promise<ActionResponse<any>> {
-  try {
-    const contest = await prisma.votingContest.findUnique({
-      where: { id: contestId },
-      include: {
-        event: {
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-            startDateTime: true,
-            endDateTime: true,
-            publishedStatus: true,
-          },
-        },
-        contestants: {
-          where: {
-            status: ContestantStatus.ACTIVE,
-          },
-          include: {
-            _count: {
-              select: {
-                votes: true,
-              },
-            },
-          },
-          orderBy: {
-            contestNumber: 'asc',
-          },
-        },
-      },
-    });
-
-    if (!contest) {
-      return { success: false, message: 'Contest not found' };
-    }
-
-    if (contest.event.publishedStatus !== 'PUBLISHED') {
-      return { success: false, message: 'Contest is not published' };
-    }
-
-    // Only show results if live results are enabled
-    if (!contest.showLiveResults) {
-      return {
-        success: true,
-        data: {
-          contest: {
-            id: contest.id,
-            showLiveResults: false,
-          },
-          contestants: contest.contestants.map((contestant) => ({
-            id: contestant.id,
-            name: contestant.name,
-            bio: contestant.bio,
-            imageUrl: contestant.imageUrl,
-            contestNumber: contestant.contestNumber,
-            socialLinks: {
-              instagram: contestant.instagramUrl,
-              twitter: contestant.twitterUrl,
-              facebook: contestant.facebookUrl,
-            },
-          })),
-        },
-      };
-    }
-
-    // Calculate total votes
-    const totalVotes = await prisma.vote.count({
-      where: { contestId },
-    });
-
-    // Calculate results
-    const results = contest.contestants.map((contestant) => {
-      const voteCount = contestant._count.votes;
-      const percentage = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0;
-
-      return {
-        id: contestant.id,
-        name: contestant.name,
-        bio: contestant.bio,
-        imageUrl: contestant.imageUrl,
-        contestNumber: contestant.contestNumber,
-        socialLinks: {
-          instagram: contestant.instagramUrl,
-          twitter: contestant.twitterUrl,
-          facebook: contestant.facebookUrl,
-        },
-        voteCount,
-        percentage: Math.round(percentage * 100) / 100,
-        rank: 0,
-      };
-    });
-
-    // Sort and rank
-    results.sort((a, b) => b.voteCount - a.voteCount);
-    results.forEach((result, index) => {
-      result.rank = index + 1;
-    });
-
-    return {
-      success: true,
-      data: {
-        contest: {
-          id: contest.id,
-          showLiveResults: contest.showLiveResults,
-          showVoterNames: contest.showVoterNames,
-        },
-        event: contest.event,
-        results,
-        statistics: {
-          totalVotes,
-          totalContestants: contest.contestants.length,
-        },
-      },
-    };
-  } catch (error) {
-    console.error('Error getting public contest results:', error);
-    return { success: false, message: 'Failed to get contest results' };
-  }
-}
-
-// Updated interface - removed redundant fields that exist in parent Event model
-export async function createVotingContest(data: {
-  eventId: string;
-  votingType: VotingType;
-  votePackagesEnabled?: boolean;
-  maxVotesPerUser?: number;
-  allowMultipleVotes?: boolean;
-  showLiveResults?: boolean;
-  showVoterNames?: boolean;
-}): Promise<ActionResponse<any>> {
-  const headersList = await headers();
-  const session = await auth.api.getSession({ headers: headersList });
-
-  if (!session) {
-    return { success: false, message: 'Not authenticated' };
-  }
-
-  try {
-    // Check if user owns the event or is admin
-    const event = await prisma.event.findUnique({
-      where: { id: data.eventId },
-      select: {
-        userId: true,
-        eventType: true,
-        startDateTime: true,
-        endDateTime: true,
-      },
-    });
-
-    if (!event) {
-      return { success: false, message: 'Event not found' };
-    }
-
-    const isAdmin = session.user.role === 'ADMIN';
-    const isOwner = event.userId === session.user.id;
-
-    if (!isAdmin && !isOwner) {
-      return { success: false, message: 'Not authorized' };
-    }
-
-    if (event.eventType !== EventType.VOTING_CONTEST) {
-      return { success: false, message: 'Event must be a voting contest type' };
-    }
-
-    // Create voting contest - using event dates for voting window by default
-    const votingContest = await prisma.votingContest.create({
-      data: {
-        eventId: data.eventId,
-        votingType: data.votingType,
-        votePackagesEnabled: data.votePackagesEnabled || false,
-        maxVotesPerUser: data.maxVotesPerUser,
-        allowMultipleVotes: data.allowMultipleVotes !== false,
-        // Use event's start/end dates as default voting window
-        votingStartDate: event.startDateTime,
-        votingEndDate: event.endDateTime,
-        showLiveResults: data.showLiveResults !== false,
-        showVoterNames: data.showVoterNames || false,
-      },
-    });
-
-    revalidatePath(`/dashboard/events/${data.eventId}`);
-    return {
-      success: true,
-      message: 'Voting contest created successfully',
-      data: votingContest,
-    };
-  } catch (error) {
-    console.error('Error creating voting contest:', error);
-    return { success: false, message: 'Failed to create voting contest' };
-  }
-}
-
-// Updated interface - using event-based scheduling
-export async function updateVotingContest(data: {
-  contestId: string;
-  votingType?: VotingType;
-  votePackagesEnabled?: boolean;
-  maxVotesPerUser?: number;
-  allowMultipleVotes?: boolean;
-  showLiveResults?: boolean;
-  showVoterNames?: boolean;
-}): Promise<ActionResponse<any>> {
-  const headersList = await headers();
-  const session = await auth.api.getSession({ headers: headersList });
-
-  if (!session) {
-    return { success: false, message: 'Not authenticated' };
-  }
-
-  try {
-    // Check permissions
-    const contest = await prisma.votingContest.findUnique({
-      where: { id: data.contestId },
-      include: {
-        event: {
-          select: {
-            userId: true,
-            startDateTime: true,
-            endDateTime: true,
-          },
-        },
-      },
-    });
-
-    if (!contest) {
-      return { success: false, message: 'Contest not found' };
-    }
-
-    const isAdmin = session.user.role === 'ADMIN';
-    const isOwner = contest.event.userId === session.user.id;
-
-    if (!isAdmin && !isOwner) {
-      return { success: false, message: 'Not authorized' };
-    }
-
-    // Update contest - sync voting dates with event dates
-    const updatedContest = await prisma.votingContest.update({
-      where: { id: data.contestId },
-      data: {
-        ...data,
-        // Keep voting window in sync with event dates
-        votingStartDate: contest.event.startDateTime,
-        votingEndDate: contest.event.endDateTime,
-      },
-    });
-
-    revalidatePath(`/dashboard/events/${contest.eventId}`);
-    return {
-      success: true,
-      message: 'Voting contest updated successfully',
-      data: updatedContest,
-    };
-  } catch (error) {
-    console.error('Error updating voting contest:', error);
-    return { success: false, message: 'Failed to update voting contest' };
   }
 }
 
@@ -1082,6 +1070,87 @@ export async function castPaidVote(data: {
   }
 }
 
+// Purchase vote with default pricing (when no packages are used)
+export async function purchaseVoteWithDefaultPrice(data: {
+  contestId: string;
+  amount: number;
+  voteCount?: number; // Defaults to 1
+}): Promise<ActionResponse<any>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({ headers: headersList });
+
+  if (!session) {
+    return { success: false, message: 'Please log in to purchase votes' };
+  }
+
+  try {
+    // Get contest info
+    const contest = await prisma.votingContest.findUnique({
+      where: { id: data.contestId },
+      include: {
+        event: true,
+      },
+    });
+
+    if (!contest) {
+      return { success: false, message: 'Contest not found' };
+    }
+
+    // Check if voting is allowed
+    if (contest.votingType !== VotingType.PAID) {
+      return { success: false, message: 'This is not a paid voting contest' };
+    }
+
+    // Check voting window
+    const now = new Date();
+    if (contest.votingStartDate && now < contest.votingStartDate) {
+      return { success: false, message: 'Voting has not started yet' };
+    }
+
+    if (contest.votingEndDate && now > contest.votingEndDate) {
+      return { success: false, message: 'Voting has ended' };
+    }
+
+    // Get platform fee percentage
+    const platformFeePercentage = await getPlatformFeePercentage();
+    const platformFee = (data.amount * platformFeePercentage) / 100;
+
+    // Create a unique reference for Paystack
+    const reference = `vote_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+
+    // Create vote order with default pricing
+    const voteOrder = await prisma.voteOrder.create({
+      data: {
+        userId: session.user.id,
+        contestId: data.contestId,
+        votePackageId: null, // No package for default pricing
+        paystackId: reference,
+        totalAmount: data.amount,
+        platformFee,
+        voteCount: data.voteCount || 1,
+        votesRemaining: data.voteCount || 1,
+        paymentStatus: 'PENDING',
+        currency: 'NGN',
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Vote order created successfully',
+      data: {
+        orderId: voteOrder.id,
+        reference: voteOrder.paystackId,
+        amount: data.amount,
+        voteCount: data.voteCount || 1,
+      },
+    };
+  } catch (error) {
+    console.error('Error purchasing vote with default price:', error);
+    return { success: false, message: 'Failed to purchase vote' };
+  }
+}
+
 // Verify vote payment (called by Paystack webhook or payment verification)
 export async function verifyVotePayment(data: {
   voteOrderId: string;
@@ -1227,5 +1296,134 @@ export async function getUserVoteOrders(
   } catch (error) {
     console.error('Error getting user vote orders:', error);
     return { success: false, message: 'Failed to get vote orders' };
+  }
+}
+
+export async function getPublicContestResults(
+  contestId: string
+): Promise<ActionResponse<any>> {
+  try {
+    const contest = await prisma.votingContest.findUnique({
+      where: { id: contestId },
+      include: {
+        event: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            startDateTime: true,
+            endDateTime: true,
+            publishedStatus: true,
+          },
+        },
+        contestants: {
+          where: {
+            status: ContestantStatus.ACTIVE,
+          },
+          include: {
+            _count: {
+              select: {
+                votes: true,
+              },
+            },
+          },
+          orderBy: {
+            contestNumber: 'asc',
+          },
+        },
+      },
+    });
+
+    if (!contest) {
+      return { success: false, message: 'Contest not found' };
+    }
+
+    if (contest.event.publishedStatus !== 'PUBLISHED') {
+      return { success: false, message: 'Contest is not published' };
+    }
+
+    // Only show results if live results are enabled
+    if (!contest.showLiveResults) {
+      return {
+        success: true,
+        data: {
+          contest: {
+            id: contest.id,
+            showLiveResults: false,
+            allowGuestVoting: contest.allowGuestVoting,
+            defaultVotePrice: contest.defaultVotePrice,
+            votePackagesEnabled: contest.votePackagesEnabled,
+          },
+          contestants: contest.contestants.map((contestant) => ({
+            id: contestant.id,
+            name: contestant.name,
+            bio: contestant.bio,
+            imageUrl: contestant.imageUrl,
+            contestNumber: contestant.contestNumber,
+            socialLinks: {
+              instagram: contestant.instagramUrl,
+              twitter: contestant.twitterUrl,
+              facebook: contestant.facebookUrl,
+            },
+          })),
+        },
+      };
+    }
+
+    // Calculate total votes
+    const totalVotes = await prisma.vote.count({
+      where: { contestId },
+    });
+
+    // Calculate results
+    const results = contest.contestants.map((contestant) => {
+      const voteCount = contestant._count.votes;
+      const percentage = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0;
+
+      return {
+        id: contestant.id,
+        name: contestant.name,
+        bio: contestant.bio,
+        imageUrl: contestant.imageUrl,
+        contestNumber: contestant.contestNumber,
+        socialLinks: {
+          instagram: contestant.instagramUrl,
+          twitter: contestant.twitterUrl,
+          facebook: contestant.facebookUrl,
+        },
+        voteCount,
+        percentage: Math.round(percentage * 100) / 100,
+        rank: 0,
+      };
+    });
+
+    // Sort and rank
+    results.sort((a, b) => b.voteCount - a.voteCount);
+    results.forEach((result, index) => {
+      result.rank = index + 1;
+    });
+
+    return {
+      success: true,
+      data: {
+        contest: {
+          id: contest.id,
+          showLiveResults: contest.showLiveResults,
+          showVoterNames: contest.showVoterNames,
+          allowGuestVoting: contest.allowGuestVoting,
+          defaultVotePrice: contest.defaultVotePrice,
+          votePackagesEnabled: contest.votePackagesEnabled,
+        },
+        event: contest.event,
+        results,
+        statistics: {
+          totalVotes,
+          totalContestants: contest.contestants.length,
+        },
+      },
+    };
+  } catch (error) {
+    console.error('Error getting public contest results:', error);
+    return { success: false, message: 'Failed to get contest results' };
   }
 }

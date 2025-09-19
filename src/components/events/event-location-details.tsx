@@ -107,18 +107,6 @@ export function EventLocationDetails({
             }
           });
 
-          // Add online venue option for voting contests
-          if (isVotingContest) {
-            venueMap.set('online', {
-              id: 'online',
-              name: 'Online Event',
-              address: 'Virtual/Online',
-              city: { name: 'Online', state: 'Virtual' },
-              isOwned: false,
-              isOnline: true,
-            });
-          }
-
           setVenues(Array.from(venueMap.values()));
         } else {
           // Otherwise, get all venues (for admin users)
@@ -128,28 +116,13 @@ export function EventLocationDetails({
               ...venue,
               isOwned: false,
             }));
-
-            // Add online venue option for voting contests
-            if (isVotingContest) {
-              allVenues.unshift({
-                id: 'online',
-                name: 'Online Event',
-                address: 'Virtual/Online',
-                city: { name: 'Online', state: 'Virtual' },
-                isOwned: false,
-                isOnline: true,
-              });
-            }
-
             setVenues(allVenues);
           }
         }
 
         // If we have a venueId in formData, set the selected venue
         if (formData.venueId) {
-          const venue = Array.from(venues).find(
-            (v: any) => v.id === formData.venueId
-          );
+          const venue = venues.find((v: any) => v.id === formData.venueId);
           if (venue) {
             setSelectedVenue(venue);
           }
@@ -163,14 +136,18 @@ export function EventLocationDetails({
     };
 
     fetchData();
-  }, [formData.venueId, isVotingContest]);
+  }, [formData.venueId]);
 
   // Auto-select online venue for voting contests if none selected
   useEffect(() => {
     if (isVotingContest && !formData.venueId && venues.length > 0) {
-      const onlineVenue = venues.find((v) => v.id === 'online');
+      // Look for the online venue (either by ID or name)
+      const onlineVenue = venues.find(
+        (v) => v.id === 'online-venue-id' || v.name === 'Online Event'
+      );
       if (onlineVenue) {
-        handleVenueChange('online');
+        handleVenueChange(onlineVenue.id);
+        setSelectedVenue(onlineVenue);
       }
     }
   }, [isVotingContest, formData.venueId, venues]);
@@ -201,14 +178,15 @@ export function EventLocationDetails({
     const venue = venues.find((venue) => venue.id === values.venueId);
     let cityId = venue?.cityId || venue?.city?.id;
 
-    // For online venues, set cityId to null
-    if (venue?.isOnline) {
-      cityId = undefined;
+    // For online venues, set cityId appropriately
+    if (venue?.name === 'Online Event' || venue?.id === 'online-venue-id') {
+      // Look for the online city or set to null
+      cityId = venue?.cityId || undefined;
     }
 
     updateFormData({
       ...values,
-      cityId, // Add the cityId from the selected venue
+      cityId,
     });
 
     onNext();
@@ -242,7 +220,7 @@ export function EventLocationDetails({
               <h3 className="font-medium text-blue-900">Online Event</h3>
               <p className="text-sm text-blue-700 mt-1">
                 Voting contests are conducted online. The &quot;Online
-                Event&quot; venue has been automatically selected for you. You
+                Event&quot; venue will be automatically selected for you. You
                 can provide additional details about the contest in the location
                 field below if needed.
               </p>
@@ -264,18 +242,14 @@ export function EventLocationDetails({
                 <div className="space-y-3">
                   <Select
                     onValueChange={(value) => handleVenueChange(value)}
-                    defaultValue={field.value}
-                    disabled={
-                      isLoading || (isVotingContest && field.value === 'online')
-                    }
+                    value={field.value}
+                    disabled={isLoading}
                   >
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue
                           placeholder={
-                            isVotingContest
-                              ? 'Online Event (Auto-selected)'
-                              : 'Select a venue'
+                            isVotingContest ? 'Online Event' : 'Select a venue'
                           }
                         />
                       </SelectTrigger>
@@ -284,18 +258,19 @@ export function EventLocationDetails({
                       {venues.map((venue) => (
                         <SelectItem key={venue.id} value={venue.id}>
                           <div className="flex items-center gap-2">
-                            {venue.isOnline && (
+                            {(venue.name === 'Online Event' ||
+                              venue.id === 'online-venue-id') && (
                               <Globe className="h-4 w-4 text-blue-600" />
                             )}
                             <span>{venue.name}</span>
-                            {venue.isOwned && !venue.isOnline && (
+                            {venue.isOwned && venue.name !== 'Online Event' && (
                               <span className="text-xs bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
                                 Owned
                               </span>
                             )}
-                            {!venue.isOnline && (
+                            {venue.name !== 'Online Event' && (
                               <span className="text-muted-foreground">
-                                - {venue.city?.name}
+                                - {venue.city?.name || venue.address}
                               </span>
                             )}
                           </div>
@@ -335,13 +310,17 @@ export function EventLocationDetails({
           {selectedVenue && (
             <div className="border rounded-md p-4 bg-muted/20">
               <h3 className="font-medium mb-2 flex items-center gap-2">
-                {selectedVenue.isOnline ? 'Event Type:' : 'Venue Details:'}
-                {selectedVenue.isOwned && (
-                  <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
-                    Your Venue
-                  </span>
-                )}
-                {selectedVenue.isOnline && (
+                {selectedVenue.name === 'Online Event'
+                  ? 'Event Type:'
+                  : 'Venue Details:'}
+                {selectedVenue.isOwned &&
+                  selectedVenue.name !== 'Online Event' && (
+                    <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
+                      Your Venue
+                    </span>
+                  )}
+                {(selectedVenue.name === 'Online Event' ||
+                  selectedVenue.id === 'online-venue-id') && (
                   <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded">
                     Online
                   </span>
@@ -352,7 +331,7 @@ export function EventLocationDetails({
                   <p>
                     <strong>Location:</strong> {selectedVenue.address}
                   </p>
-                  {!selectedVenue.isOnline && (
+                  {selectedVenue.name !== 'Online Event' && (
                     <p>
                       <strong>City:</strong> {selectedVenue.city?.name},{' '}
                       {selectedVenue.city?.state}
@@ -373,11 +352,12 @@ export function EventLocationDetails({
                   )}
                 </div>
               </div>
-              {selectedVenue.description && !selectedVenue.isOnline && (
-                <div className="mt-3 pt-3 border-t">
-                  <p className="text-sm">{selectedVenue.description}</p>
-                </div>
-              )}
+              {selectedVenue.description &&
+                selectedVenue.name !== 'Online Event' && (
+                  <div className="mt-3 pt-3 border-t">
+                    <p className="text-sm">{selectedVenue.description}</p>
+                  </div>
+                )}
             </div>
           )}
 

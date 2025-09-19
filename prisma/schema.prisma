@@ -556,13 +556,14 @@ model VotingContest {
   votingType VotingType @default(FREE)
 
   // Vote package settings
-  votePackagesEnabled Boolean @default(false)
-
+  votePackagesEnabled Boolean   @default(false)
+  allowGuestVoting    Boolean   @default(false) // Allow voting without account
+  defaultVotePrice    Float? // Price for a single vote when no packages
   // Voting rules
-  maxVotesPerUser    Int? // null means unlimited
-  allowMultipleVotes Boolean   @default(true) // Can vote for multiple contestants
-  votingStartDate    DateTime?
-  votingEndDate      DateTime?
+  maxVotesPerUser     Int? // null means unlimited
+  allowMultipleVotes  Boolean   @default(true) // Can vote for multiple contestants
+  votingStartDate     DateTime?
+  votingEndDate       DateTime?
 
   // Results settings
   showLiveResults Boolean @default(true)
@@ -666,8 +667,8 @@ model VoteOrder {
 
 model Vote {
   id           String        @id @default(cuid())
-  userId       String
-  user         User          @relation(fields: [userId], references: [id])
+  userId       String?
+  user         User?         @relation(fields: [userId], references: [id])
   contestId    String
   contest      VotingContest @relation(fields: [contestId], references: [id])
   contestantId String
@@ -682,12 +683,12 @@ model Vote {
   createdAt DateTime @default(now())
 
   // Prevent duplicate free votes per user per contestant
-  @@unique([userId, contestantId, voteType])
   @@index([userId])
   @@index([contestId])
   @@index([contestantId])
   @@index([voteType])
   @@index([createdAt])
+  @@index([ipAddress])
 }
 
 model Event {
