@@ -773,6 +773,38 @@ export async function getEvents(
             },
           },
         },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            organizerProfile: {
+              select: {
+                organizationName: true,
+              },
+            },
+          },
+        },
+        // Include voting contest data
+        votingContest: {
+          include: {
+            contestants: {
+              include: {
+                _count: {
+                  select: {
+                    votes: true,
+                  },
+                },
+              },
+            },
+            votePackages: true,
+            _count: {
+              select: {
+                votes: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { startDateTime: 'asc' },
     });
@@ -1616,7 +1648,7 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
   const { role, subRole, id: userId } = session.user;
 
   try {
-    // Check if event exists with comprehensive relations
+    // Check if event exists with comprehensive relations including voting contest
     const event = await prisma.event.findUnique({
       where: { id },
       include: {
@@ -1632,7 +1664,34 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
         },
         waitingList: true,
         ratings: true,
-        Notification: true, // Note: Capital 'N' as per your schema
+        Notification: true,
+        // Include voting contest data
+        votingContest: {
+          include: {
+            contestants: {
+              include: {
+                votes: true,
+              },
+            },
+            votePackages: {
+              include: {
+                voteOrders: {
+                  include: {
+                    votes: true,
+                    notifications: true,
+                  },
+                },
+              },
+            },
+            votes: true,
+            VoteOrder: {
+              include: {
+                votes: true,
+                notifications: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -1654,13 +1713,21 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
       };
     }
 
-    // Check if the event has orders or tickets
+    // Check if the event has orders, tickets, or voting activity
     const hasOrders = event.orders.length > 0;
     const hasTickets = event.ticketTypes.some(
       (type) => type.tickets.length > 0
     );
 
-    if (hasOrders || hasTickets) {
+    // Fix: Properly check for voting activity with null/undefined safety
+    const hasVotingActivity =
+      (event.votingContest?.votes?.length ?? 0) > 0 ||
+      (event.votingContest?.VoteOrder?.some(
+        (order) => (order.votes?.length ?? 0) > 0
+      ) ??
+        false);
+
+    if (hasOrders || hasTickets || hasVotingActivity) {
       // Instead of deleting, mark as cancelled
       await prisma.event.update({
         where: { id },
@@ -1678,30 +1745,67 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
       return {
         success: true,
         message:
-          'Event has been cancelled instead of deleted because it has associated orders or tickets',
+          'Event has been cancelled instead of deleted because it has associated orders, tickets, or voting activity',
       };
     }
 
-    // If no orders or tickets, we need to delete in the correct order to avoid foreign key constraints
+    // If no orders, tickets, or voting activity, delete in correct order
     await prisma.$transaction(async (tx) => {
       // Delete in reverse dependency order
 
-      // 1. Delete notifications
+      // 1. Delete notifications first
       await tx.notification.deleteMany({
         where: { eventId: id },
       });
 
-      // 2. Delete ratings
+      // 2. If this is a voting contest, delete voting contest data
+      if (event.votingContest) {
+        // Delete votes first
+        await tx.vote.deleteMany({
+          where: { contestId: event.votingContest.id },
+        });
+
+        // Delete vote order notifications
+        const voteOrderIds =
+          event.votingContest.VoteOrder?.map((order) => order.id) || [];
+        if (voteOrderIds.length > 0) {
+          await tx.notification.deleteMany({
+            where: { voteOrderId: { in: voteOrderIds } },
+          });
+        }
+
+        // Delete vote orders
+        await tx.voteOrder.deleteMany({
+          where: { contestId: event.votingContest.id },
+        });
+
+        // Delete vote packages
+        await tx.votePackage.deleteMany({
+          where: { contestId: event.votingContest.id },
+        });
+
+        // Delete contestants
+        await tx.contestant.deleteMany({
+          where: { contestId: event.votingContest.id },
+        });
+
+        // Delete voting contest
+        await tx.votingContest.delete({
+          where: { id: event.votingContest.id },
+        });
+      }
+
+      // 3. Delete ratings
       await tx.rating.deleteMany({
         where: { eventId: id },
       });
 
-      // 3. Delete waiting list entries
+      // 4. Delete waiting list entries
       await tx.waitingList.deleteMany({
         where: { eventId: id },
       });
 
-      // 4. Delete tickets (if any exist without orders)
+      // 5. Delete tickets and ticket types (if any exist without orders)
       const ticketTypeIds = event.ticketTypes.map((tt) => tt.id);
       if (ticketTypeIds.length > 0) {
         // Delete ticket validations first
@@ -1721,12 +1825,12 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
         });
       }
 
-      // 5. Delete ticket types
+      // 6. Delete ticket types
       await tx.ticketType.deleteMany({
         where: { eventId: id },
       });
 
-      // 6. Disconnect tags (many-to-many relationship)
+      // 7. Disconnect tags (many-to-many relationship)
       await tx.event.update({
         where: { id },
         data: {
@@ -1736,7 +1840,7 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
         },
       });
 
-      // 7. Finally delete the event
+      // 8. Finally delete the event
       await tx.event.delete({
         where: { id },
       });
@@ -1812,7 +1916,7 @@ export async function hardDeleteEvent(
   try {
     console.log(`Starting hard delete for event ID: ${id}`);
 
-    // Check if event exists and get full data for audit log
+    // Check if event exists and get full data for audit log including voting contest
     const event = await prisma.event.findUnique({
       where: { id },
       include: {
@@ -1845,6 +1949,33 @@ export async function hardDeleteEvent(
             email: true,
           },
         },
+        // Include comprehensive voting contest data
+        votingContest: {
+          include: {
+            contestants: {
+              include: {
+                votes: true,
+              },
+            },
+            votePackages: {
+              include: {
+                voteOrders: {
+                  include: {
+                    votes: true,
+                    notifications: true,
+                  },
+                },
+              },
+            },
+            votes: true,
+            VoteOrder: {
+              include: {
+                votes: true,
+                notifications: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -1857,11 +1988,22 @@ export async function hardDeleteEvent(
     }
 
     console.log(`Event found: ${event.title}`);
+    console.log(`Event type: ${event.eventType}`);
     console.log(`Ticket types: ${event.ticketTypes.length}`);
     console.log(`Orders: ${event.orders.length}`);
     console.log(`Ratings: ${event.ratings.length}`);
     console.log(`Notifications: ${event.Notification.length}`);
     console.log(`Waiting list: ${event.waitingList.length}`);
+
+    if (event.votingContest) {
+      console.log(`Voting contest found with:`);
+      console.log(`- Contestants: ${event.votingContest.contestants.length}`);
+      console.log(
+        `- Vote packages: ${event.votingContest.votePackages.length}`
+      );
+      console.log(`- Total votes: ${event.votingContest.votes.length}`);
+      console.log(`- Vote orders: ${event.votingContest.VoteOrder.length}`);
+    }
 
     // Get client IP and user agent for audit trail
     const headerList = await headers();
@@ -1890,6 +2032,7 @@ export async function hardDeleteEvent(
                 title: event.title,
                 slug: event.slug,
                 description: event.description,
+                eventType: event.eventType,
                 startDateTime: event.startDateTime?.toISOString(),
                 endDateTime: event.endDateTime?.toISOString(),
                 publishedStatus: event.publishedStatus,
@@ -1918,6 +2061,22 @@ export async function hardDeleteEvent(
                 (sum, order) => sum + order.totalAmount,
                 0
               ),
+              // Add voting contest data to audit log
+              votingContest: event.votingContest
+                ? {
+                    id: event.votingContest.id,
+                    votingType: event.votingContest.votingType,
+                    contestantsCount: event.votingContest.contestants.length,
+                    votePackagesCount: event.votingContest.votePackages.length,
+                    totalVotes: event.votingContest.votes.length,
+                    voteOrdersCount: event.votingContest.VoteOrder.length,
+                    contestants: event.votingContest.contestants.map((c) => ({
+                      name: c.name,
+                      contestNumber: c.contestNumber,
+                      votesCount: c.votes.length,
+                    })),
+                  }
+                : null,
             },
             newValues: { deleted: true },
             ipAddress,
@@ -1950,7 +2109,55 @@ export async function hardDeleteEvent(
           console.log(`Deleted ${deletedTickets.count} tickets`);
         }
 
-        // 3. Delete all order notifications
+        // 3. Delete voting contest data if it exists
+        if (event.votingContest) {
+          console.log('Deleting voting contest data...');
+
+          // Delete votes first (they reference contestants and vote orders)
+          const deletedVotes = await tx.vote.deleteMany({
+            where: { contestId: event.votingContest.id },
+          });
+          console.log(`Deleted ${deletedVotes.count} votes`);
+
+          // Delete vote order notifications
+          const voteOrderIds =
+            event.votingContest.VoteOrder?.map((order) => order.id) || [];
+          if (voteOrderIds.length > 0) {
+            const deletedVoteOrderNotifications =
+              await tx.notification.deleteMany({
+                where: { voteOrderId: { in: voteOrderIds } },
+              });
+            console.log(
+              `Deleted ${deletedVoteOrderNotifications.count} vote order notifications`
+            );
+          }
+
+          // Delete vote orders
+          const deletedVoteOrders = await tx.voteOrder.deleteMany({
+            where: { contestId: event.votingContest.id },
+          });
+          console.log(`Deleted ${deletedVoteOrders.count} vote orders`);
+
+          // Delete vote packages
+          const deletedVotePackages = await tx.votePackage.deleteMany({
+            where: { contestId: event.votingContest.id },
+          });
+          console.log(`Deleted ${deletedVotePackages.count} vote packages`);
+
+          // Delete contestants
+          const deletedContestants = await tx.contestant.deleteMany({
+            where: { contestId: event.votingContest.id },
+          });
+          console.log(`Deleted ${deletedContestants.count} contestants`);
+
+          // Delete voting contest itself
+          await tx.votingContest.delete({
+            where: { id: event.votingContest.id },
+          });
+          console.log('Deleted voting contest');
+        }
+
+        // 4. Delete all order notifications
         console.log('Deleting order notifications...');
         const orderIds = event.orders.map((order) => order.id);
         if (orderIds.length > 0) {
@@ -1964,7 +2171,7 @@ export async function hardDeleteEvent(
           );
         }
 
-        // 4. Delete all orders
+        // 5. Delete all orders
         console.log('Deleting orders...');
         if (orderIds.length > 0) {
           const deletedOrders = await tx.order.deleteMany({
@@ -1973,14 +2180,14 @@ export async function hardDeleteEvent(
           console.log(`Deleted ${deletedOrders.count} orders`);
         }
 
-        // 5. Delete all ticket types
+        // 6. Delete all ticket types
         console.log('Deleting ticket types...');
         const deletedTicketTypes = await tx.ticketType.deleteMany({
           where: { eventId: id },
         });
         console.log(`Deleted ${deletedTicketTypes.count} ticket types`);
 
-        // 6. Delete all event notifications
+        // 7. Delete all event notifications
         console.log('Deleting event notifications...');
         const deletedEventNotifications = await tx.notification.deleteMany({
           where: { eventId: id },
@@ -1989,21 +2196,21 @@ export async function hardDeleteEvent(
           `Deleted ${deletedEventNotifications.count} event notifications`
         );
 
-        // 7. Delete all ratings
+        // 8. Delete all ratings
         console.log('Deleting ratings...');
         const deletedRatings = await tx.rating.deleteMany({
           where: { eventId: id },
         });
         console.log(`Deleted ${deletedRatings.count} ratings`);
 
-        // 8. Delete all waiting list entries
+        // 9. Delete all waiting list entries
         console.log('Deleting waiting list entries...');
         const deletedWaitingList = await tx.waitingList.deleteMany({
           where: { eventId: id },
         });
         console.log(`Deleted ${deletedWaitingList.count} waiting list entries`);
 
-        // 8.5. Delete any audit logs that reference this event (optional - be careful!)
+        // 10. Delete any audit logs that reference this event (optional - be careful!)
         console.log('Deleting event-related audit logs...');
         const deletedAuditLogs = await tx.auditLog.deleteMany({
           where: {
@@ -2013,7 +2220,7 @@ export async function hardDeleteEvent(
         });
         console.log(`Deleted ${deletedAuditLogs.count} audit logs`);
 
-        // 9. Disconnect tags (many-to-many relationship)
+        // 11. Disconnect tags (many-to-many relationship)
         console.log('Disconnecting tags...');
         await tx.event.update({
           where: { id },
@@ -2025,7 +2232,7 @@ export async function hardDeleteEvent(
         });
         console.log('Tags disconnected');
 
-        // 10. Finally delete the event itself
+        // 12. Finally delete the event itself
         console.log('Deleting event...');
         await tx.event.delete({
           where: { id },
@@ -2045,6 +2252,7 @@ export async function hardDeleteEvent(
               deletedAt: new Date().toISOString(),
               deletedBy: adminUserId,
               eventTitle: event.title,
+              eventType: event.eventType,
               totalRecordsDeleted: {
                 tickets: event.ticketTypes.reduce(
                   (sum, tt) => sum + tt.tickets.length,
@@ -2055,6 +2263,15 @@ export async function hardDeleteEvent(
                 notifications: event.Notification.length,
                 waitingList: event.waitingList.length,
                 ticketTypes: event.ticketTypes.length,
+                // Add voting contest deletion counts
+                votingContestData: event.votingContest
+                  ? {
+                      contestants: event.votingContest.contestants.length,
+                      votes: event.votingContest.votes.length,
+                      voteOrders: event.votingContest.VoteOrder.length,
+                      votePackages: event.votingContest.votePackages.length,
+                    }
+                  : null,
               },
             },
             ipAddress,
@@ -2078,7 +2295,7 @@ export async function hardDeleteEvent(
     console.log('Hard delete completed successfully');
     return {
       success: true,
-      message: `Event "${event.title}" and all related data have been permanently deleted. This action has been logged for audit purposes.`,
+      message: `Event "${event.title}" and all related data (including voting contest data) have been permanently deleted. This action has been logged for audit purposes.`,
     };
   } catch (error) {
     console.error('Error performing hard delete:', error);
