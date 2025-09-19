@@ -3,6 +3,7 @@ import { StatsCard } from '@/components/stats-card';
 import { getServerSideAuth } from '@/lib/auth-server';
 import { isSuperAdmin } from '@/lib/auth-utils';
 import { getAdminDashboardStats } from '@/actions/analytics.actions';
+import { getPlatformFee } from '@/lib/platform-settings';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -28,8 +29,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-// import { AdminNotificationCenter } from '@/components/admin/admin-notification-center';
-// import { SystemHealthCheck } from '@/components/admin/system-health-check';
 
 export default async function AdminDashboardPage() {
   const session = await getServerSideAuth({
@@ -43,6 +42,14 @@ export default async function AdminDashboardPage() {
   }
 
   const isUserSuperAdmin = isSuperAdmin(session.user);
+
+  // Fetch platform fee percentage
+  let platformFeePercentage = 5;
+  try {
+    platformFeePercentage = await getPlatformFee();
+  } catch (error) {
+    console.error('Error loading platform fee:', error);
+  }
 
   // Fetch real dashboard data
   let dashboardData = null;
@@ -73,6 +80,18 @@ export default async function AdminDashboardPage() {
   };
 
   const data = dashboardData || defaultData;
+
+  // Calculate platform revenue using dynamic fee
+  const estimatedRevenue = data.overview.totalTicketsSold * 2500; // Assuming avg ticket price
+  const platformRevenue = (estimatedRevenue * platformFeePercentage) / 100;
+
+  // Format currency
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-NG', {
+      style: 'currency',
+      currency: 'NGN',
+    }).format(amount);
+  };
 
   return (
     <DashboardLayout session={session}>
@@ -603,19 +622,15 @@ export default async function AdminDashboardPage() {
                       Revenue This Month
                     </span>
                     <span className="text-sm text-muted-foreground">
-                      ₦
-                      {(data.overview.totalTicketsSold * 2500).toLocaleString()}
+                      {formatCurrency(estimatedRevenue)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">
-                      Platform Fee Collected
+                      Platform Fee Collected ({platformFeePercentage}%)
                     </span>
                     <span className="text-sm text-muted-foreground">
-                      ₦
-                      {Math.round(
-                        data.overview.totalTicketsSold * 2500 * 0.05
-                      ).toLocaleString()}
+                      {formatCurrency(platformRevenue)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -204,11 +204,29 @@ export function ContestantManagement({
       return;
     }
 
+    // FIX: Ensure contestants data is properly structured
     updateFormData({
-      contestants,
+      contestants: contestants.map((contestant) => ({
+        ...contestant,
+        // Ensure all required fields have default values
+        bio: contestant.bio || '',
+        imageUrl: contestant.imageUrl || '',
+        instagramUrl: contestant.instagramUrl || '',
+        twitterUrl: contestant.twitterUrl || '',
+        facebookUrl: contestant.facebookUrl || '',
+        status: contestant.status || 'ACTIVE',
+      })),
     });
+
     onNext();
   };
+
+  // Also fix the form initialization
+  useEffect(() => {
+    if (formData.contestants && Array.isArray(formData.contestants)) {
+      setContestants(formData.contestants);
+    }
+  }, [formData.contestants]);
 
   // Open add contestant dialog
   const handleAddContestant = () => {

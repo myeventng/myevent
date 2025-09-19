@@ -192,11 +192,21 @@ export function CreateEventForm({
         const eventId = result.data.id;
 
         if (isVotingContest) {
-          // Create voting contest
+          // Create voting contest - FIX: Check if votingContest data exists
           if (formData.votingContest) {
             const contestResult = await createVotingContest({
               eventId,
-              ...formData.votingContest,
+              votingType: formData.votingContest.votingType,
+              votePackagesEnabled:
+                formData.votingContest.votePackagesEnabled || false,
+              defaultVotePrice: formData.votingContest.defaultVotePrice,
+              allowGuestVoting:
+                formData.votingContest.allowGuestVoting || false,
+              maxVotesPerUser: formData.votingContest.maxVotesPerUser,
+              allowMultipleVotes:
+                formData.votingContest.allowMultipleVotes !== false,
+              showLiveResults: formData.votingContest.showLiveResults !== false,
+              showVoterNames: formData.votingContest.showVoterNames || false,
             });
 
             if (!contestResult.success) {
@@ -205,6 +215,69 @@ export function CreateEventForm({
               );
               return;
             }
+
+            const contestId = contestResult.data.id;
+
+            // Create contestants - FIX: Implement contestant creation
+            if (formData.contestants && formData.contestants.length > 0) {
+              const contestantPromises = formData.contestants.map(
+                async (contestant: any) => {
+                  return createContestant({
+                    contestId,
+                    name: contestant.name,
+                    bio: contestant.bio || '',
+                    imageUrl: contestant.imageUrl || '',
+                    contestNumber: contestant.contestNumber,
+                    instagramUrl: contestant.instagramUrl || '',
+                    twitterUrl: contestant.twitterUrl || '',
+                    facebookUrl: contestant.facebookUrl || '',
+                  });
+                }
+              );
+
+              const contestantResults = await Promise.all(contestantPromises);
+              const failedContestants = contestantResults.filter(
+                (r) => !r.success
+              );
+
+              if (failedContestants.length > 0) {
+                toast.error(
+                  `Contest created but ${failedContestants.length} contestant(s) failed to create`
+                );
+              }
+            }
+
+            // Create vote packages - FIX: Implement vote package creation
+            if (
+              formData.votingContest.votePackagesEnabled &&
+              formData.votingContest.votePackages &&
+              formData.votingContest.votePackages.length > 0
+            ) {
+              const packagePromises = formData.votingContest.votePackages.map(
+                async (pkg: any) => {
+                  return createVotePackage({
+                    contestId,
+                    name: pkg.name,
+                    description: pkg.description || '',
+                    voteCount: pkg.voteCount,
+                    price: pkg.price,
+                    sortOrder: pkg.sortOrder || 0,
+                  });
+                }
+              );
+
+              const packageResults = await Promise.all(packagePromises);
+              const failedPackages = packageResults.filter((r) => !r.success);
+
+              if (failedPackages.length > 0) {
+                toast.error(
+                  `Contest created but ${failedPackages.length} vote package(s) failed to create`
+                );
+              }
+            }
+          } else {
+            toast.error('Voting contest data is missing');
+            return;
           }
         } else {
           // Create ticket types for standard events
@@ -219,9 +292,8 @@ export function CreateEventForm({
             });
 
             const ticketResults = await Promise.all(ticketPromises);
-
-            // Check if all ticket types were created successfully
             const failedTickets = ticketResults.filter((r) => !r.success);
+
             if (failedTickets.length > 0) {
               toast.error(
                 `Event created but ${failedTickets.length} ticket type(s) failed to create`

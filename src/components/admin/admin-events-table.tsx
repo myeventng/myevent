@@ -85,7 +85,7 @@ export function AdminEventsTable({
 }: AdminEventsTableProps) {
   const [data, setData] = useState<any[]>(initialData);
   const [sorting, setSorting] = useState<SortingState>([
-    { id: 'startDateTime', desc: false },
+    { id: 'title', desc: false },
   ]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
@@ -645,7 +645,7 @@ export function AdminEventsTable({
               <SelectValue placeholder="Filter by type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Types</SelectItem>
+              <SelectItem value="all">All Types</SelectItem>
               <SelectItem value="STANDARD">Standard</SelectItem>
               <SelectItem value="VOTING_CONTEST">Voting Contest</SelectItem>
               <SelectItem value="INVITE">Invite Only</SelectItem>
@@ -669,7 +669,7 @@ export function AdminEventsTable({
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Statuses</SelectItem>
+              <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="PUBLISHED">Published</SelectItem>
               <SelectItem value="PENDING_REVIEW">Pending Review</SelectItem>
               <SelectItem value="DRAFT">Draft</SelectItem>

@@ -147,6 +147,32 @@ export function EditEventForm({
         setFormData({
           ...baseFormData,
           isFree: true, // Voting contests are always "free" events
+          // FIX: Initialize voting contest data properly
+          votingContest: initialData.votingContest
+            ? {
+                votingType: initialData.votingContest.votingType,
+                votePackagesEnabled:
+                  initialData.votingContest.votePackagesEnabled || false,
+                defaultVotePrice: initialData.votingContest.defaultVotePrice,
+                allowGuestVoting:
+                  initialData.votingContest.allowGuestVoting || false,
+                maxVotesPerUser: initialData.votingContest.maxVotesPerUser,
+                allowMultipleVotes:
+                  initialData.votingContest.allowMultipleVotes !== false,
+                showLiveResults:
+                  initialData.votingContest.showLiveResults !== false,
+                showVoterNames:
+                  initialData.votingContest.showVoterNames || false,
+                votingStartDate: initialData.votingContest.votingStartDate
+                  ? new Date(initialData.votingContest.votingStartDate)
+                  : undefined,
+                votingEndDate: initialData.votingContest.votingEndDate
+                  ? new Date(initialData.votingContest.votingEndDate)
+                  : undefined,
+                votePackages: [], // Will be loaded separately
+              }
+            : undefined,
+          contestants: [], // Will be loaded separately
         });
       } else {
         setFormData({
@@ -161,7 +187,7 @@ export function EditEventForm({
     }
   }, [initialData, isVotingContest]);
 
-  // Fetch existing data based on event type
+  // Fetch existing data based on event type - FIXED VERSION
   useEffect(() => {
     const fetchData = async () => {
       if (initialData?.id) {
@@ -179,8 +205,8 @@ export function EditEventForm({
                 (result: any) => ({
                   id: result.id,
                   name: result.name,
-                  bio: result.bio,
-                  imageUrl: result.imageUrl,
+                  bio: result.bio || '',
+                  imageUrl: result.imageUrl || '',
                   contestNumber: result.contestNumber,
                   instagramUrl: result.socialLinks?.instagram || '',
                   twitterUrl: result.socialLinks?.twitter || '',
@@ -189,17 +215,11 @@ export function EditEventForm({
                 })
               );
 
+              // FIX: Update form data with fetched contest data
               setFormData((prev: any) => ({
                 ...prev,
                 votingContest: {
-                  votingType: contestData.votingType,
-                  votePackagesEnabled: contestData.votePackagesEnabled,
-                  defaultVotePrice: contestData.defaultVotePrice,
-                  allowGuestVoting: contestData.allowGuestVoting,
-                  maxVotesPerUser: contestData.maxVotesPerUser,
-                  allowMultipleVotes: contestData.allowMultipleVotes,
-                  showLiveResults: contestData.showLiveResults,
-                  showVoterNames: contestData.showVoterNames,
+                  ...prev.votingContest,
                   votePackages: contestResults.data.votePackages || [],
                 },
                 contestants,
@@ -288,7 +308,14 @@ export function EditEventForm({
           if (formData.votingContest && initialData.votingContest?.id) {
             const contestResult = await updateVotingContest({
               contestId: initialData.votingContest.id,
-              ...formData.votingContest,
+              votingType: formData.votingContest.votingType,
+              votePackagesEnabled: formData.votingContest.votePackagesEnabled,
+              defaultVotePrice: formData.votingContest.defaultVotePrice,
+              allowGuestVoting: formData.votingContest.allowGuestVoting,
+              maxVotesPerUser: formData.votingContest.maxVotesPerUser,
+              allowMultipleVotes: formData.votingContest.allowMultipleVotes,
+              showLiveResults: formData.votingContest.showLiveResults,
+              showVoterNames: formData.votingContest.showVoterNames,
             });
 
             if (!contestResult.success) {
@@ -298,11 +325,10 @@ export function EditEventForm({
               return;
             }
 
-            // Handle contestants - this is simplified for editing
-            // In a real implementation, you'd want to handle updates/deletions more carefully
+            // FIX: Handle new contestants properly
             if (formData.contestants && formData.contestants.length > 0) {
-              const newContestants = formData.contestants.filter((c: any) =>
-                c.id?.startsWith('temp-')
+              const newContestants = formData.contestants.filter(
+                (c: any) => c.id?.startsWith('temp-contestant-') || !c.id
               );
 
               if (newContestants.length > 0) {
@@ -311,12 +337,12 @@ export function EditEventForm({
                     return createContestant({
                       contestId: initialData.votingContest.id,
                       name: contestant.name,
-                      bio: contestant.bio,
-                      imageUrl: contestant.imageUrl,
+                      bio: contestant.bio || '',
+                      imageUrl: contestant.imageUrl || '',
                       contestNumber: contestant.contestNumber,
-                      instagramUrl: contestant.instagramUrl,
-                      twitterUrl: contestant.twitterUrl,
-                      facebookUrl: contestant.facebookUrl,
+                      instagramUrl: contestant.instagramUrl || '',
+                      twitterUrl: contestant.twitterUrl || '',
+                      facebookUrl: contestant.facebookUrl || '',
                     });
                   }
                 );
@@ -334,13 +360,13 @@ export function EditEventForm({
               }
             }
 
-            // Handle vote packages - simplified approach
+            // FIX: Handle new vote packages properly
             if (
               formData.votingContest.votePackagesEnabled &&
               formData.votingContest.votePackages?.length > 0
             ) {
               const newPackages = formData.votingContest.votePackages.filter(
-                (p: any) => p.id?.startsWith('temp-')
+                (p: any) => p.id?.startsWith('temp-') || !p.id
               );
 
               if (newPackages.length > 0) {
@@ -348,7 +374,7 @@ export function EditEventForm({
                   return createVotePackage({
                     contestId: initialData.votingContest.id,
                     name: pkg.name,
-                    description: pkg.description,
+                    description: pkg.description || '',
                     voteCount: pkg.voteCount,
                     price: pkg.price,
                     sortOrder: pkg.sortOrder || 0,
@@ -365,9 +391,12 @@ export function EditEventForm({
                 }
               }
             }
+          } else {
+            toast.error('Voting contest data is missing');
+            return;
           }
         } else {
-          // Handle ticket types for standard events
+          // Handle ticket types for standard events (existing logic)
           const existingTicketIds = ticketTypes
             .filter((t) => !t.id?.startsWith('temp-'))
             .map((t) => t.id);

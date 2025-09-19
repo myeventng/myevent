@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
@@ -14,13 +14,6 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -66,6 +59,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { getPlatformFee } from '@/lib/platform-settings';
 import { toast } from 'sonner';
 
 // Schema for vote package
@@ -105,9 +99,6 @@ interface VotingContestSetupProps {
   onPrevious: () => void;
 }
 
-// Platform fee percentage - could be moved to constants
-const PLATFORM_FEE_PERCENTAGE = 5;
-
 export function VotingContestSetup({
   formData,
   updateFormData,
@@ -122,6 +113,7 @@ export function VotingContestSetup({
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [platformFeePercentage, setPlatformFeePercentage] = useState(5);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -150,6 +142,19 @@ export function VotingContestSetup({
     },
   });
 
+  useEffect(() => {
+    const loadPlatformFee = async () => {
+      try {
+        const fee = await getPlatformFee();
+        setPlatformFeePercentage(fee);
+      } catch (error) {
+        console.error('Error loading platform fee:', error);
+      }
+    };
+
+    loadPlatformFee();
+  }, []);
+
   const votingType = form.watch('votingType');
   const votePackagesEnabled = form.watch('votePackagesEnabled');
   const allowGuestVoting = form.watch('allowGuestVoting');
@@ -157,7 +162,7 @@ export function VotingContestSetup({
 
   // Calculate platform fee for a given amount
   const calculatePlatformFee = (amount: number) => {
-    return (amount * PLATFORM_FEE_PERCENTAGE) / 100;
+    return (amount * platformFeePercentage) / 100;
   };
 
   // Format price as currency
@@ -220,12 +225,23 @@ export function VotingContestSetup({
       votePackages: votePackagesEnabled ? votePackages : [],
     };
 
+    // FIX: Update the form data structure to match what's expected
     updateFormData({
-      votingContest: contestData,
+      votingContest: {
+        ...contestData,
+        votingStartDate: values.votingStartDate,
+        votingEndDate: values.votingEndDate,
+      },
     });
 
     onNext();
   };
+
+  useEffect(() => {
+    if (formData.votingContest?.votePackages) {
+      setVotePackages(formData.votingContest.votePackages);
+    }
+  }, [formData.votingContest?.votePackages]);
 
   return (
     <div className="space-y-6">
@@ -339,7 +355,7 @@ export function VotingContestSetup({
                           </p>
                           <p>
                             <strong>
-                              Platform Fee ({PLATFORM_FEE_PERCENTAGE}%):
+                              Platform Fee ({platformFeePercentage}%):
                             </strong>{' '}
                             {formatPrice(calculatePlatformFee(field.value))}
                           </p>
@@ -814,7 +830,7 @@ export function VotingContestSetup({
                       {field.value && (
                         <FormDescription className="space-y-1">
                           <div className="text-blue-600">
-                            Platform fee ({PLATFORM_FEE_PERCENTAGE}%):{' '}
+                            Platform fee ({platformFeePercentage}%):{' '}
                             {formatPrice(calculatePlatformFee(field.value))}
                           </div>
                           <div className="text-green-600">

@@ -37,6 +37,7 @@ import { getTags } from '@/actions/tag.actions';
 import { getVenueById } from '@/actions/venue-actions';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { EventType } from '@/generated/prisma';
+import { getPlatformFee } from '@/lib/platform-settings';
 
 interface EventPreviewProps {
   formData: any;
@@ -48,9 +49,6 @@ interface EventPreviewProps {
   userRole?: string;
   userSubRole?: string;
 }
-
-// Platform fee percentage - could be moved to constants
-const PLATFORM_FEE_PERCENTAGE = 5;
 
 export function EventPreview({
   formData,
@@ -67,9 +65,23 @@ export function EventPreview({
   const [tags, setTags] = useState<any[]>([]);
   const [venue, setVenue] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-
+  const [platformFeePercentage, setPlatformFeePercentage] = useState(5);
   const isVotingContest = formData.eventType === EventType.VOTING_CONTEST;
   const isStandardEvent = formData.eventType === EventType.STANDARD;
+
+  // Load platform fee
+  useEffect(() => {
+    const loadPlatformFee = async () => {
+      try {
+        const fee = await getPlatformFee();
+        setPlatformFeePercentage(fee);
+      } catch (error) {
+        console.error('Error loading platform fee:', error);
+      }
+    };
+
+    loadPlatformFee();
+  }, []);
 
   // Fetch associated data for preview
   useEffect(() => {
@@ -132,9 +144,9 @@ export function EventPreview({
     fetchData();
   }, []);
 
-  // Calculate platform fee
+  // Calculate platform fee using dynamic percentage
   const calculatePlatformFee = (amount: number) => {
-    return (amount * PLATFORM_FEE_PERCENTAGE) / 100;
+    return (amount * platformFeePercentage) / 100;
   };
 
   // Format price as currency
@@ -531,7 +543,7 @@ export function EventPreview({
                               </div>
                               <div className="flex justify-between text-blue-600">
                                 <span>
-                                  Platform Fee ({PLATFORM_FEE_PERCENTAGE}%):
+                                  Platform Fee ({platformFeePercentage}%):
                                 </span>
                                 <span>
                                   -
@@ -585,8 +597,8 @@ export function EventPreview({
                                     <div className="space-y-1 text-xs">
                                       <div className="flex justify-between text-blue-600">
                                         <span>
-                                          Platform Fee (
-                                          {PLATFORM_FEE_PERCENTAGE}%):
+                                          Platform Fee ({platformFeePercentage}
+                                          %):
                                         </span>
                                         <span>
                                           -
@@ -629,8 +641,8 @@ export function EventPreview({
                         </h5>
                         <div className="text-sm text-blue-800 space-y-1">
                           <p>
-                            • Platform fee: {PLATFORM_FEE_PERCENTAGE}% of all
-                            vote sales
+                            • Platform fee: {platformFeePercentage}% of all vote
+                            sales
                           </p>
                           <p>• Fees are automatically deducted from payments</p>
                           <p>

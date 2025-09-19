@@ -785,7 +785,7 @@ export async function getEvents(
             },
           },
         },
-        // Include voting contest data
+        // Include voting contest data with error handling
         votingContest: {
           include: {
             contestants: {
@@ -815,10 +815,56 @@ export async function getEvents(
     };
   } catch (error) {
     console.error('Error fetching events:', error);
-    return {
-      success: false,
-      message: 'Failed to fetch events',
-    };
+
+    // Try to fetch events without voting contest data as fallback
+    try {
+      console.log('Attempting fallback query without voting contest data...');
+      const fallbackEvents = await prisma.event.findMany({
+        where: published ? { publishedStatus: 'PUBLISHED' } : {},
+        include: {
+          tags: true,
+          category: true,
+          venue: {
+            include: {
+              city: true,
+            },
+          },
+          ticketTypes: {
+            where: {
+              quantity: {
+                gt: 0,
+              },
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              organizerProfile: {
+                select: {
+                  organizationName: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { startDateTime: 'asc' },
+      });
+
+      console.log('Fallback query successful');
+      return {
+        success: true,
+        data: fallbackEvents,
+      };
+    } catch (fallbackError) {
+      console.error('Fallback query also failed:', fallbackError);
+      return {
+        success: false,
+        message: 'Failed to fetch events',
+        data: [], // Return empty array instead of undefined
+      };
+    }
   }
 }
 

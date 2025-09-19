@@ -20,6 +20,7 @@ import {
   getEventTicketStats,
   getTicketValidations,
 } from '@/actions/ticket.actions';
+import { getPlatformFee } from '@/lib/platform-settings';
 import { toast } from 'sonner';
 
 interface ScannerPageProps {
@@ -32,6 +33,21 @@ export function TicketScannerPage({ eventId, eventTitle }: ScannerPageProps) {
   const [validations, setValidations] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('scanner');
+  const [platformFeePercentage, setPlatformFeePercentage] = useState(5);
+
+  // Load platform fee
+  useEffect(() => {
+    const loadPlatformFee = async () => {
+      try {
+        const fee = await getPlatformFee();
+        setPlatformFeePercentage(fee);
+      } catch (error) {
+        console.error('Error loading platform fee:', error);
+      }
+    };
+
+    loadPlatformFee();
+  }, []);
 
   // Load event stats and validations
   const loadData = async () => {
@@ -397,7 +413,7 @@ export function TicketScannerPage({ eventId, eventTitle }: ScannerPageProps) {
                     <div className="p-4 border border-gray-200 rounded-lg bg-gray-50">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-sm text-gray-600">
-                          Platform Fee (5%)
+                          Platform Fee ({platformFeePercentage}%)
                         </span>
                         <span className="font-medium text-gray-700">
                           -{formatCurrency(stats.revenue.platformFee)}
