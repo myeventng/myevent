@@ -4,7 +4,12 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
-import { AgeRestriction, DressCode, PublishedStatus } from '@/generated/prisma';
+import {
+  AgeRestriction,
+  DressCode,
+  PublishedStatus,
+  EventType,
+} from '@/generated/prisma';
 import { createEventNotification } from '@/actions/notification.actions';
 
 interface EventInput {
@@ -18,6 +23,7 @@ interface EventInput {
   url?: string;
   lateEntry?: Date;
   idRequired?: boolean;
+  eventType: EventType;
   attendeeLimit?: number;
   embeddedVideoUrl?: string;
   dressCode?: DressCode;
@@ -249,6 +255,7 @@ export async function createEvent(
         isFree: data.isFree,
         url: data.url,
         lateEntry: data.lateEntry,
+        eventType: data.eventType || EventType.STANDARD,
         idRequired: data.idRequired,
         attendeeLimit: data.attendeeLimit,
         embeddedVideoUrl: data.embeddedVideoUrl,

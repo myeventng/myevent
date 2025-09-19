@@ -179,11 +179,14 @@ export function CreateEventForm({
         validatedData = standardEventSchema.parse(formData);
       }
 
-      // Create the event
-      const result = await createEvent({
+      const eventData = {
         ...validatedData,
+        eventType: formData.eventType,
         publishedStatus: publishStatus,
-      });
+      };
+
+      // Create the event
+      const result = await createEvent(eventData);
 
       if (result.success && result.data) {
         const eventId = result.data.id;
