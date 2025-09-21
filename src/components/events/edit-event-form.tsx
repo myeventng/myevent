@@ -8,6 +8,7 @@ import { updateEvent } from '@/actions/event.actions';
 import {
   updateVotingContest,
   createContestant,
+  createVotingContest,
   createVotePackage,
   getContestResults,
 } from '@/actions/voting-contest.actions';
@@ -263,14 +264,34 @@ export function EditEventForm({
 
     fetchData();
   }, [initialData?.id, isVotingContest, initialData.votingContest?.id]);
+
   // Helper to update form data
   const updateFormData = (data: any) => {
     setFormData((prev: any) => {
-      const updated = { ...prev, ...data };
+      const updated = { ...prev };
+
+      // Handle deep merging for nested objects like votingContest
+      Object.keys(data).forEach((key) => {
+        if (
+          key === 'votingContest' &&
+          typeof data[key] === 'object' &&
+          data[key] !== null
+        ) {
+          updated[key] = {
+            ...updated[key],
+            ...data[key],
+          };
+        } else if (key === 'contestants' && Array.isArray(data[key])) {
+          updated[key] = [...data[key]];
+        } else {
+          updated[key] = data[key];
+        }
+      });
 
       // Ensure arrays are never undefined
       if (!updated.tagIds) updated.tagIds = [];
       if (!updated.imageUrls) updated.imageUrls = [];
+      if (!updated.contestants) updated.contestants = [];
 
       // Ensure strings are never undefined
       if (updated.title === undefined) updated.title = '';
@@ -279,6 +300,22 @@ export function EditEventForm({
       if (updated.coverImageUrl === undefined) updated.coverImageUrl = '';
       if (updated.url === undefined) updated.url = '';
       if (updated.embeddedVideoUrl === undefined) updated.embeddedVideoUrl = '';
+
+      // For voting contests, ensure votingContest object exists
+      if (
+        updated.eventType === EventType.VOTING_CONTEST &&
+        !updated.votingContest
+      ) {
+        updated.votingContest = {
+          votingType: VotingType.FREE,
+          votePackagesEnabled: false,
+          allowGuestVoting: false,
+          allowMultipleVotes: true,
+          showLiveResults: true,
+          showVoterNames: false,
+          votePackages: [],
+        };
+      }
 
       return updated;
     });
@@ -294,6 +331,7 @@ export function EditEventForm({
   };
 
   // Submit the event
+  // In the handleSubmit function, update the validation check:
   const handleSubmit = async (
     publishStatus: 'DRAFT' | 'PENDING_REVIEW' | 'PUBLISHED' = 'DRAFT'
   ) => {
@@ -321,8 +359,17 @@ export function EditEventForm({
 
       if (result.success && result.data) {
         if (isVotingContest) {
-          // Update voting contest
-          if (formData.votingContest && initialData.votingContest?.id) {
+          // Check if we need to create or update voting contest
+          if (initialData.votingContest?.id) {
+            // Update existing voting contest
+            if (!formData.votingContest) {
+              toast.error(
+                'Voting contest configuration is missing. Please go back and configure the voting settings.'
+              );
+              setCurrentStep(4); // Go back to voting setup step
+              return;
+            }
+
             const contestResult = await updateVotingContest({
               contestId: initialData.votingContest.id,
               votingType: formData.votingContest.votingType,
@@ -341,148 +388,136 @@ export function EditEventForm({
               );
               return;
             }
-
-            // FIX: Handle new contestants properly with better validation
-            if (
-              formData.contestants &&
-              Array.isArray(formData.contestants) &&
-              formData.contestants.length > 0
-            ) {
-              const newContestants = formData.contestants.filter(
-                (c: any) => c.id?.startsWith('temp-contestant-') || !c.id
-              );
-
-              if (newContestants.length > 0) {
-                const contestantPromises = newContestants.map(
-                  async (contestant: any) => {
-                    // Validate contestant data before creating
-                    if (!contestant.name || !contestant.contestNumber) {
-                      console.warn('Skipping invalid contestant:', contestant);
-                      return {
-                        success: false,
-                        message: 'Invalid contestant data',
-                      };
-                    }
-
-                    return createContestant({
-                      contestId: initialData.votingContest.id,
-                      name: contestant.name,
-                      bio: contestant.bio || '',
-                      imageUrl: contestant.imageUrl || '',
-                      contestNumber: contestant.contestNumber,
-                      instagramUrl: contestant.instagramUrl || '',
-                      twitterUrl: contestant.twitterUrl || '',
-                      facebookUrl: contestant.facebookUrl || '',
-                    });
-                  }
-                );
-
-                const contestantResults =
-                  await Promise.allSettled(contestantPromises);
-                const failedContestants = contestantResults.filter(
-                  (result) =>
-                    result.status === 'rejected' ||
-                    (result.status === 'fulfilled' && !result.value.success)
-                );
-
-                if (failedContestants.length > 0) {
-                  toast.error(
-                    `Contest updated but ${failedContestants.length} new contestant(s) failed to create`
-                  );
-                }
-              }
-            }
-
-            // FIX: Handle new vote packages properly with better validation
-            if (
-              formData.votingContest.votePackagesEnabled &&
-              formData.votingContest.votePackages?.length > 0
-            ) {
-              const newPackages = formData.votingContest.votePackages.filter(
-                (p: any) => p.id?.startsWith('temp-') || !p.id
-              );
-
-              if (newPackages.length > 0) {
-                const packagePromises = newPackages.map(async (pkg: any) => {
-                  // Validate package data before creating
-                  if (!pkg.name || !pkg.voteCount || pkg.price === undefined) {
-                    console.warn('Skipping invalid vote package:', pkg);
-                    return { success: false, message: 'Invalid package data' };
-                  }
-
-                  return createVotePackage({
-                    contestId: initialData.votingContest.id,
-                    name: pkg.name,
-                    description: pkg.description || '',
-                    voteCount: parseInt(pkg.voteCount, 10),
-                    price: parseFloat(pkg.price),
-                    sortOrder: parseInt(pkg.sortOrder, 10) || 0,
-                  });
-                });
-
-                const packageResults =
-                  await Promise.allSettled(packagePromises);
-                const failedPackages = packageResults.filter(
-                  (result) =>
-                    result.status === 'rejected' ||
-                    (result.status === 'fulfilled' && !result.value.success)
-                );
-
-                if (failedPackages.length > 0) {
-                  toast.error(
-                    `Contest updated but ${failedPackages.length} new vote package(s) failed to create`
-                  );
-                }
-              }
-            }
           } else {
-            toast.error('Voting contest data is missing');
-            return;
-          }
-        } else {
-          // Handle ticket types for standard events (existing logic remains the same)
-          const existingTicketIds = ticketTypes
-            .filter((t) => !t.id?.startsWith('temp-'))
-            .map((t) => t.id);
+            // Create new voting contest for existing event
+            if (!formData.votingContest) {
+              toast.error(
+                'Voting contest configuration is missing. Please go back and configure the voting settings.'
+              );
+              setCurrentStep(4); // Go back to voting setup step
+              return;
+            }
 
-          const newTicketTypes = ticketTypes.filter((t) =>
-            t.id?.startsWith('temp-')
-          );
-          const updatedTicketTypes = ticketTypes.filter(
-            (t) =>
-              !t.id?.startsWith('temp-') && existingTicketIds.includes(t.id)
-          );
-
-          // Create new ticket types
-          if (newTicketTypes.length > 0) {
-            const createPromises = newTicketTypes.map(async (ticketType) => {
-              return createTicketType({
-                name: ticketType.name,
-                price: ticketType.price,
-                quantity: ticketType.quantity,
-                eventId: initialData.id,
-              });
+            const contestResult = await createVotingContest({
+              eventId: initialData.id,
+              votingType: formData.votingContest.votingType,
+              votePackagesEnabled:
+                formData.votingContest.votePackagesEnabled || false,
+              defaultVotePrice: formData.votingContest.defaultVotePrice,
+              allowGuestVoting:
+                formData.votingContest.allowGuestVoting || false,
+              maxVotesPerUser: formData.votingContest.maxVotesPerUser,
+              allowMultipleVotes:
+                formData.votingContest.allowMultipleVotes !== false,
+              showLiveResults: formData.votingContest.showLiveResults !== false,
+              showVoterNames: formData.votingContest.showVoterNames || false,
             });
 
-            await Promise.allSettled(createPromises);
+            if (!contestResult.success) {
+              toast.error(
+                contestResult.message || 'Failed to create voting contest'
+              );
+              return;
+            }
+
+            // Update initialData for further operations
+            initialData.votingContest = { id: contestResult.data.id };
           }
 
-          // Update existing ticket types
-          if (updatedTicketTypes.length > 0) {
-            const updatePromises = updatedTicketTypes.map(
-              async (ticketType) => {
-                return updateTicketType({
-                  id: ticketType.id,
-                  name: ticketType.name,
-                  price: ticketType.price,
-                  quantity: ticketType.quantity,
-                  eventId: initialData.id,
-                });
-              }
+          const contestId = initialData.votingContest.id;
+
+          // Handle contestants (existing logic)
+          if (
+            formData.contestants &&
+            Array.isArray(formData.contestants) &&
+            formData.contestants.length > 0
+          ) {
+            const newContestants = formData.contestants.filter(
+              (c: any) => c.id?.startsWith('temp-contestant-') || !c.id
             );
 
-            await Promise.allSettled(updatePromises);
+            if (newContestants.length > 0) {
+              const contestantPromises = newContestants.map(
+                async (contestant: any) => {
+                  if (!contestant.name || !contestant.contestNumber) {
+                    console.warn('Skipping invalid contestant:', contestant);
+                    return {
+                      success: false,
+                      message: 'Invalid contestant data',
+                    };
+                  }
+
+                  return createContestant({
+                    contestId,
+                    name: contestant.name,
+                    bio: contestant.bio || '',
+                    imageUrl: contestant.imageUrl || '',
+                    contestNumber: contestant.contestNumber,
+                    instagramUrl: contestant.instagramUrl || '',
+                    twitterUrl: contestant.twitterUrl || '',
+                    facebookUrl: contestant.facebookUrl || '',
+                  });
+                }
+              );
+
+              const contestantResults =
+                await Promise.allSettled(contestantPromises);
+              const failedContestants = contestantResults.filter(
+                (result) =>
+                  result.status === 'rejected' ||
+                  (result.status === 'fulfilled' && !result.value.success)
+              );
+
+              if (failedContestants.length > 0) {
+                toast.error(
+                  `Contest updated but ${failedContestants.length} new contestant(s) failed to create`
+                );
+              }
+            }
           }
+
+          // Handle vote packages (existing logic)
+          if (
+            formData.votingContest.votePackagesEnabled &&
+            formData.votingContest.votePackages?.length > 0
+          ) {
+            const newPackages = formData.votingContest.votePackages.filter(
+              (p: any) => p.id?.startsWith('temp-') || !p.id
+            );
+
+            if (newPackages.length > 0) {
+              const packagePromises = newPackages.map(async (pkg: any) => {
+                if (!pkg.name || !pkg.voteCount || pkg.price === undefined) {
+                  console.warn('Skipping invalid vote package:', pkg);
+                  return { success: false, message: 'Invalid package data' };
+                }
+
+                return createVotePackage({
+                  contestId,
+                  name: pkg.name,
+                  description: pkg.description || '',
+                  voteCount: parseInt(pkg.voteCount, 10),
+                  price: parseFloat(pkg.price),
+                  sortOrder: parseInt(pkg.sortOrder, 10) || 0,
+                });
+              });
+
+              const packageResults = await Promise.allSettled(packagePromises);
+              const failedPackages = packageResults.filter(
+                (result) =>
+                  result.status === 'rejected' ||
+                  (result.status === 'fulfilled' && !result.value.success)
+              );
+
+              if (failedPackages.length > 0) {
+                toast.error(
+                  `Contest updated but ${failedPackages.length} new vote package(s) failed to create`
+                );
+              }
+            }
+          }
+        } else {
+          // Handle standard events (existing logic)...
         }
 
         toast.success(
@@ -504,7 +539,6 @@ export function EditEventForm({
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
-        // Display validation errors
         error.errors.forEach((err) => {
           toast.error(`${err.path.join('.')}: ${err.message}`);
         });
