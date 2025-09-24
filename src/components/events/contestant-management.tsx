@@ -881,8 +881,8 @@ export function ContestantManagement({
               {isEditDialogMode ? 'Edit Contestant' : 'Add Contestant'}
             </DialogTitle>
             <DialogDescription>
-              Fill in the contestant's information. Name, contest number, and
-              profile image are required.
+              Fill in the contestant&apos;s information. Name, contest number,
+              and profile image are required.
             </DialogDescription>
           </DialogHeader>
 

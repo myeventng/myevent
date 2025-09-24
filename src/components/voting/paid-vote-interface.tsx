@@ -146,7 +146,7 @@ export function PaidVoteInterface({
           <div className="text-center py-4">
             <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground mb-4">
-              You don't have any vote packages with remaining votes.
+              You don&apos;t have any vote packages with remaining votes.
             </p>
             <p className="text-sm text-muted-foreground">
               Purchase a vote package to start voting for {contestantName}.
@@ -203,8 +203,8 @@ export function PaidVoteInterface({
           <Alert>
             <CheckCircle className="h-4 w-4" />
             <AlertDescription>
-              Using 1 vote from "
-              {selectedOrder.votePackage?.name || 'Vote Package'}" (
+              Using 1 vote from &quot;
+              {selectedOrder.votePackage?.name || 'Vote Package'}&quot; (
               {selectedOrder.votesRemaining} votes remaining)
             </AlertDescription>
           </Alert>

@@ -32,7 +32,7 @@ export default async function AdminEditEventPage({
   }
 
   const event = response.data;
-  let enhancedEventData = { ...event };
+  const enhancedEventData = { ...event };
 
   try {
     if (event.eventType === 'VOTING_CONTEST' && event.votingContest) {

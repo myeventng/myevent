@@ -939,7 +939,6 @@ export async function getEvents(
 }
 
 // Enhanced events fetching with pagination, search, and filtering
-// Enhanced events fetching with pagination, search, and filtering including voting contests
 export async function getEventsWithFilters({
   page = 1,
   limit = 12,
@@ -2185,7 +2184,7 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
     }
 
     // Process and enhance the event data
-    let enhancedEvent = { ...event } as any;
+    const enhancedEvent = { ...event } as any;
 
     // Calculate additional metrics for standard events
     if (event.eventType === EventType.STANDARD && event.ticketTypes) {
