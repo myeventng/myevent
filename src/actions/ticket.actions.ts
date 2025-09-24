@@ -1495,3 +1495,67 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
     };
   }
 }
+
+// Add this function to your ticket.actions.ts file
+
+// Get ticket types with sold count for editing
+export async function getTicketTypesWithSalesData(
+  eventId: string
+): Promise<ActionResponse<any[]>> {
+  try {
+    const ticketTypes = await prisma.ticketType.findMany({
+      where: { eventId },
+      include: {
+        _count: {
+          select: {
+            tickets: {
+              where: {
+                status: { in: ['UNUSED', 'USED'] }, // Only count sold tickets
+              },
+            },
+          },
+        },
+        tickets: {
+          where: {
+            status: { in: ['UNUSED', 'USED'] },
+          },
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: { price: 'asc' },
+    });
+
+    // Transform the data to include sold count and deletion capability
+    const enhancedTicketTypes = ticketTypes.map((ticketType) => ({
+      id: ticketType.id,
+      name: ticketType.name,
+      price: ticketType.price,
+      quantity: ticketType.quantity,
+      description: ticketType.description,
+      maxPerUser: ticketType.maxPerUser,
+      saleStartDate: ticketType.saleStartDate,
+      saleEndDate: ticketType.saleEndDate,
+      isRefundable: ticketType.isRefundable,
+      soldCount: ticketType._count.tickets,
+      canDelete: ticketType._count.tickets === 0, // Can only delete if no tickets sold
+      tickets: ticketType.tickets,
+    }));
+
+    return {
+      success: true,
+      data: enhancedTicketTypes,
+    };
+  } catch (error) {
+    console.error(
+      `Error fetching ticket types with sales data for event ${eventId}:`,
+      error
+    );
+    return {
+      success: false,
+      message: 'Failed to fetch ticket types with sales data',
+    };
+  }
+}

@@ -225,6 +225,61 @@ export async function getPlatformFeePercentage(): Promise<number> {
   }
 }
 
+// Get platform settings for client use (no admin permission required)
+export async function getPublicPlatformSettings(): Promise<
+  ActionResponse<{
+    defaultPlatformFeePercentage: number;
+    maintenanceMode: boolean;
+    allowRegistrations: boolean;
+    paystackPublicKey: string;
+  }>
+> {
+  try {
+    // Get public settings that clients can access
+    const settings = await prisma.platformSettings.findMany({
+      where: {
+        key: {
+          in: [
+            'financial.defaultPlatformFeePercentage',
+            'general.maintenanceMode',
+            'general.allowRegistrations',
+            'financial.paystackPublicKey',
+          ],
+        },
+      },
+    });
+
+    // Convert to object
+    const settingsObj: any = {};
+    settings.forEach((setting) => {
+      settingsObj[setting.key] = setting.value;
+    });
+
+    return {
+      success: true,
+      data: {
+        defaultPlatformFeePercentage:
+          settingsObj['financial.defaultPlatformFeePercentage'] || 5,
+        maintenanceMode: settingsObj['general.maintenanceMode'] || false,
+        allowRegistrations: settingsObj['general.allowRegistrations'] !== false,
+        paystackPublicKey: settingsObj['financial.paystackPublicKey'] || '',
+      },
+    };
+  } catch (error) {
+    console.error('Error fetching public platform settings:', error);
+    return {
+      success: false,
+      message: 'Failed to fetch platform settings',
+      data: {
+        defaultPlatformFeePercentage: 5,
+        maintenanceMode: false,
+        allowRegistrations: true,
+        paystackPublicKey: '',
+      },
+    };
+  }
+}
+
 // Process refund (approve/reject)
 export async function processRefund(
   orderId: string,

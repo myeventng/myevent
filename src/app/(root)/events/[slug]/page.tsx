@@ -9,18 +9,21 @@ import {
   Tag,
   ExternalLink,
   Star,
+  Trophy,
+  Vote,
 } from 'lucide-react';
 import { getEventBySlug } from '@/actions/event.actions';
 import { getEventRatings } from '@/actions/rating.actions';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-// import { CompactRating } from '@/components/ui/ratings-display';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { EventTicketBooking } from '@/components/events/clientside/event-ticket-booking';
+import { VotingContestComponent } from '@/components/voting/voting-contest-component';
 import { EventGallery } from '@/components/events/clientside/event-gallery';
 import { EventReviews } from '@/components/events/clientside/event-reviews';
 import { ShareEventButton } from '@/components/events/clientside/share-event-button';
+import { EventType } from '@/generated/prisma';
 import Image from 'next/image';
 
 interface EventPageProps {
@@ -52,16 +55,22 @@ export async function generateMetadata({ params }: EventPageProps) {
       ? ratingsResponse.data.totalCount
       : 0;
 
-  const description = event.description
+  const isVotingContest = event.eventType === EventType.VOTING_CONTEST;
+
+  let description = event.description
     ? `${event.description.slice(0, 160)}...`
-    : `Join us for ${event.title}! ${
+    : `${isVotingContest ? 'Vote in' : 'Join us for'} ${event.title}! ${
         ratingsCount > 0
-          ? `Rated ${averageRating}/5 stars by ${ratingsCount} attendees.`
+          ? `Rated ${averageRating}/5 stars by ${ratingsCount} ${isVotingContest ? 'participants' : 'attendees'}.`
           : ''
       }`;
 
+  if (isVotingContest && event.votingContest) {
+    description = `Vote for your favorite contestant in ${event.title}! ${event.votingContest.contestants?.length || 0} contestants competing.`;
+  }
+
   return {
-    title: `${event.title} | ${format(
+    title: `${event.title} ${isVotingContest ? '| Voting Contest' : ''} | ${format(
       new Date(event.startDateTime),
       'MMM d, yyyy'
     )}`,
@@ -83,6 +92,7 @@ export async function generateMetadata({ params }: EventPageProps) {
       'event:start_time': event.startDateTime,
       'event:end_time': event.endDateTime,
       'event:location': `${event.venue.name}, ${event.venue.address}`,
+      'event:type': event.eventType,
     },
   };
 }
@@ -118,10 +128,23 @@ export default async function EventPage({ params }: EventPageProps) {
   };
 
   const isEventPast = new Date(event.endDateTime) < new Date();
-  const availableTickets = event.ticketTypes.reduce(
-    (sum: number, type: any) => sum + type.quantity,
-    0
-  );
+  const isVotingContest = event.eventType === EventType.VOTING_CONTEST;
+
+  // For voting contests, check if voting period is active
+  const isVotingActive =
+    isVotingContest &&
+    event.votingContest &&
+    (!event.votingContest.votingStartDate ||
+      new Date() >= new Date(event.votingContest.votingStartDate)) &&
+    (!event.votingContest.votingEndDate ||
+      new Date() <= new Date(event.votingContest.votingEndDate));
+
+  const availableTickets = isVotingContest
+    ? 0
+    : event.ticketTypes?.reduce(
+        (sum: number, type: any) => sum + type.quantity,
+        0
+      ) || 0;
 
   // Calculate average rating for display
   const averageRating =
@@ -133,8 +156,46 @@ export default async function EventPage({ params }: EventPageProps) {
       ? ratingsResponse.data.totalCount
       : 0;
 
+  const getEventTypeIcon = () => {
+    switch (event.eventType) {
+      case EventType.VOTING_CONTEST:
+        return <Trophy className="h-5 w-5" />;
+      case EventType.INVITE:
+        return <Users className="h-5 w-5" />;
+      default:
+        return <Calendar className="h-5 w-5" />;
+    }
+  };
+
+  const getEventTypeBadge = () => {
+    switch (event.eventType) {
+      case EventType.VOTING_CONTEST:
+        return (
+          <Badge
+            variant="secondary"
+            className="bg-purple-100 text-purple-800 border-purple-300"
+          >
+            <Trophy className="h-3 w-3 mr-1" />
+            Voting Contest
+          </Badge>
+        );
+      case EventType.INVITE:
+        return (
+          <Badge
+            variant="secondary"
+            className="bg-blue-100 text-blue-800 border-blue-300"
+          >
+            <Users className="h-3 w-3 mr-1" />
+            Invite Only
+          </Badge>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-blue-">
+    <div className="min-h-screen bg-background">
       {/* Hero Section */}
       <div className="relative">
         {event.coverImageUrl && (
@@ -156,7 +217,10 @@ export default async function EventPage({ params }: EventPageProps) {
           <div className="container mx-auto">
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <h1 className="text-4xl font-bold mb-2">{event.title}</h1>
+                <div className="flex items-center gap-3 mb-2">
+                  {getEventTypeIcon()}
+                  <h1 className="text-4xl font-bold">{event.title}</h1>
+                </div>
                 <div className="flex flex-wrap items-center gap-4 text-lg mb-2">
                   <div className="flex items-center gap-2">
                     <Calendar className="h-5 w-5" />
@@ -174,10 +238,20 @@ export default async function EventPage({ params }: EventPageProps) {
                       </span>
                     </div>
                   )}
+                  {isVotingContest && event.votingContest && (
+                    <div className="flex items-center gap-2">
+                      <Vote className="h-5 w-5" />
+                      <span>
+                        {event.votingContest._count?.votes || 0} votes cast
+                      </span>
+                    </div>
+                  )}
                 </div>
-                {event.tags && event.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {event.tags.map((tag: any) => (
+                <div className="flex flex-wrap gap-2">
+                  {getEventTypeBadge()}
+                  {event.tags &&
+                    event.tags.length > 0 &&
+                    event.tags.map((tag: any) => (
                       <Badge
                         key={tag.id}
                         variant="secondary"
@@ -187,19 +261,18 @@ export default async function EventPage({ params }: EventPageProps) {
                         {tag.name}
                       </Badge>
                     ))}
-                  </div>
-                )}
+                  {event.featured && (
+                    <Badge
+                      variant="secondary"
+                      className="bg-yellow-500/20 text-yellow-100 border-yellow-500/30"
+                    >
+                      <Star className="h-4 w-4 mr-1" />
+                      Featured
+                    </Badge>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-2">
-                {event.featured && (
-                  <Badge
-                    variant="secondary"
-                    className="bg-yellow-500/20 text-yellow-100 border-yellow-500/30"
-                  >
-                    <Star className="h-4 w-4 mr-1" />
-                    Featured
-                  </Badge>
-                )}
                 <ShareEventButton event={event} />
               </div>
             </div>
@@ -212,10 +285,37 @@ export default async function EventPage({ params }: EventPageProps) {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Left Column - Event Details */}
           <div className="lg:col-span-2 space-y-8">
+            {/* Voting Status Alert for Voting Contests */}
+            {isVotingContest && event.votingContest && (
+              <Card className="border-purple-200 bg-purple-50">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-3">
+                    <Trophy className="h-8 w-8 text-purple-600" />
+                    <div>
+                      <h3 className="font-semibold text-purple-900">
+                        {isVotingActive ? 'Voting is Live!' : 'Voting Contest'}
+                      </h3>
+                      <p className="text-purple-700">
+                        {isVotingActive
+                          ? 'Cast your vote for your favorite contestant below'
+                          : event.votingContest.votingStartDate &&
+                              new Date() <
+                                new Date(event.votingContest.votingStartDate)
+                            ? `Voting starts ${format(new Date(event.votingContest.votingStartDate), 'PPP p')}`
+                            : 'Voting has ended'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Event Description */}
             <Card>
               <CardHeader>
-                <CardTitle>About This Event</CardTitle>
+                <CardTitle>
+                  {isVotingContest ? 'About This Contest' : 'About This Event'}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="prose max-w-none">
@@ -225,17 +325,29 @@ export default async function EventPage({ params }: EventPageProps) {
                     </p>
                   ) : (
                     <p className="text-muted-foreground italic">
-                      No description provided for this event.
+                      No description provided for this{' '}
+                      {isVotingContest ? 'contest' : 'event'}.
                     </p>
                   )}
                 </div>
               </CardContent>
             </Card>
 
+            {/* Voting Contest Component */}
+            {isVotingContest && event.votingContest && (
+              <VotingContestComponent
+                event={event}
+                votingContest={event.votingContest}
+                isVotingActive={isVotingActive}
+              />
+            )}
+
             {/* Event Details */}
             <Card>
               <CardHeader>
-                <CardTitle>Event Details</CardTitle>
+                <CardTitle>
+                  {isVotingContest ? 'Contest Details' : 'Event Details'}
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid md:grid-cols-2 gap-4">
@@ -271,50 +383,114 @@ export default async function EventPage({ params }: EventPageProps) {
                     </div>
                   </div>
 
-                  {event.attendeeLimit && (
-                    <div className="flex items-center gap-3">
-                      <Users className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">Capacity</p>
-                        <p className="text-sm text-muted-foreground">
-                          {event.attendeeLimit} attendees
-                        </p>
+                  {/* Voting-specific details */}
+                  {isVotingContest && event.votingContest && (
+                    <>
+                      {event.votingContest.votingStartDate && (
+                        <div className="flex items-center gap-3">
+                          <Vote className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Voting Period</p>
+                            <p className="text-sm text-muted-foreground">
+                              {format(
+                                new Date(event.votingContest.votingStartDate),
+                                'PPP p'
+                              )}
+                              {event.votingContest.votingEndDate && (
+                                <span>
+                                  {' '}
+                                  -{' '}
+                                  {format(
+                                    new Date(event.votingContest.votingEndDate),
+                                    'PPP p'
+                                  )}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-3">
+                        <Trophy className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">Contestants</p>
+                          <p className="text-sm text-muted-foreground">
+                            {event.votingContest.contestants?.length || 0}{' '}
+                            contestants competing
+                          </p>
+                        </div>
                       </div>
-                    </div>
+
+                      <div className="flex items-center gap-3">
+                        <Users className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">Voting Type</p>
+                          <p className="text-sm text-muted-foreground">
+                            {event.votingContest.votingType === 'FREE'
+                              ? 'Free Voting'
+                              : 'Paid Voting'}
+                            {event.votingContest.allowGuestVoting &&
+                              ' (Guests allowed)'}
+                          </p>
+                        </div>
+                      </div>
+                    </>
                   )}
 
-                  {event.age && (
-                    <div className="flex items-center gap-3">
-                      <Users className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">Age Restriction</p>
-                        <p className="text-sm text-muted-foreground">
-                          {(event.age as string)
-                            .replace(/_/g, ' ')
-                            .toLowerCase()
-                            .replace(/\b\w/g, (l: string) => l.toUpperCase())}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  {/* Standard event details */}
+                  {!isVotingContest && (
+                    <>
+                      {event.attendeeLimit && (
+                        <div className="flex items-center gap-3">
+                          <Users className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Capacity</p>
+                            <p className="text-sm text-muted-foreground">
+                              {event.attendeeLimit} attendees
+                            </p>
+                          </div>
+                        </div>
+                      )}
 
-                  {event.dressCode && (
-                    <div className="flex items-center gap-3">
-                      <Tag className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">Dress Code</p>
-                        <p className="text-sm text-muted-foreground">
-                          {(event.dressCode as string)
-                            .replace(/_/g, ' ')
-                            .toLowerCase()
-                            .replace(/\b\w/g, (l: string) => l.toUpperCase())}
-                        </p>
-                      </div>
-                    </div>
+                      {event.age && (
+                        <div className="flex items-center gap-3">
+                          <Users className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Age Restriction</p>
+                            <p className="text-sm text-muted-foreground">
+                              {(event.age as string)
+                                .replace(/_/g, ' ')
+                                .toLowerCase()
+                                .replace(/\b\w/g, (l: string) =>
+                                  l.toUpperCase()
+                                )}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {event.dressCode && (
+                        <div className="flex items-center gap-3">
+                          <Tag className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Dress Code</p>
+                            <p className="text-sm text-muted-foreground">
+                              {(event.dressCode as string)
+                                .replace(/_/g, ' ')
+                                .toLowerCase()
+                                .replace(/\b\w/g, (l: string) =>
+                                  l.toUpperCase()
+                                )}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
-                {event.lateEntry && (
+                {!isVotingContest && event.lateEntry && (
                   <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                     <p className="text-sm text-amber-800">
                       <Clock className="h-4 w-4 inline mr-1" />
@@ -323,7 +499,7 @@ export default async function EventPage({ params }: EventPageProps) {
                   </div>
                 )}
 
-                {event.idRequired && (
+                {!isVotingContest && event.idRequired && (
                   <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <p className="text-sm text-blue-800">
                       Valid ID required for entry
@@ -342,7 +518,9 @@ export default async function EventPage({ params }: EventPageProps) {
             {event.embeddedVideoUrl && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Event Preview</CardTitle>
+                  <CardTitle>
+                    {isVotingContest ? 'Contest Preview' : 'Event Preview'}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="aspect-video">
@@ -435,23 +613,24 @@ export default async function EventPage({ params }: EventPageProps) {
                       rel="noopener noreferrer"
                     >
                       <ExternalLink className="h-4 w-4 mr-2" />
-                      Event Website
+                      {isVotingContest ? 'Contest Website' : 'Event Website'}
                     </a>
                   </Button>
                 </CardContent>
               </Card>
             )}
 
-            {/* Event Reviews - Updated Component */}
+            {/* Event Reviews */}
             <EventReviews
               eventId={event.id}
               eventTitle={event.title}
               initialRatings={initialRatings}
               isPastEvent={isEventPast}
+              isVotingContest={isVotingContest}
             />
           </div>
 
-          {/* Right Column - Booking & Organizer Info */}
+          {/* Right Column - Booking/Voting & Quick Info */}
           <div className="space-y-6">
             {/* Quick Facts */}
             <Card>
@@ -459,6 +638,17 @@ export default async function EventPage({ params }: EventPageProps) {
                 <CardTitle>Quick Facts</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-sm text-muted-foreground">Type</span>
+                  <span className="text-sm font-medium">
+                    {event.eventType === EventType.VOTING_CONTEST
+                      ? 'Voting Contest'
+                      : event.eventType === EventType.INVITE
+                        ? 'Invite Only'
+                        : 'Standard Event'}
+                  </span>
+                </div>
+
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">
                     Category
@@ -468,31 +658,66 @@ export default async function EventPage({ params }: EventPageProps) {
                   </span>
                 </div>
 
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Price Range
-                  </span>
-                  <span className="text-sm font-medium">
-                    {event.isFree
-                      ? 'Free'
-                      : event.ticketTypes.length > 0
-                      ? `₦${Math.min(
-                          ...event.ticketTypes.map((t: any) => t.price)
-                        )} - ₦${Math.max(
-                          ...event.ticketTypes.map((t: any) => t.price)
-                        )}`
-                      : 'N/A'}
-                  </span>
-                </div>
+                {!isVotingContest && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        Price Range
+                      </span>
+                      <span className="text-sm font-medium">
+                        {event.isFree
+                          ? 'Free'
+                          : event.ticketTypes && event.ticketTypes.length > 0
+                            ? `₦${Math.min(
+                                ...event.ticketTypes.map((t: any) => t.price)
+                              )} - ₦${Math.max(
+                                ...event.ticketTypes.map((t: any) => t.price)
+                              )}`
+                            : 'N/A'}
+                      </span>
+                    </div>
 
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Available Tickets
-                  </span>
-                  <span className="text-sm font-medium">
-                    {availableTickets} remaining
-                  </span>
-                </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        Available Tickets
+                      </span>
+                      <span className="text-sm font-medium">
+                        {availableTickets} remaining
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                {isVotingContest && event.votingContest && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        Contestants
+                      </span>
+                      <span className="text-sm font-medium">
+                        {event.votingContest.contestants?.length || 0}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        Total Votes
+                      </span>
+                      <span className="text-sm font-medium">
+                        {event.votingContest._count?.votes || 0}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        Voting Status
+                      </span>
+                      <span className="text-sm font-medium">
+                        {isVotingActive ? 'Live' : 'Ended'}
+                      </span>
+                    </div>
+                  </>
+                )}
 
                 {ratingsCount > 0 && (
                   <div className="flex justify-between">
@@ -507,11 +732,11 @@ export default async function EventPage({ params }: EventPageProps) {
               </CardContent>
             </Card>
 
-            {/* Ticket Booking */}
-            {!isEventPast && availableTickets > 0 && (
+            {/* Ticket Booking for Standard Events */}
+            {!isVotingContest && !isEventPast && availableTickets > 0 && (
               <EventTicketBooking
                 event={event}
-                ticketTypes={event.ticketTypes}
+                ticketTypes={event.ticketTypes || []}
               />
             )}
 
@@ -520,9 +745,11 @@ export default async function EventPage({ params }: EventPageProps) {
               <Card>
                 <CardContent className="p-6 text-center">
                   <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="font-semibold mb-2">Event Has Ended</h3>
+                  <h3 className="font-semibold mb-2">
+                    {isVotingContest ? 'Contest Has Ended' : 'Event Has Ended'}
+                  </h3>
                   <p className="text-sm text-muted-foreground">
-                    This event took place on{' '}
+                    This {isVotingContest ? 'contest' : 'event'} took place on{' '}
                     {format(new Date(event.startDateTime), 'PPP')}
                   </p>
                   {ratingsCount > 0 && (
@@ -548,7 +775,7 @@ export default async function EventPage({ params }: EventPageProps) {
               </Card>
             )}
 
-            {!isEventPast && availableTickets === 0 && (
+            {!isVotingContest && !isEventPast && availableTickets === 0 && (
               <Card>
                 <CardContent className="p-6 text-center">
                   <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />

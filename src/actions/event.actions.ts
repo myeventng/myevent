@@ -11,6 +11,7 @@ import {
   EventType,
 } from '@/generated/prisma';
 import { createEventNotification } from '@/actions/notification.actions';
+import { VotingContest, VotingType } from '@/generated/prisma';
 
 interface EventInput {
   title: string;
@@ -38,6 +39,21 @@ interface EventInput {
 
 interface UpdateEventInput extends EventInput {
   id: string;
+  // Add voting contest support
+  votingContest?: {
+    votingType: VotingType;
+    votePackagesEnabled?: boolean;
+    defaultVotePrice?: number;
+    allowGuestVoting?: boolean;
+    maxVotesPerUser?: number;
+    allowMultipleVotes?: boolean;
+    votingStartDate?: Date;
+    votingEndDate?: Date;
+    showLiveResults?: boolean;
+    showVoterNames?: boolean;
+    votePackages?: any[];
+  };
+  contestants?: any[];
 }
 
 interface ActionResponse<T> {
@@ -314,9 +330,10 @@ export async function createEvent(
   }
 }
 
-// Update event with proper notification workflow
+// Update event
+
 export async function updateEvent(
-  data: UpdateEventInput
+  data: UpdateEventInput & { votingContest?: any }
 ): Promise<ActionResponse<any>> {
   // Validate user permission
   const permissionCheck = await validateUserPermission();
@@ -330,7 +347,7 @@ export async function updateEvent(
   const { userId, isAdmin } = permissionCheck.userData!;
 
   try {
-    // Check if event exists
+    // Check if event exists - THIS WAS MISSING
     const existingEvent = await prisma.event.findUnique({
       where: { id: data.id },
       include: {
@@ -397,7 +414,7 @@ export async function updateEvent(
       }
     }
 
-    // Generate new slug if title changed or if slug is missing
+    // Generate new slug if needed
     let slug = existingEvent.slug;
     if (data.title !== existingEvent.title || !existingEvent.slug) {
       slug = await generateSlug(data.title, data.id);
@@ -410,70 +427,125 @@ export async function updateEvent(
       };
     }
 
-    // Get the existing tag IDs
-    const existingTagIds = existingEvent.tags.map((tag) => tag.id);
-
-    // Create arrays for disconnecting and connecting tags
+    // Handle tag updates - FIXED TYPE ANNOTATIONS
+    const existingTagIds = existingEvent.tags.map((tag: any) => tag.id);
     const disconnectTags = existingTagIds.filter(
-      (id) => !data.tagIds.includes(id)
+      (id: any) => !data.tagIds.includes(id)
     );
     const connectTags = data.tagIds.filter(
-      (id) => !existingTagIds.includes(id)
+      (id: any) => !existingTagIds.includes(id)
     );
 
-    // Determine publish status based on user role and current status
+    // Determine publish status
     let publishedStatus: PublishedStatus;
     if (isAdmin) {
-      // Admins can set any status or default to published
       publishedStatus = data.publishedStatus || 'PUBLISHED';
     } else {
-      // Organizers: if saving as draft, keep as draft, otherwise submit for review
       publishedStatus =
         data.publishedStatus === 'DRAFT' ? 'DRAFT' : 'PENDING_REVIEW';
     }
 
-    // Update event
-    const updatedEvent = await prisma.event.update({
-      where: { id: data.id },
-      data: {
-        title: data.title,
-        slug,
-        description: data.description,
-        location: data.location,
-        coverImageUrl: data.coverImageUrl,
-        startDateTime: data.startDateTime,
-        endDateTime: data.endDateTime,
-        isFree: data.isFree,
-        url: data.url,
-        lateEntry: data.lateEntry,
-        idRequired: data.idRequired,
-        attendeeLimit: data.attendeeLimit,
-        embeddedVideoUrl: data.embeddedVideoUrl,
-        dressCode: data.dressCode,
-        age: data.age,
-        imageUrls: data.imageUrls,
-        tags: {
-          disconnect: disconnectTags.map((id) => ({ id })),
-          connect: connectTags.map((id) => ({ id })),
-        },
-        category: data.categoryId
-          ? { connect: { id: data.categoryId } }
-          : { disconnect: true },
-        venue: { connect: { id: data.venueId } },
-        City: data.cityId
-          ? { connect: { id: data.cityId } }
-          : { disconnect: true },
-        publishedStatus,
-      },
-      include: {
-        tags: true,
-        category: true,
-        venue: {
-          include: {
-            city: true,
+    // Start transaction for atomic updates
+    const result = await prisma.$transaction(async (tx) => {
+      // Update the main event
+      const updatedEvent = await tx.event.update({
+        where: { id: data.id },
+        data: {
+          title: data.title,
+          slug,
+          description: data.description,
+          location: data.location,
+          coverImageUrl: data.coverImageUrl,
+          startDateTime: data.startDateTime,
+          endDateTime: data.endDateTime,
+          isFree: data.isFree,
+          url: data.url,
+          lateEntry: data.lateEntry,
+          idRequired: data.idRequired,
+          attendeeLimit: data.attendeeLimit,
+          embeddedVideoUrl: data.embeddedVideoUrl,
+          dressCode: data.dressCode,
+          age: data.age,
+          imageUrls: data.imageUrls,
+          tags: {
+            disconnect: disconnectTags.map((id: any) => ({ id })),
+            connect: connectTags.map((id: any) => ({ id })),
           },
+          category: data.categoryId
+            ? { connect: { id: data.categoryId } }
+            : { disconnect: true },
+          venue: { connect: { id: data.venueId } },
+          City: data.cityId
+            ? { connect: { id: data.cityId } }
+            : { disconnect: true },
+          publishedStatus,
         },
-      },
+        include: {
+          tags: true,
+          category: true,
+          venue: {
+            include: {
+              city: true,
+            },
+          },
+          votingContest: true, // Include voting contest in response
+        },
+      });
+
+      // Handle voting contest updates if this is a voting contest event
+      if (
+        updatedEvent.eventType === EventType.VOTING_CONTEST &&
+        data.votingContest
+      ) {
+        console.log('Updating voting contest with data:', data.votingContest);
+
+        // Check if voting contest exists
+        let votingContest = await tx.votingContest.findUnique({
+          where: { eventId: data.id },
+        });
+
+        if (votingContest) {
+          // Update existing voting contest
+          await tx.votingContest.update({
+            where: { id: votingContest.id },
+            data: {
+              votingType: data.votingContest.votingType,
+              votePackagesEnabled:
+                data.votingContest.votePackagesEnabled || false,
+              defaultVotePrice: data.votingContest.defaultVotePrice,
+              allowGuestVoting: data.votingContest.allowGuestVoting || false,
+              maxVotesPerUser: data.votingContest.maxVotesPerUser,
+              allowMultipleVotes:
+                data.votingContest.allowMultipleVotes !== false,
+              votingStartDate: data.votingContest.votingStartDate,
+              votingEndDate: data.votingContest.votingEndDate,
+              showLiveResults: data.votingContest.showLiveResults !== false,
+              showVoterNames: data.votingContest.showVoterNames || false,
+            },
+          });
+        } else {
+          // Create new voting contest if it doesn't exist
+          votingContest = await tx.votingContest.create({
+            data: {
+              eventId: data.id,
+              votingType: data.votingContest.votingType,
+              votePackagesEnabled:
+                data.votingContest.votePackagesEnabled || false,
+              defaultVotePrice: data.votingContest.defaultVotePrice,
+              allowGuestVoting: data.votingContest.allowGuestVoting || false,
+              maxVotesPerUser: data.votingContest.maxVotesPerUser,
+              allowMultipleVotes:
+                data.votingContest.allowMultipleVotes !== false,
+              votingStartDate: data.votingContest.votingStartDate,
+              votingEndDate: data.votingContest.votingEndDate,
+              showLiveResults: data.votingContest.showLiveResults !== false,
+              showVoterNames: data.votingContest.showVoterNames || false,
+            },
+          });
+        }
+      }
+
+      return updatedEvent;
     });
 
     // Create notifications based on status change
@@ -482,7 +554,6 @@ export async function updateEvent(
       publishedStatus === 'PUBLISHED' &&
       existingEvent.publishedStatus !== 'PUBLISHED'
     ) {
-      // Admin published the event - notify the organizer
       await createEventNotification(
         data.id,
         'EVENT_APPROVED',
@@ -493,13 +564,12 @@ export async function updateEvent(
       publishedStatus === 'PENDING_REVIEW' &&
       existingEvent.publishedStatus !== 'PENDING_REVIEW'
     ) {
-      // Organizer submitted for review - notify admins
       await createEventNotification(data.id, 'EVENT_SUBMITTED');
     }
 
     revalidatePath('/admin/events');
     revalidatePath('/dashboard/events');
-    revalidatePath(`/events/${updatedEvent.slug}`);
+    revalidatePath(`/events/${result.slug}`);
     revalidatePath(`/events/${data.id}`);
     revalidatePath('/events');
 
@@ -513,7 +583,7 @@ export async function updateEvent(
     return {
       success: true,
       message,
-      data: updatedEvent,
+      data: result,
     };
   } catch (error) {
     console.error('Error updating event:', error);
@@ -869,6 +939,7 @@ export async function getEvents(
 }
 
 // Enhanced events fetching with pagination, search, and filtering
+// Enhanced events fetching with pagination, search, and filtering including voting contests
 export async function getEventsWithFilters({
   page = 1,
   limit = 12,
@@ -881,6 +952,10 @@ export async function getEventsWithFilters({
   sortBy = 'startDateTime',
   sortOrder = 'asc',
   featured = false,
+  // New voting contest filters
+  eventTypes = [],
+  votingStatus = '',
+  votingType = '',
 }: {
   page?: number;
   limit?: number;
@@ -893,6 +968,9 @@ export async function getEventsWithFilters({
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
   featured?: boolean;
+  eventTypes?: string[];
+  votingStatus?: string;
+  votingType?: string;
 }): Promise<
   ActionResponse<{
     events: any[];
@@ -917,6 +995,13 @@ export async function getEventsWithFilters({
     // Add featured filter
     if (featured) {
       where.featured = true;
+    }
+
+    // Add event type filter
+    if (eventTypes.length > 0) {
+      where.eventType = {
+        in: eventTypes,
+      };
     }
 
     // Add search filter
@@ -956,6 +1041,19 @@ export async function getEventsWithFilters({
             },
           },
         },
+        // Search in contestant names for voting contests
+        {
+          votingContest: {
+            contestants: {
+              some: {
+                name: {
+                  contains: search,
+                  mode: 'insensitive',
+                },
+              },
+            },
+          },
+        },
       ];
     }
 
@@ -978,6 +1076,76 @@ export async function getEventsWithFilters({
           },
         },
       };
+    }
+
+    // Add voting contest specific filters
+    if (eventTypes.includes('VOTING_CONTEST') || votingStatus || votingType) {
+      // If filtering by voting status
+      if (votingStatus) {
+        const now = new Date();
+        switch (votingStatus) {
+          case 'upcoming':
+            where.votingContest = {
+              ...where.votingContest,
+              votingStartDate: {
+                gt: now,
+              },
+            };
+            break;
+          case 'active':
+            where.votingContest = {
+              ...where.votingContest,
+              OR: [
+                {
+                  AND: [
+                    { votingStartDate: { lte: now } },
+                    { votingEndDate: { gte: now } },
+                  ],
+                },
+                {
+                  AND: [
+                    { votingStartDate: null },
+                    { votingEndDate: { gte: now } },
+                  ],
+                },
+                {
+                  AND: [
+                    { votingStartDate: { lte: now } },
+                    { votingEndDate: null },
+                  ],
+                },
+                {
+                  AND: [{ votingStartDate: null }, { votingEndDate: null }],
+                },
+              ],
+            };
+            break;
+          case 'ended':
+            where.votingContest = {
+              ...where.votingContest,
+              votingEndDate: {
+                lt: now,
+              },
+            };
+            break;
+        }
+      }
+
+      // If filtering by voting type
+      if (votingType) {
+        where.votingContest = {
+          ...where.votingContest,
+          votingType: votingType,
+        };
+      }
+
+      // Ensure we only get events that have a voting contest when filtering by voting-specific criteria
+      if (votingStatus || votingType) {
+        where.votingContest = {
+          ...where.votingContest,
+          NOT: null,
+        };
+      }
     }
 
     // Add date range filter
@@ -1059,8 +1227,11 @@ export async function getEventsWithFilters({
       }
     }
 
-    // Add price range filter
-    if (priceRange) {
+    // Add price range filter (only for non-voting contest events or when multiple event types are selected)
+    if (
+      priceRange &&
+      (!eventTypes.includes('VOTING_CONTEST') || eventTypes.length > 1)
+    ) {
       switch (priceRange) {
         case 'free':
           where.isFree = true;
@@ -1126,6 +1297,19 @@ export async function getEventsWithFilters({
       case 'featured':
         orderBy = [{ featured: 'desc' }, { startDateTime: 'asc' }];
         break;
+      case 'votes':
+        // Sort by vote count for voting contests
+        orderBy = [
+          {
+            votingContest: {
+              _count: {
+                votes: sortOrder,
+              },
+            },
+          },
+          { startDateTime: 'asc' },
+        ];
+        break;
       default:
         orderBy = { startDateTime: sortOrder };
     }
@@ -1133,7 +1317,7 @@ export async function getEventsWithFilters({
     // Get total count for pagination
     const totalCount = await prisma.event.count({ where });
 
-    // Fetch events
+    // Fetch events with enhanced includes for voting contests
     const events = await prisma.event.findMany({
       where,
       include: {
@@ -1161,6 +1345,38 @@ export async function getEventsWithFilters({
             organizerProfile: {
               select: {
                 organizationName: true,
+              },
+            },
+          },
+        },
+        // Include voting contest data
+        votingContest: {
+          include: {
+            contestants: {
+              include: {
+                _count: {
+                  select: {
+                    votes: true,
+                  },
+                },
+              },
+              where: {
+                status: 'ACTIVE',
+              },
+              orderBy: [
+                {
+                  votes: {
+                    _count: 'desc',
+                  },
+                },
+                { contestNumber: 'asc' },
+              ],
+              take: 3, // Only get top 3 contestants for card display
+            },
+            _count: {
+              select: {
+                votes: true,
+                contestants: true,
               },
             },
           },
@@ -1567,26 +1783,626 @@ export async function bulkUnfeatureEvents(
   }
 }
 
+// Enhanced getEventById function with comprehensive nested data
 export async function getEventById(id: string): Promise<ActionResponse<any>> {
   try {
+    // First, fetch the basic event data to determine type
+    const basicEvent = await prisma.event.findUnique({
+      where: { id },
+      select: {
+        eventType: true,
+        id: true,
+      },
+    });
+
+    if (!basicEvent) {
+      return {
+        success: false,
+        message: 'Event not found',
+      };
+    }
+
+    // Build comprehensive query based on event type
     const event = await prisma.event.findUnique({
       where: { id },
       include: {
-        tags: true,
-        category: true,
-        venue: {
-          include: {
-            city: true,
+        // Basic relations for all events
+        tags: {
+          select: {
+            id: true,
+            name: true,
+            bgColor: true,
+            slug: true,
           },
         },
-        ticketTypes: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        venue: {
+          include: {
+            city: {
+              select: {
+                id: true,
+                name: true,
+                state: true,
+                population: true,
+              },
+            },
+          },
+        },
+        City: {
+          select: {
+            id: true,
+            name: true,
+            state: true,
+            population: true,
+          },
+        },
         user: {
           select: {
             id: true,
             name: true,
             email: true,
             image: true,
-            organizerProfile: true,
+            firstName: true,
+            lastName: true,
+            organizerProfile: {
+              select: {
+                id: true,
+                organizationName: true,
+                bio: true,
+                website: true,
+                organizationType: true,
+                verificationStatus: true,
+                businessRegistrationNumber: true,
+                taxIdentificationNumber: true,
+                customPlatformFee: true,
+                bankAccount: true,
+                bankCode: true,
+                accountName: true,
+              },
+            },
+          },
+        },
+
+        // Standard event specific data
+        ticketTypes: {
+          include: {
+            tickets: {
+              include: {
+                order: {
+                  select: {
+                    id: true,
+                    totalAmount: true,
+                    quantity: true,
+                    paymentStatus: true,
+                    createdAt: true,
+                    buyer: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                      },
+                    },
+                  },
+                },
+                validations: {
+                  include: {
+                    validator: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            _count: {
+              select: {
+                tickets: true,
+              },
+            },
+          },
+          orderBy: {
+            price: 'asc',
+          },
+        },
+
+        // Voting contest specific data
+        votingContest: {
+          include: {
+            contestants: {
+              include: {
+                votes: {
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        name: true,
+                        image: true,
+                      },
+                    },
+                    voteOrder: {
+                      select: {
+                        id: true,
+                        totalAmount: true,
+                        paymentStatus: true,
+                        createdAt: true,
+                      },
+                    },
+                  },
+                  orderBy: {
+                    createdAt: 'desc',
+                  },
+                },
+                _count: {
+                  select: {
+                    votes: true,
+                  },
+                },
+              },
+              orderBy: [
+                { status: 'asc' }, // ACTIVE first
+                { contestNumber: 'asc' },
+              ],
+            },
+            votePackages: {
+              orderBy: {
+                sortOrder: 'asc',
+              },
+              include: {
+                voteOrders: {
+                  include: {
+                    user: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                      },
+                    },
+                    votes: {
+                      include: {
+                        contestant: {
+                          select: {
+                            id: true,
+                            name: true,
+                            contestNumber: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                  orderBy: {
+                    createdAt: 'desc',
+                  },
+                },
+                _count: {
+                  select: {
+                    voteOrders: true,
+                  },
+                },
+              },
+            },
+            votes: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    image: true,
+                  },
+                },
+                contestant: {
+                  select: {
+                    id: true,
+                    name: true,
+                    contestNumber: true,
+                    imageUrl: true,
+                  },
+                },
+                voteOrder: {
+                  select: {
+                    id: true,
+                    totalAmount: true,
+                    paymentStatus: true,
+                    votePackage: {
+                      select: {
+                        id: true,
+                        name: true,
+                        voteCount: true,
+                        price: true,
+                      },
+                    },
+                  },
+                },
+              },
+              orderBy: {
+                createdAt: 'desc',
+              },
+            },
+            VoteOrder: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                  },
+                },
+                votePackage: {
+                  select: {
+                    id: true,
+                    name: true,
+                    voteCount: true,
+                    price: true,
+                  },
+                },
+                votes: {
+                  include: {
+                    contestant: {
+                      select: {
+                        id: true,
+                        name: true,
+                        contestNumber: true,
+                      },
+                    },
+                  },
+                },
+                notifications: {
+                  select: {
+                    id: true,
+                    type: true,
+                    status: true,
+                    createdAt: true,
+                  },
+                },
+              },
+              orderBy: {
+                createdAt: 'desc',
+              },
+            },
+            _count: {
+              select: {
+                contestants: true,
+                votes: true,
+                votePackages: true,
+                VoteOrder: true,
+              },
+            },
+          },
+        },
+
+        // Common relations for all events
+        orders: {
+          include: {
+            buyer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                image: true,
+              },
+            },
+            tickets: {
+              include: {
+                ticketType: {
+                  select: {
+                    id: true,
+                    name: true,
+                    price: true,
+                  },
+                },
+                validations: {
+                  include: {
+                    validator: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            Notification: {
+              select: {
+                id: true,
+                type: true,
+                status: true,
+                createdAt: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
+        waitingList: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                image: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+        ratings: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                image: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
+        Notification: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
+
+        // Aggregated counts for performance insights
+        _count: {
+          select: {
+            orders: true,
+            ratings: true,
+            waitingList: true,
+            Notification: true,
+          },
+        },
+      },
+    });
+
+    if (!event) {
+      return {
+        success: false,
+        message: 'Event not found',
+      };
+    }
+
+    // Process and enhance the event data
+    let enhancedEvent = { ...event } as any;
+
+    // Calculate additional metrics for standard events
+    if (event.eventType === EventType.STANDARD && event.ticketTypes) {
+      enhancedEvent.ticketTypes = event.ticketTypes.map((ticketType) => {
+        const soldTickets = ticketType.tickets.filter(
+          (ticket) => ticket.order && ticket.order.paymentStatus === 'COMPLETED'
+        );
+        const totalRevenue = soldTickets.reduce(
+          (sum, ticket) => sum + (ticket.order?.totalAmount || 0),
+          0
+        );
+        const availableQuantity = ticketType.quantity - soldTickets.length;
+
+        return {
+          ...ticketType,
+          soldCount: soldTickets.length,
+          availableCount: Math.max(0, availableQuantity),
+          totalRevenue: totalRevenue,
+          conversionRate:
+            ticketType.quantity > 0
+              ? (soldTickets.length / ticketType.quantity) * 100
+              : 0,
+        };
+      });
+
+      // Calculate overall event statistics
+      const totalTicketsSold = event.ticketTypes.reduce(
+        (sum, tt) =>
+          sum +
+          tt.tickets.filter(
+            (t) => t.order && t.order.paymentStatus === 'COMPLETED'
+          ).length,
+        0
+      );
+      const totalRevenue = event.orders
+        .filter((order) => order.paymentStatus === 'COMPLETED')
+        .reduce((sum, order) => sum + order.totalAmount, 0);
+      const totalCapacity = event.ticketTypes.reduce(
+        (sum, tt) => sum + tt.quantity,
+        0
+      );
+
+      enhancedEvent.analytics = {
+        totalTicketsSold,
+        totalRevenue,
+        totalCapacity,
+        utilizationRate:
+          totalCapacity > 0 ? (totalTicketsSold / totalCapacity) * 100 : 0,
+        averageOrderValue:
+          event.orders.length > 0 ? totalRevenue / event.orders.length : 0,
+      };
+    }
+
+    // Calculate voting contest statistics
+    if (event.eventType === EventType.VOTING_CONTEST && event.votingContest) {
+      const contest = event.votingContest;
+
+      // Calculate contestant vote counts and rankings
+      const contestantsWithStats = contest.contestants.map((contestant) => {
+        const voteCount = contestant._count.votes;
+        const recentVotes = contestant.votes.slice(0, 10); // Last 10 votes
+
+        return {
+          ...contestant,
+          voteCount,
+          recentVotes,
+          socialLinks: {
+            instagram: contestant.instagramUrl,
+            twitter: contestant.twitterUrl,
+            facebook: contestant.facebookUrl,
+          },
+        };
+      });
+
+      // Sort by vote count for ranking
+      const rankedContestants = contestantsWithStats
+        .sort((a, b) => b.voteCount - a.voteCount)
+        .map((contestant, index) => ({
+          ...contestant,
+          rank: index + 1,
+        }));
+
+      enhancedEvent.votingContest = {
+        ...contest,
+        contestants: rankedContestants,
+        analytics: {
+          totalVotes: contest._count.votes,
+          totalContestants: contest._count.contestants,
+          totalVoteOrders: contest._count.VoteOrder,
+          totalVotePackages: contest._count.votePackages,
+          averageVotesPerContestant:
+            contest._count.contestants > 0
+              ? contest._count.votes / contest._count.contestants
+              : 0,
+          topContestant: rankedContestants[0] || null,
+          votingActivity: contest.votes.slice(0, 20), // Recent 20 votes
+          revenue: contest.VoteOrder.filter(
+            (order) => order.paymentStatus === 'COMPLETED'
+          ).reduce((sum, order) => sum + order.totalAmount, 0),
+        },
+      };
+
+      // For edit form compatibility, also set contestants at root level
+      enhancedEvent.contestants = rankedContestants.map((contestant) => ({
+        id: contestant.id,
+        name: contestant.name,
+        bio: contestant.bio || '',
+        imageUrl: contestant.imageUrl || '',
+        contestNumber: contestant.contestNumber,
+        instagramUrl: contestant.instagramUrl || '',
+        twitterUrl: contestant.twitterUrl || '',
+        facebookUrl: contestant.facebookUrl || '',
+        status: contestant.status,
+        voteCount: contestant.voteCount,
+        rank: contestant.rank,
+      }));
+    }
+
+    // Calculate average rating
+    if (event.ratings && event.ratings.length > 0) {
+      const totalRating = event.ratings.reduce(
+        (sum, rating) => sum + Number(rating.rating),
+        0
+      );
+      enhancedEvent.averageRating = totalRating / event.ratings.length;
+      enhancedEvent.ratingsCount = event.ratings.length;
+    } else {
+      enhancedEvent.averageRating = 0;
+      enhancedEvent.ratingsCount = 0;
+    }
+
+    // Add computed fields for forms
+    enhancedEvent.isUpcoming = new Date(event.startDateTime) > new Date();
+    enhancedEvent.isOngoing =
+      new Date() >= new Date(event.startDateTime) &&
+      new Date() <= new Date(event.endDateTime);
+    enhancedEvent.isPast = new Date(event.endDateTime) < new Date();
+
+    // Add permissions context (you can expand this based on user role)
+    enhancedEvent.permissions = {
+      canEdit: true, // Will be determined by calling code based on user context
+      canDelete: true,
+      canPublish: true,
+      canViewAnalytics: true,
+    };
+
+    return {
+      success: true,
+      data: enhancedEvent,
+    };
+  } catch (error) {
+    console.error(
+      `Error fetching comprehensive event data for ID ${id}:`,
+      error
+    );
+
+    // Provide detailed error logging
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
+
+    return {
+      success: false,
+      message: 'Failed to fetch event details',
+    };
+  }
+}
+
+// Lightweight version for lists and basic operations
+export async function getEventByIdBasic(
+  id: string
+): Promise<ActionResponse<any>> {
+  try {
+    const event = await prisma.event.findUnique({
+      where: { id },
+      include: {
+        tags: {
+          select: {
+            id: true,
+            name: true,
+            bgColor: true,
+          },
+        },
+        category: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        venue: {
+          include: {
+            city: {
+              select: {
+                id: true,
+                name: true,
+                state: true,
+              },
+            },
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            organizerProfile: {
+              select: {
+                organizationName: true,
+              },
+            },
+          },
+        },
+        _count: {
+          select: {
+            orders: true,
+            ratings: true,
           },
         },
       },
@@ -1604,12 +2420,50 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
       data: event,
     };
   } catch (error) {
-    console.error(`Error fetching event with ID ${id}:`, error);
+    console.error(`Error fetching basic event data for ID ${id}:`, error);
     return {
       success: false,
       message: 'Failed to fetch event',
     };
   }
+}
+
+// Utility function to get event with user permission context
+export async function getEventByIdWithPermissions(
+  id: string,
+  userId?: string,
+  userRole?: string,
+  userSubRole?: string
+): Promise<ActionResponse<any>> {
+  const result = await getEventById(id);
+
+  if (!result.success || !result.data) {
+    return result;
+  }
+
+  // Add permission context
+  const event = result.data;
+  const isOwner = event.userId === userId;
+  const isAdmin = userRole === 'ADMIN';
+  const isSuperAdmin = isAdmin && userSubRole === 'SUPER_ADMIN';
+  const isStaff = isAdmin && userSubRole === 'STAFF';
+
+  event.permissions = {
+    canEdit: isOwner || isAdmin,
+    canDelete: isOwner || isSuperAdmin,
+    canPublish: isAdmin,
+    canViewAnalytics: isOwner || isAdmin,
+    canManageContestants: isOwner || isAdmin,
+    canManageTickets: isOwner || isAdmin,
+    canHardDelete: isSuperAdmin,
+    canFeature: isAdmin,
+    canApproveReject: isAdmin,
+  };
+
+  return {
+    success: true,
+    data: event,
+  };
 }
 
 // Fixed: Updated to use findFirst instead of findUnique for slug queries

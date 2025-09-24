@@ -45,6 +45,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "framer-motion": "^12.23.21",
     "fs": "^0.0.1-security",
     "handlebars": "^4.7.8",
     "jspdf": "^3.0.1",

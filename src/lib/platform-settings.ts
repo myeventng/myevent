@@ -58,7 +58,7 @@ export async function getPaystackConfig() {
 
 export async function getPlatformFee(): Promise<number> {
   const fee = await getCachedSetting('financial.defaultPlatformFeePercentage');
-  return fee || 5; // Default 5%
+  return fee || 10; // Default 10%
 }
 
 export async function isMaintenanceMode(): Promise<boolean> {

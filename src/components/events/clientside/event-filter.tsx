@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { X, Star } from 'lucide-react';
+import { X, Star, Trophy, Calendar, Users, Vote } from 'lucide-react';
 
 interface FilterState {
   search: string;
@@ -25,6 +25,10 @@ interface FilterState {
   sortBy: string;
   sortOrder: 'asc' | 'desc';
   featured: boolean;
+  // New filters for voting contests
+  eventTypes: string[];
+  votingStatus: string;
+  votingType: string;
 }
 
 interface EventsFiltersProps {
@@ -58,6 +62,18 @@ export function EventsFilters({
     }
   };
 
+  const toggleEventType = (eventType: string) => {
+    const currentTypes = filters.eventTypes || [];
+    if (currentTypes.includes(eventType)) {
+      updateFilter(
+        'eventTypes',
+        currentTypes.filter((type) => type !== eventType)
+      );
+    } else {
+      updateFilter('eventTypes', [...currentTypes, eventType]);
+    }
+  };
+
   const hasActiveFilters = () => {
     return (
       filters.categoryId ||
@@ -65,7 +81,10 @@ export function EventsFilters({
       filters.tagIds.length > 0 ||
       filters.dateRange ||
       filters.priceRange ||
-      filters.featured
+      filters.featured ||
+      (filters.eventTypes && filters.eventTypes.length > 0) ||
+      filters.votingStatus ||
+      filters.votingType
     );
   };
 
@@ -93,6 +112,103 @@ export function EventsFilters({
       </div>
 
       <Separator />
+
+      {/* Event Type Filter */}
+      <div className="space-y-3">
+        <Label className="text-base font-medium">Event Type</Label>
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="standard"
+              checked={(filters.eventTypes || []).includes('STANDARD')}
+              onCheckedChange={() => toggleEventType('STANDARD')}
+            />
+            <label
+              htmlFor="standard"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
+            >
+              <Calendar className="h-4 w-4" />
+              Standard Events
+            </label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="voting-contest"
+              checked={(filters.eventTypes || []).includes('VOTING_CONTEST')}
+              onCheckedChange={() => toggleEventType('VOTING_CONTEST')}
+            />
+            <label
+              htmlFor="voting-contest"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
+            >
+              <Trophy className="h-4 w-4 text-purple-600" />
+              Voting Contests
+            </label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="invite"
+              checked={(filters.eventTypes || []).includes('INVITE')}
+              onCheckedChange={() => toggleEventType('INVITE')}
+            />
+            <label
+              htmlFor="invite"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2"
+            >
+              <Users className="h-4 w-4 text-blue-600" />
+              Invite Only
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <Separator />
+
+      {/* Voting Contest Specific Filters */}
+      {(filters.eventTypes || []).includes('VOTING_CONTEST') && (
+        <>
+          <div className="space-y-3">
+            <Label className="text-base font-medium">Voting Status</Label>
+            <Select
+              value={filters.votingStatus || ''}
+              onValueChange={(value) =>
+                updateFilter('votingStatus', value === 'all' ? '' : value)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Any status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Any status</SelectItem>
+                <SelectItem value="upcoming">Voting Not Started</SelectItem>
+                <SelectItem value="active">Voting Active</SelectItem>
+                <SelectItem value="ended">Voting Ended</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-3">
+            <Label className="text-base font-medium">Voting Type</Label>
+            <Select
+              value={filters.votingType || ''}
+              onValueChange={(value) =>
+                updateFilter('votingType', value === 'all' ? '' : value)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Any type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Any type</SelectItem>
+                <SelectItem value="FREE">Free Voting</SelectItem>
+                <SelectItem value="PAID">Paid Voting</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Separator />
+        </>
+      )}
 
       {/* Category Filter */}
       <div className="space-y-3">
@@ -169,29 +285,35 @@ export function EventsFilters({
 
       <Separator />
 
-      {/* Price Range Filter */}
-      <div className="space-y-3">
-        <Label className="text-base font-medium">Price Range</Label>
-        <Select
-          value={filters.priceRange}
-          onValueChange={(value) =>
-            updateFilter('priceRange', value === 'all' ? '' : value)
-          }
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Any price" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Any price</SelectItem>
-            <SelectItem value="free">Free events</SelectItem>
-            <SelectItem value="under_5000">Under ₦5,000</SelectItem>
-            <SelectItem value="5000_20000">₦5,000 - ₦20,000</SelectItem>
-            <SelectItem value="over_20000">Over ₦20,000</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Price Range Filter - Only show for non-voting contests */}
+      {!(filters.eventTypes || []).includes('VOTING_CONTEST') ||
+      (filters.eventTypes || []).length > 1 ||
+      (filters.eventTypes || []).length === 0 ? (
+        <>
+          <div className="space-y-3">
+            <Label className="text-base font-medium">Price Range</Label>
+            <Select
+              value={filters.priceRange}
+              onValueChange={(value) =>
+                updateFilter('priceRange', value === 'all' ? '' : value)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Any price" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Any price</SelectItem>
+                <SelectItem value="free">Free events</SelectItem>
+                <SelectItem value="under_5000">Under ₦5,000</SelectItem>
+                <SelectItem value="5000_20000">₦5,000 - ₦20,000</SelectItem>
+                <SelectItem value="over_20000">Over ₦20,000</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-      <Separator />
+          <Separator />
+        </>
+      ) : null}
 
       {/* Tags Filter */}
       <div className="space-y-3">
@@ -286,6 +408,30 @@ export function EventsFilters({
                   filterOptions.cities.find((c) => c.id === filters.cityId)
                     ?.name
                 }
+              </div>
+            )}
+            {filters.eventTypes && filters.eventTypes.length > 0 && (
+              <div>
+                • Event Types:{' '}
+                {filters.eventTypes
+                  .map((type) =>
+                    type === 'VOTING_CONTEST'
+                      ? 'Voting Contests'
+                      : type === 'INVITE'
+                        ? 'Invite Only'
+                        : 'Standard Events'
+                  )
+                  .join(', ')}
+              </div>
+            )}
+            {filters.votingStatus && (
+              <div>
+                • Voting Status: {filters.votingStatus.replace('_', ' ')}
+              </div>
+            )}
+            {filters.votingType && (
+              <div>
+                • Voting Type: {filters.votingType === 'FREE' ? 'Free' : 'Paid'}
               </div>
             )}
             {filters.tagIds.length > 0 && (

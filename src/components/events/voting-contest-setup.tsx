@@ -59,7 +59,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { getPlatformFee } from '@/lib/platform-settings';
+import { getPublicPlatformSettings } from '@/actions/platform-settings.actions';
 import { toast } from 'sonner';
 
 // Schema for vote package
@@ -167,10 +167,15 @@ export function VotingContestSetup({
   useEffect(() => {
     const loadPlatformFee = async () => {
       try {
-        const fee = await getPlatformFee();
-        setPlatformFeePercentage(fee);
+        const result = await getPublicPlatformSettings();
+        if (result.success && result.data) {
+          setPlatformFeePercentage(result.data.defaultPlatformFeePercentage);
+        } else {
+          setPlatformFeePercentage(10);
+        }
       } catch (error) {
         console.error('Error loading platform fee:', error);
+        setPlatformFeePercentage(10);
       }
     };
 

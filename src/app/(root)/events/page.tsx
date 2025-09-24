@@ -2,7 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useInView } from 'react-intersection-observer';
-import { SlidersHorizontal, Calendar, Loader2 } from 'lucide-react';
+import {
+  SlidersHorizontal,
+  Calendar,
+  Loader2,
+  Trophy,
+  Vote,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -40,6 +46,10 @@ interface FilterState {
   sortBy: string;
   sortOrder: 'asc' | 'desc';
   featured: boolean;
+  // New filters for voting contests
+  eventTypes: string[];
+  votingStatus: string;
+  votingType: string;
 }
 
 export default function EnhancedAllEventsPage() {
@@ -52,7 +62,7 @@ export default function EnhancedAllEventsPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isError, setIsError] = useState(false);
 
-  // Filter state
+  // Filter state with new voting contest filters
   const [filters, setFilters] = useState<FilterState>({
     search: '',
     categoryId: '',
@@ -63,6 +73,9 @@ export default function EnhancedAllEventsPage() {
     sortBy: 'startDateTime',
     sortOrder: 'asc',
     featured: false,
+    eventTypes: [],
+    votingStatus: '',
+    votingType: '',
   });
 
   // UI state
@@ -86,7 +99,7 @@ export default function EnhancedAllEventsPage() {
     rootMargin: '100px',
   });
 
-  // Fetch events function
+  // Fetch events function with new filters
   const fetchEvents = useCallback(
     async (page: number = 1, reset: boolean = false) => {
       try {
@@ -109,6 +122,9 @@ export default function EnhancedAllEventsPage() {
           sortBy: filters.sortBy,
           sortOrder: filters.sortOrder,
           featured: filters.featured,
+          eventTypes: filters.eventTypes,
+          votingStatus: filters.votingStatus,
+          votingType: filters.votingType,
         });
 
         if (!response.success) {
@@ -149,6 +165,9 @@ export default function EnhancedAllEventsPage() {
       filters.sortBy,
       filters.sortOrder,
       filters.featured,
+      filters.eventTypes,
+      filters.votingStatus,
+      filters.votingType,
     ]
   );
 
@@ -197,6 +216,9 @@ export default function EnhancedAllEventsPage() {
       sortBy: 'startDateTime',
       sortOrder: 'asc',
       featured: false,
+      eventTypes: [],
+      votingStatus: '',
+      votingType: '',
     });
   }, []);
 
@@ -209,6 +231,9 @@ export default function EnhancedAllEventsPage() {
     if (filters.dateRange) count++;
     if (filters.priceRange) count++;
     if (filters.featured) count++;
+    if (filters.eventTypes.length > 0) count++;
+    if (filters.votingStatus) count++;
+    if (filters.votingType) count++;
     return count;
   }, [filters]);
 
@@ -217,7 +242,6 @@ export default function EnhancedAllEventsPage() {
   // Handle hero search
   const handleHeroSearch = () => {
     // The search will automatically trigger due to the debounced effect
-    // You can add additional logic here if needed
   };
 
   // Get unique cities and calculate stats
@@ -227,22 +251,37 @@ export default function EnhancedAllEventsPage() {
     0
   );
 
+  // Get event type counts for better UX
+  const getEventTypeStats = () => {
+    const standardEvents = events.filter(
+      (e) => e.eventType === 'STANDARD'
+    ).length;
+    const votingContests = events.filter(
+      (e) => e.eventType === 'VOTING_CONTEST'
+    ).length;
+    const inviteEvents = events.filter((e) => e.eventType === 'INVITE').length;
+
+    return { standardEvents, votingContests, inviteEvents };
+  };
+
+  const eventTypeStats = getEventTypeStats();
+
   return (
     <div className="min-h-screen bg-background">
       {/* Hero Section */}
       <PageTitleHero
         title="Discover Amazing Events"
         subtitle="🎉 Find Your Next Adventure"
-        description="From concerts and festivals to workshops and conferences, discover events that match your interests and connect with your community."
+        description="From concerts and festivals to workshops and voting contests, discover events that match your interests and connect with your community."
         showSearch={true}
-        searchPlaceholder="Search events, venues, or organizers..."
+        searchPlaceholder="Search events, contests, venues, or organizers..."
         searchValue={filters.search}
         onSearchChange={(value) => updateFilter('search', value)}
         onSearchSubmit={handleHeroSearch}
         stats={{
           totalEvents: totalCount,
           totalLocations: uniqueCities,
-          totalAttendees: Math.max(totalAttendees, 1000), // Minimum display value
+          totalAttendees: Math.max(totalAttendees, 1000),
         }}
         height="lg"
         backgroundImage="/assets/images/events-hero-bg.jpg"
@@ -258,9 +297,39 @@ export default function EnhancedAllEventsPage() {
                 {isLoading
                   ? 'Loading events...'
                   : isError
-                  ? 'Error loading events'
-                  : `${totalCount} event${totalCount !== 1 ? 's' : ''} found`}
+                    ? 'Error loading events'
+                    : `${totalCount} event${totalCount !== 1 ? 's' : ''} found`}
               </div>
+
+              {/* Event Type Stats */}
+              {!isLoading && !isError && totalCount > 0 && (
+                <div className="hidden md:flex items-center gap-2">
+                  {eventTypeStats.standardEvents > 0 && (
+                    <Badge variant="outline" className="text-xs">
+                      <Calendar className="h-3 w-3 mr-1" />
+                      {eventTypeStats.standardEvents} Events
+                    </Badge>
+                  )}
+                  {eventTypeStats.votingContests > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="text-xs text-purple-600 border-purple-300"
+                    >
+                      <Trophy className="h-3 w-3 mr-1" />
+                      {eventTypeStats.votingContests} Contests
+                    </Badge>
+                  )}
+                  {eventTypeStats.inviteEvents > 0 && (
+                    <Badge
+                      variant="outline"
+                      className="text-xs text-blue-600 border-blue-300"
+                    >
+                      <Calendar className="h-3 w-3 mr-1" />
+                      {eventTypeStats.inviteEvents} Invite Only
+                    </Badge>
+                  )}
+                </div>
+              )}
 
               {/* Sort Dropdown */}
               <Select
@@ -285,6 +354,9 @@ export default function EnhancedAllEventsPage() {
                   <SelectItem value="title-desc">Title: Z to A</SelectItem>
                   <SelectItem value="featured-desc">Featured First</SelectItem>
                   <SelectItem value="createdAt-desc">Recently Added</SelectItem>
+                  <SelectItem value="votes-desc">
+                    Most Votes (Contests)
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -306,8 +378,8 @@ export default function EnhancedAllEventsPage() {
                 <SheetHeader>
                   <SheetTitle>Filter Events</SheetTitle>
                   <SheetDescription>
-                    Narrow down events to find exactly what you&apos;re looking
-                    for
+                    Narrow down events and contests to find exactly what you're
+                    looking for
                   </SheetDescription>
                 </SheetHeader>
 
@@ -356,6 +428,52 @@ export default function EnhancedAllEventsPage() {
                   }
                   <button
                     onClick={() => updateFilter('cityId', '')}
+                    className="ml-1 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
+
+              {filters.eventTypes.length > 0 && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  Types:{' '}
+                  {filters.eventTypes
+                    .map((type) =>
+                      type === 'VOTING_CONTEST'
+                        ? 'Contests'
+                        : type === 'INVITE'
+                          ? 'Invite Only'
+                          : 'Events'
+                    )
+                    .join(', ')}
+                  <button
+                    onClick={() => updateFilter('eventTypes', [])}
+                    className="ml-1 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
+
+              {filters.votingStatus && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  <Vote className="h-3 w-3" />
+                  Voting: {filters.votingStatus.replace('_', ' ')}
+                  <button
+                    onClick={() => updateFilter('votingStatus', '')}
+                    className="ml-1 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
+
+              {filters.votingType && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  {filters.votingType === 'FREE' ? 'Free' : 'Paid'} Voting
+                  <button
+                    onClick={() => updateFilter('votingType', '')}
                     className="ml-1 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
                   >
                     ×
@@ -457,13 +575,25 @@ export default function EnhancedAllEventsPage() {
               <Card className="max-w-md mx-auto">
                 <CardContent className="p-6 text-center">
                   <div className="text-muted-foreground mb-4">
-                    <Calendar className="h-12 w-12 mx-auto" />
+                    {filters.eventTypes.includes('VOTING_CONTEST') &&
+                    filters.eventTypes.length === 1 ? (
+                      <Trophy className="h-12 w-12 mx-auto" />
+                    ) : (
+                      <Calendar className="h-12 w-12 mx-auto" />
+                    )}
                   </div>
-                  <h3 className="font-semibold mb-2">No Events Found</h3>
+                  <h3 className="font-semibold mb-2">
+                    No{' '}
+                    {filters.eventTypes.includes('VOTING_CONTEST') &&
+                    filters.eventTypes.length === 1
+                      ? 'Contests'
+                      : 'Events'}{' '}
+                    Found
+                  </h3>
                   <p className="text-muted-foreground mb-4">
                     {activeFiltersCount > 0
-                      ? 'No events match your current filters. Try adjusting your search criteria.'
-                      : 'No events are currently available. Check back later for new events.'}
+                      ? `No ${filters.eventTypes.includes('VOTING_CONTEST') && filters.eventTypes.length === 1 ? 'contests' : 'events'} match your current filters. Try adjusting your search criteria.`
+                      : `No ${filters.eventTypes.includes('VOTING_CONTEST') && filters.eventTypes.length === 1 ? 'contests' : 'events'} are currently available. Check back later for new ones.`}
                   </p>
                   {activeFiltersCount > 0 && (
                     <Button variant="outline" onClick={clearAllFilters}>
@@ -498,7 +628,7 @@ export default function EnhancedAllEventsPage() {
             {/* End of Results */}
             {!hasMore && events.length > 0 && (
               <div className="text-center py-8 text-muted-foreground">
-                <p>You&apos;ve reached the end of the events list.</p>
+                <p>You've reached the end of the events list.</p>
                 <p className="text-sm mt-1">
                   Showing all {events.length} events
                 </p>
