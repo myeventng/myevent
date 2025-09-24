@@ -588,7 +588,7 @@ export function ComprehensiveVotingInterface({
               <div className="text-center py-4">
                 <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
                 <p className="text-muted-foreground">
-                  You haven't purchased any votes yet.
+                  You haven&apos;t purchased any votes yet.
                 </p>
               </div>
             )}
