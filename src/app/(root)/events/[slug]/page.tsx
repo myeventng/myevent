@@ -196,7 +196,7 @@ export default async function EventPage({ params }: EventPageProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Hero Section - Shoobs Style */}
+      {/* Hero Section*/}
       <div className="relative bg-black">
         {/* Background overlay image */}
         {event.coverImageUrl && (
@@ -215,41 +215,43 @@ export default async function EventPage({ params }: EventPageProps) {
         )}
 
         {/* Content container */}
-        <div className="relative container mx-auto px-4 py-8 md:py-12">
+        <div className="relative container mx-auto px-4 py-8 md:py-12 pt-28 md:pt-32">
           <div className="grid md:grid-cols-2 gap-8 items-start">
             {/* Left: Featured Image */}
-            <div className="w-full">
-              {event.imageUrls && event.imageUrls[0] ? (
-                <div className="aspect-[4/3] md:aspect-square overflow-hidden rounded-lg shadow-2xl">
-                  <Image
-                    width={600}
-                    height={600}
-                    unoptimized
-                    priority
-                    quality={100}
-                    src={event.imageUrls[0]}
-                    alt={event.title}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ) : event.coverImageUrl ? (
-                <div className="aspect-[4/3] md:aspect-square overflow-hidden rounded-lg shadow-2xl">
-                  <Image
-                    width={600}
-                    height={600}
-                    unoptimized
-                    priority
-                    quality={100}
-                    src={event.coverImageUrl}
-                    alt={event.title}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ) : (
-                <div className="aspect-[4/3] md:aspect-square bg-gray-800 rounded-lg shadow-2xl flex items-center justify-center">
-                  <Calendar className="h-24 w-24 text-gray-600" />
-                </div>
-              )}
+            <div className="mb-6 md:mb-20 relative">
+              <div className="w-full max-w-md mx-auto">
+                {event.imageUrls && event.imageUrls[0] ? (
+                  <div className="aspect-[4/3] md:aspect-square overflow-hidden rounded-lg shadow-2xl">
+                    <Image
+                      width={600}
+                      height={600}
+                      unoptimized
+                      priority
+                      quality={100}
+                      src={event.imageUrls[0]}
+                      alt={event.title}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : event.coverImageUrl ? (
+                  <div className="aspect-[4/3] md:aspect-square overflow-hidden rounded-lg shadow-2xl">
+                    <Image
+                      width={600}
+                      height={600}
+                      unoptimized
+                      priority
+                      quality={100}
+                      src={event.coverImageUrl}
+                      alt={event.title}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="aspect-[4/3] md:aspect-square bg-gray-800 rounded-lg shadow-2xl flex items-center justify-center">
+                    <Calendar className="h-24 w-24 text-gray-600" />
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Right: Event Details */}
