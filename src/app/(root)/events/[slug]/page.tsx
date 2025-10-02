@@ -196,10 +196,11 @@ export default async function EventPage({ params }: EventPageProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Hero Section */}
-      <div className="relative">
+      {/* Hero Section - Shoobs Style */}
+      <div className="relative bg-black">
+        {/* Background overlay image */}
         {event.coverImageUrl && (
-          <div className="aspect-[21/9] w-full overflow-hidden">
+          <div className="absolute inset-0 opacity-20">
             <Image
               fill
               priority
@@ -207,72 +208,153 @@ export default async function EventPage({ params }: EventPageProps) {
               unoptimized
               sizes="100vw"
               src={event.coverImageUrl}
-              alt={event.title}
-              className="h-full w-full object-cover"
+              alt=""
+              className="h-full w-full object-cover blur-sm"
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/60" />
           </div>
         )}
-        <div className="absolute bottom-5 left-0 right-0 p-6 text-white">
-          <div className="container mx-auto">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
+
+        {/* Content container */}
+        <div className="relative container mx-auto px-4 py-8 md:py-12">
+          <div className="grid md:grid-cols-2 gap-8 items-start">
+            {/* Left: Featured Image */}
+            <div className="w-full">
+              {event.imageUrls && event.imageUrls[0] ? (
+                <div className="aspect-[4/3] md:aspect-square overflow-hidden rounded-lg shadow-2xl">
+                  <Image
+                    width={600}
+                    height={600}
+                    unoptimized
+                    priority
+                    quality={100}
+                    src={event.imageUrls[0]}
+                    alt={event.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ) : event.coverImageUrl ? (
+                <div className="aspect-[4/3] md:aspect-square overflow-hidden rounded-lg shadow-2xl">
+                  <Image
+                    width={600}
+                    height={600}
+                    unoptimized
+                    priority
+                    quality={100}
+                    src={event.coverImageUrl}
+                    alt={event.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="aspect-[4/3] md:aspect-square bg-gray-800 rounded-lg shadow-2xl flex items-center justify-center">
+                  <Calendar className="h-24 w-24 text-gray-600" />
+                </div>
+              )}
+            </div>
+
+            {/* Right: Event Details */}
+            <div className="text-white space-y-6">
+              {/* Event Type Badge */}
+              <div className="flex items-center gap-2">
+                {getEventTypeBadge()}
+                {event.featured && (
+                  <Badge
+                    variant="secondary"
+                    className="bg-yellow-500/20 text-yellow-100 border-yellow-500/30"
+                  >
+                    <Star className="h-4 w-4 mr-1" />
+                    Featured
+                  </Badge>
+                )}
+              </div>
+
+              {/* Title */}
+              <div>
+                <div className="flex items-start gap-3 mb-3">
                   {getEventTypeIcon()}
-                  <h1 className="text-4xl font-bold">{event.title}</h1>
-                </div>
-                <div className="flex flex-wrap items-center gap-4 text-lg mb-2">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5" />
-                    <span>{formatDateTime(event.startDateTime)}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-5 w-5" />
-                    <span>{event.venue.name}</span>
-                  </div>
-                  {ratingsCount > 0 && (
-                    <div className="flex items-center gap-2">
-                      <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
-                      <span>
-                        {averageRating.toFixed(1)} ({ratingsCount} reviews)
-                      </span>
-                    </div>
-                  )}
-                  {isVotingContest && event.votingContest && (
-                    <div className="flex items-center gap-2">
-                      <Vote className="h-5 w-5" />
-                      <span>
-                        {event.votingContest._count?.votes || 0} votes cast
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {getEventTypeBadge()}
-                  {event.tags &&
-                    event.tags.length > 0 &&
-                    event.tags.map((tag: any) => (
-                      <Badge
-                        key={tag.id}
-                        variant="secondary"
-                        style={{ backgroundColor: tag.bgColor }}
-                        className="text-white"
-                      >
-                        {tag.name}
-                      </Badge>
-                    ))}
-                  {event.featured && (
-                    <Badge
-                      variant="secondary"
-                      className="bg-yellow-500/20 text-yellow-100 border-yellow-500/30"
-                    >
-                      <Star className="h-4 w-4 mr-1" />
-                      Featured
-                    </Badge>
-                  )}
+                  <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
+                    {event.title}
+                  </h1>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+
+              {/* Date & Time */}
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <Calendar className="h-5 w-5 flex-shrink-0 mt-1" />
+                  <div>
+                    <p className="font-semibold">Date & Time</p>
+                    <p className="text-gray-300">
+                      {format(
+                        new Date(event.startDateTime),
+                        'EEEE, MMMM d, yyyy'
+                      )}
+                    </p>
+                    <p className="text-gray-300">
+                      {formatTime(event.startDateTime)} -{' '}
+                      {formatTime(event.endDateTime)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Location */}
+                <div className="flex items-start gap-3">
+                  <MapPin className="h-5 w-5 flex-shrink-0 mt-1" />
+                  <div>
+                    <p className="font-semibold">Location</p>
+                    <p className="text-gray-300">{event.venue.name}</p>
+                    <p className="text-gray-300">{event.venue.address}</p>
+                    {event.venue.city && (
+                      <p className="text-gray-300">{event.venue.city.name}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Rating */}
+                {ratingsCount > 0 && (
+                  <div className="flex items-center gap-3">
+                    <Star className="h-5 w-5 fill-yellow-400 text-yellow-400 flex-shrink-0" />
+                    <div>
+                      <p className="font-semibold">Rating</p>
+                      <p className="text-gray-300">
+                        {averageRating.toFixed(1)}/5 ({ratingsCount} reviews)
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Voting Stats */}
+                {isVotingContest && event.votingContest && (
+                  <div className="flex items-center gap-3">
+                    <Vote className="h-5 w-5 flex-shrink-0" />
+                    <div>
+                      <p className="font-semibold">Votes Cast</p>
+                      <p className="text-gray-300">
+                        {event.votingContest._count?.votes || 0} votes
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Tags */}
+              {event.tags && event.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {event.tags.map((tag: any) => (
+                    <Badge
+                      key={tag.id}
+                      variant="secondary"
+                      style={{ backgroundColor: tag.bgColor }}
+                      className="text-white"
+                    >
+                      {tag.name}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {/* Share Button */}
+              <div className="pt-4">
                 <ShareEventButton event={event} />
               </div>
             </div>
