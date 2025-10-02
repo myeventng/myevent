@@ -65,6 +65,7 @@ interface Event {
   title: string;
   description?: string;
   coverImageUrl?: string;
+  imageUrls: string[];
   startDateTime: string;
   endDateTime: string;
   venue: {

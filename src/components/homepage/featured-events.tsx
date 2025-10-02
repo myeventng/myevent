@@ -15,6 +15,7 @@ interface Event {
   title: string;
   description?: string;
   coverImageUrl?: string;
+  imageUrls: string[];
   startDateTime: string;
   venue: {
     name: string;
@@ -69,11 +70,15 @@ export const FeaturedEventsSection: React.FC<FeaturedEventsSectionProps> = ({
               className="group relative overflow-hidden rounded-2xl bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-all duration-300"
             >
               <div className="aspect-[4/3] overflow-hidden">
-                {event.coverImageUrl ? (
+                {event.imageUrls || event.coverImageUrl ? (
                   <Image
                     width={500}
                     height={500}
-                    src={event.coverImageUrl}
+                    src={
+                      event.imageUrls[0] ||
+                      event.coverImageUrl ||
+                      '/placeholder.png'
+                    }
                     alt={event.title}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                   />

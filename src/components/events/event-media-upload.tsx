@@ -16,7 +16,8 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { FileUploader } from '@/components/layout/file-uploader';
-import { VideoIcon } from 'lucide-react';
+import { VideoIcon, Info } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 // Form schema for this step
 const formSchema = z.object({
@@ -96,6 +97,18 @@ export function EventMediaUpload({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Cover Image</FormLabel>
+
+                <Alert className="mb-4">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Usage:</strong> This image will be used in the
+                    homepage slider and event detail page.
+                    <br />
+                    <strong>Recommended dimension:</strong> 1200x630 pixels
+                    (maintains 16:9 aspect ratio)
+                  </AlertDescription>
+                </Alert>
+
                 <FormControl>
                   <FileUploader
                     onFieldChange={field.onChange}
@@ -119,6 +132,21 @@ export function EventMediaUpload({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Event Gallery</FormLabel>
+
+                <Alert className="mb-4">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Usage:</strong> The first image will be used as the
+                    featured image in event cards, listings, and thumbnails.
+                    <br />
+                    <strong>Recommended dimension:</strong> 800x600 pixels
+                    (maintains 4:3 aspect ratio for better card display)
+                    <br />
+                    <strong>Additional images:</strong> Will appear in the event
+                    gallery section.
+                  </AlertDescription>
+                </Alert>
+
                 <FormControl>
                   <FileUploader
                     onFieldChange={field.onChange}
@@ -131,7 +159,8 @@ export function EventMediaUpload({
                 </FormControl>
                 <FormDescription>
                   Upload additional images for your event gallery (up to 5
-                  images).
+                  images). The first image is particularly important as it will
+                  be your primary display image.
                 </FormDescription>
                 <FormMessage />
               </FormItem>

@@ -27,6 +27,7 @@ interface EventCardProps {
     startDateTime: string;
     endDateTime: string;
     coverImageUrl?: string;
+    imageUrls: string[];
     isFree: boolean;
     venue: {
       name: string;
@@ -143,7 +144,7 @@ export function EventCard({ event }: EventCardProps) {
             unoptimized
             priority
             quality={90}
-            src={event.coverImageUrl}
+            src={event.imageUrls[0] || event.coverImageUrl}
             alt={event.title}
             className="w-full h-full object-cover"
           />
