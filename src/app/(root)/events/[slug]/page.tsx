@@ -273,8 +273,8 @@ export default async function EventPage({ params }: EventPageProps) {
               {/* Title */}
               <div>
                 <div className="flex items-start gap-3 mb-3">
-                  {getEventTypeIcon()}
-                  <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
+                  {/* {getEventTypeIcon()} */}
+                  <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold leading-tight">
                     {event.title}
                   </h1>
                 </div>
