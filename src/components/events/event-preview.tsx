@@ -988,7 +988,7 @@ export function EventPreview({
                         <div>
                           <h4 className="font-medium text-blue-900">Seating Arrangement Enabled</h4>
                           <p className="text-sm text-blue-800 mt-1">
-                            After saving this event, you'll be able to create tables and assign guests to specific seats from the event management page. Navigate to the "Seating" tab to configure your venue layout.
+                            After saving this event, you&apos;ll be able to create tables and assign guests to specific seats from the event management page. Navigate to the &quot;Seating&quot; tab to configure your venue layout.
                           </p>
                         </div>
                       </div>

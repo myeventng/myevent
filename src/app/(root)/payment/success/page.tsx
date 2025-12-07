@@ -41,7 +41,7 @@ export default async function PaymentSuccess({
         <main className="mx-auto max-w-2xl py-44 px-4">
           <h1 className="text-2xl font-bold mb-2">Order Not Found</h1>
           <p className="text-muted-foreground mb-6">
-            We couldn't find your order. Please contact support if you need
+            We couldn&apos;t find your order. Please contact support if you need
             assistance.
           </p>
           <Link className="underline" href="/events">
@@ -138,7 +138,7 @@ export default async function PaymentSuccess({
       <main className="mx-auto max-w-2xl py-44 px-4">
         <h1 className="text-2xl font-bold mb-2">Order Not Found</h1>
         <p className="text-muted-foreground mb-6">
-          We couldn't find your order. Please contact support if you need
+          We couldn&apos;t find your order. Please contact support if you need
           assistance.
         </p>
         <Link className="underline" href="/events">

@@ -173,7 +173,7 @@ export function InviteOnlySetup({
           {inviteOnly.enableSeatingArrangement && (
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-700">
-                ℹ️ After creating your event, you'll be able to:
+                ℹ️ After creating your event, you&apos;ll be able to:
               </p>
               <ul className="text-sm text-blue-700 mt-2 space-y-1 ml-4 list-disc">
                 <li>Create tables with different shapes and capacities</li>
@@ -245,7 +245,7 @@ export function InviteOnlySetup({
             <div className="space-y-0.5">
               <Label htmlFor="sendAutoReminders">Send Auto Reminders</Label>
               <p className="text-sm text-muted-foreground">
-                Automatically remind guests who haven't RSVP'd
+                Automatically remind guests who haven&apos;t RSVP&apos;d
               </p>
             </div>
             <Switch

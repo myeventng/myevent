@@ -573,7 +573,7 @@ export function EventTicketBooking({
                   <Alert className="border-purple-200 bg-purple-50">
                     <AlertCircle className="h-4 w-4 text-purple-600" />
                     <AlertDescription className="text-purple-800">
-                      You'll need to sign in or create an account to complete
+                      You&apos;ll need to sign in or create an account to complete
                       your booking.
                     </AlertDescription>
                   </Alert>

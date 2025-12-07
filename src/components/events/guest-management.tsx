@@ -476,7 +476,7 @@ export function GuestManagement({
                 <div>
                   <h4 className="font-medium text-blue-900">Seating Arrangement Enabled</h4>
                   <p className="text-sm text-blue-800 mt-1">
-                    After saving the event, you'll be able to manage table arrangements and assign guests
+                    After saving the event, you&apos;ll be able to manage table arrangements and assign guests
                     to specific seats right here in the Guest Management tab.
                   </p>
                 </div>

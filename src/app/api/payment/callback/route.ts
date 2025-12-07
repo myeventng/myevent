@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { completeOrder } from '@/actions/order.actions';
 import { verifyVotePayment } from '@/actions/voting-contest.actions';
+import crypto from 'crypto';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -146,7 +147,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
-    const crypto = require('crypto');
+    // Remove the require() and use the imported crypto
     const hash = crypto
       .createHmac('sha512', secretKey)
       .update(JSON.stringify(body))
