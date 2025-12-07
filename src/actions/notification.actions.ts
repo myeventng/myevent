@@ -171,7 +171,7 @@ async function sendEmailForNotification(notification: any) {
   }
 }
 
-// MISSING FUNCTION: Create ticket notification
+// FIXED FUNCTION: Create ticket notification
 export async function createTicketNotification(
   orderId: string,
   type: 'TICKET_PURCHASED' | 'REFUND_REQUESTED' | 'REFUND_PROCESSED',
@@ -202,28 +202,38 @@ export async function createTicketNotification(
       };
     }
 
+    // Check if buyer exists for proper null handling
+    if (!order.buyer) {
+      return {
+        success: false,
+        message: 'Order buyer not found',
+      };
+    }
+
     const notifications = [];
 
     switch (type) {
       case 'TICKET_PURCHASED':
-        // Notify the buyer
-        const buyerNotification = await createNotification({
-          type: 'TICKET_PURCHASED',
-          title: 'Tickets Purchased Successfully! 🎟️',
-          message: `Your ${order.quantity} ticket(s) for "${order.event.title}" have been confirmed. Check your email for your tickets.`,
-          actionUrl: `/dashboard/tickets`,
-          userId: order.buyerId,
-          metadata: {
-            orderId: order.id,
-            eventId: order.eventId,
-            eventTitle: order.event.title,
-            quantity: order.quantity,
-            totalAmount: order.totalAmount,
-            purchasedAt: new Date().toISOString(),
-          },
-          sendEmail: false, // Email will be sent separately with tickets
-        });
-        notifications.push(buyerNotification);
+        // Notify the buyer - only if buyerId exists
+        if (order.buyerId) {
+          const buyerNotification = await createNotification({
+            type: 'TICKET_PURCHASED',
+            title: 'Tickets Purchased Successfully! 🎟️',
+            message: `Your ${order.quantity} ticket(s) for "${order.event.title}" have been confirmed. Check your email for your tickets.`,
+            actionUrl: `/dashboard/tickets`,
+            userId: order.buyerId,
+            metadata: {
+              orderId: order.id,
+              eventId: order.eventId,
+              eventTitle: order.event.title,
+              quantity: order.quantity,
+              totalAmount: order.totalAmount,
+              purchasedAt: new Date().toISOString(),
+            },
+            sendEmail: false, // Email will be sent separately with tickets
+          });
+          notifications.push(buyerNotification);
+        }
 
         // Notify the organizer
         if (order.event.userId) {
@@ -270,43 +280,50 @@ export async function createTicketNotification(
         });
         notifications.push(refundRequestNotification);
 
-        // Notify the buyer that request was submitted
-        const buyerRefundNotification = await createNotification({
-          type: 'REFUND_REQUESTED',
-          title: 'Refund Request Received 📝',
-          message: `Your refund request for "${order.event.title}" has been submitted and is under review.`,
-          actionUrl: `/dashboard/tickets`,
-          userId: order.buyerId,
-          metadata: {
-            orderId: order.id,
-            eventId: order.eventId,
-            eventTitle: order.event.title,
-            refundAmount: order.totalAmount,
-            requestedAt: new Date().toISOString(),
-          },
-          sendEmail: true,
-        });
-        notifications.push(buyerRefundNotification);
+        // Notify the buyer that request was submitted - only if buyerId exists
+        if (order.buyerId) {
+          const buyerRefundNotification = await createNotification({
+            type: 'REFUND_REQUESTED',
+            title: 'Refund Request Received 📝',
+            message: `Your refund request for "${order.event.title}" has been submitted and is under review.`,
+            actionUrl: `/dashboard/tickets`,
+            userId: order.buyerId,
+            metadata: {
+              orderId: order.id,
+              eventId: order.eventId,
+              eventTitle: order.event.title,
+              refundAmount: order.totalAmount,
+              requestedAt: new Date().toISOString(),
+            },
+            sendEmail: true,
+          });
+          notifications.push(buyerRefundNotification);
+        }
         break;
 
       case 'REFUND_PROCESSED':
-        // Notify the buyer that refund was processed
-        const processedNotification = await createNotification({
-          type: 'REFUND_PROCESSED',
-          title: 'Refund Processed Successfully ✅',
-          message: `Your refund of ₦${order.totalAmount.toLocaleString()} for "${order.event.title}" has been processed and will reflect in your account within 5-10 business days.`,
-          actionUrl: `/dashboard/tickets`,
-          userId: specificUserId || order.buyerId,
-          metadata: {
-            orderId: order.id,
-            eventId: order.eventId,
-            eventTitle: order.event.title,
-            refundAmount: order.totalAmount,
-            processedAt: new Date().toISOString(),
-          },
-          sendEmail: true,
-        });
-        notifications.push(processedNotification);
+        // Determine the user ID - use specificUserId if provided, otherwise order.buyerId
+        const targetUserId = specificUserId || order.buyerId;
+
+        // Notify the buyer that refund was processed - only if we have a valid userId
+        if (targetUserId) {
+          const processedNotification = await createNotification({
+            type: 'REFUND_PROCESSED',
+            title: 'Refund Processed Successfully ✅',
+            message: `Your refund of ₦${order.totalAmount.toLocaleString()} for "${order.event.title}" has been processed and will reflect in your account within 5-10 business days.`,
+            actionUrl: `/dashboard/tickets`,
+            userId: targetUserId,
+            metadata: {
+              orderId: order.id,
+              eventId: order.eventId,
+              eventTitle: order.event.title,
+              refundAmount: order.totalAmount,
+              processedAt: new Date().toISOString(),
+            },
+            sendEmail: true,
+          });
+          notifications.push(processedNotification);
+        }
 
         // Notify the organizer
         if (order.event.userId) {
@@ -463,9 +480,9 @@ export async function createEventCancellationNotification(
       };
     }
 
-    // Get unique buyers
+    // Get unique buyers - filter out null buyers
     const uniqueBuyers = event.orders.reduce((acc, order) => {
-      if (!acc.find((buyer) => buyer.id === order.buyer.id)) {
+      if (order.buyer && !acc.find((buyer) => buyer.id === order.buyer!.id)) {
         acc.push(order.buyer);
       }
       return acc;
@@ -841,6 +858,14 @@ export async function createEventNotification(
         });
 
       case 'EVENT_APPROVED':
+        // Only send if we have a valid userId
+        if (!specificUserId && !event.userId) {
+          return {
+            success: false,
+            message: 'No user ID available for notification',
+          };
+        }
+
         return await createNotification({
           type: 'EVENT_APPROVED',
           title: 'Event Approved! 🎉',
@@ -856,6 +881,14 @@ export async function createEventNotification(
         });
 
       case 'EVENT_REJECTED':
+        // Only send if we have a valid userId
+        if (!specificUserId && !event.userId) {
+          return {
+            success: false,
+            message: 'No user ID available for notification',
+          };
+        }
+
         return await createNotification({
           type: 'EVENT_REJECTED',
           title: 'Event Requires Changes ⚠️',
