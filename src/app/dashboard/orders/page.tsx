@@ -15,7 +15,7 @@ export default async function OrganizerOrdersPage() {
     redirect('/unauthorized');
   }
 
-  // Only allow organizers
+  // Only allow organizers and admins
   if (session.user.subRole !== 'ORGANIZER' && session.user.role !== 'ADMIN') {
     redirect('/unauthorized');
   }
@@ -30,8 +30,7 @@ export default async function OrganizerOrdersPage() {
     <DashboardLayout session={session}>
       <OrganizerOrderManagement
         initialOrders={initialOrders}
-        userRole={session.user.role}
-        userSubRole={session.user.subRole}
+        organizerId={session.user.id}
       />
     </DashboardLayout>
   );
