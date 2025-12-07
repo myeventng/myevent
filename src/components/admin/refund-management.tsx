@@ -26,18 +26,19 @@ import {
   CreditCard,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { RefundStatus } from '@/generated/prisma'; // Import the actual enum
+import { RefundStatus } from '@/generated/prisma';
 
+// ✅ Updated interface - buyer can be null
 interface RefundRequest {
   id: string;
   orderId: string;
   totalAmount: number;
-  refundStatus: RefundStatus | null; // Use the actual Prisma enum
+  refundStatus: RefundStatus | null;
   createdAt: string;
   buyer: {
     name: string;
     email: string;
-  };
+  } | null; // ✅ Changed to allow null
   event: {
     title: string;
     startDateTime: string;
@@ -128,7 +129,6 @@ export function RefundManagement({
     try {
       await onRefundAction(selectedRefund.orderId, approve, adminNotes);
 
-      // Show success message
       toast.success(
         approve
           ? 'Refund approved successfully'
@@ -138,8 +138,6 @@ export function RefundManagement({
       setShowDialog(false);
       setAdminNotes('');
       setSelectedRefund(null);
-
-      // Refresh the page to show updated data
       window.location.reload();
     } catch (error) {
       console.error('Error processing refund:', error);
@@ -159,7 +157,6 @@ export function RefundManagement({
     setShowDialog(true);
   };
 
-  // Filter refunds by status
   const pendingRefunds = refundRequests.filter(
     (r) => r.refundStatus === 'INITIATED'
   );
@@ -175,7 +172,6 @@ export function RefundManagement({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <CreditCard className="h-6 w-6" />
@@ -293,12 +289,15 @@ export function RefundManagement({
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        {/* ✅ Handle null buyer */}
                         <div className="flex items-center gap-2">
                           <User className="h-4 w-4 text-gray-500" />
                           <div>
-                            <p className="font-medium">{refund.buyer.name}</p>
+                            <p className="font-medium">
+                              {refund.buyer?.name || 'Guest Purchase'}
+                            </p>
                             <p className="text-gray-600">
-                              {refund.buyer.email}
+                              {refund.buyer?.email || 'No email available'}
                             </p>
                           </div>
                         </div>
@@ -369,7 +368,7 @@ export function RefundManagement({
         </Card>
       )}
 
-      {/* Processed Refunds */}
+      {/* Processed Refunds - Same buyer null handling */}
       {processedRefunds.length > 0 && (
         <Card>
           <CardHeader>
@@ -393,7 +392,8 @@ export function RefundManagement({
                         {getStatusBadge(refund.refundStatus)}
                       </div>
                       <div className="flex items-center gap-4 text-xs text-gray-600">
-                        <span>{refund.buyer.name}</span>
+                        {/* ✅ Handle null buyer */}
+                        <span>{refund.buyer?.name || 'Guest'}</span>
                         <span>{formatCurrency(refund.totalAmount)}</span>
                         <span>{formatDate(refund.createdAt)}</span>
                       </div>
@@ -411,7 +411,7 @@ export function RefundManagement({
         </Card>
       )}
 
-      {/* Failed Refunds */}
+      {/* Failed Refunds - Same buyer null handling */}
       {failedRefunds.length > 0 && (
         <Card>
           <CardHeader>
@@ -435,7 +435,8 @@ export function RefundManagement({
                         {getStatusBadge(refund.refundStatus)}
                       </div>
                       <div className="flex items-center gap-4 text-xs text-gray-600">
-                        <span>{refund.buyer.name}</span>
+                        {/* ✅ Handle null buyer */}
+                        <span>{refund.buyer?.name || 'Guest'}</span>
                         <span>{formatCurrency(refund.totalAmount)}</span>
                         <span>{formatDate(refund.createdAt)}</span>
                       </div>
@@ -463,7 +464,7 @@ export function RefundManagement({
         </Card>
       )}
 
-      {/* Refund Action Dialog - Same as before */}
+      {/* Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -489,8 +490,9 @@ export function RefundManagement({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Customer:</span>
+                    {/* ✅ Handle null buyer */}
                     <span className="font-medium">
-                      {selectedRefund.buyer.name}
+                      {selectedRefund.buyer?.name || 'Guest Purchase'}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -570,3 +572,13 @@ export function RefundManagement({
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+

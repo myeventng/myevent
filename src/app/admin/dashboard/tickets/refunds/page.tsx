@@ -1,3 +1,5 @@
+// ===== FILE 1: app/admin/dashboard/tickets/refunds/page.tsx =====
+
 import { Suspense } from 'react';
 import { RefundManagement } from '@/components/admin/refund-management';
 import { prisma } from '@/lib/prisma';
@@ -8,7 +10,7 @@ import { processRefund } from '@/actions/platform-settings.actions';
 import { RefundStatus } from '@/generated/prisma';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 
-// Define the return type that matches our component interface
+// ✅ Updated interface to match actual data - buyer can be null
 interface RefundRequestData {
   id: string;
   orderId: string;
@@ -18,7 +20,7 @@ interface RefundRequestData {
   buyer: {
     name: string;
     email: string;
-  };
+  } | null; // ✅ Changed to allow null
   event: {
     title: string;
     startDateTime: string;
@@ -33,7 +35,7 @@ async function getRefundRequests(): Promise<RefundRequestData[]> {
         { refundStatus: 'INITIATED' },
         { refundStatus: 'PROCESSED' },
         { refundStatus: 'REJECTED' },
-        { refundStatus: 'FAILED' }, // Include FAILED status
+        { refundStatus: 'FAILED' },
       ],
     },
     include: {
@@ -61,7 +63,7 @@ async function getRefundRequests(): Promise<RefundRequestData[]> {
     totalAmount: order.totalAmount,
     refundStatus: order.refundStatus,
     createdAt: order.createdAt.toISOString(),
-    buyer: order.buyer,
+    buyer: order.buyer, // ✅ This can now be null
     event: {
       title: order.event.title,
       startDateTime: order.event.startDateTime.toISOString(),
@@ -96,7 +98,6 @@ async function RefundsPage() {
         console.error('Refund processing failed:', result.message);
         throw new Error(result.message || 'Failed to process refund');
       }
-      //  revalidatePath('/admin/dashboard/refunds');
     } catch (error) {
       console.error('Error in handleRefundAction:', error);
       throw error;
