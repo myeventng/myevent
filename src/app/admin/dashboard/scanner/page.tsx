@@ -29,33 +29,41 @@ export default async function ScannerIndexPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {events.map((event) => (
-            <Card key={event.id}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <QrCode className="h-5 w-5" />
-                  {event.title}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 text-sm text-muted-foreground mb-4">
-                  <p className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    {new Date(event.startDateTime).toLocaleDateString()}
-                  </p>
-                  <p className="flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    {event._count?.tickets || 0} tickets sold
-                  </p>
-                </div>
-                <Button asChild className="w-full">
-                  <Link href={`/admin/dashboard/scanner/${event.id}`}>
-                    Open Scanner
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+          {events.map((event) => {
+            // ✅ Calculate total tickets from ticketTypes
+            const totalTickets = event.ticketTypes?.reduce(
+              (total, ticketType) => total + (ticketType.tickets?.length || 0),
+              0
+            ) || 0;
+
+            return (
+              <Card key={event.id}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <QrCode className="h-5 w-5" />
+                    {event.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 text-sm text-muted-foreground mb-4">
+                    <p className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      {new Date(event.startDateTime).toLocaleDateString()}
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      {totalTickets} tickets sold
+                    </p>
+                  </div>
+                  <Button asChild className="w-full">
+                    <Link href={`/admin/dashboard/scanner/${event.id}`}>
+                      Open Scanner
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </div>
     </DashboardLayout>
