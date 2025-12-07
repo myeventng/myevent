@@ -1357,8 +1357,21 @@ export async function getUserEvents() {
         ticketTypes: {
           include: {
             tickets: true,
+            _count: {
+              select: {
+                tickets: true,
+              },
+            },
           },
         },
+        _count: {
+          select: {
+            orders: true,
+            ratings: true,
+            ticketTypes: true,
+          },
+        },
+
         votingContest: {
           include: {
             contestants: {
