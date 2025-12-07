@@ -11,6 +11,9 @@ import {
   Shield,
   CheckCircle,
   AlertCircle,
+  Mail,
+  User,
+  Phone,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,11 +21,13 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { initiateOrder } from '@/actions/order.actions';
 import { useSession } from '@/lib/auth-client';
 import { AuthModal } from '@/components/auth/auth-modal';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface TicketType {
   id: string;
@@ -65,9 +70,14 @@ export function EventTicketBooking({
   const [purchaseNotes, setPurchaseNotes] = useState('');
   const [showNotes, setShowNotes] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [purchaseMode, setPurchaseMode] = useState<'auth' | 'guest'>('auth');
+
+  // Guest form fields
+  const [guestName, setGuestName] = useState('');
+  const [guestEmail, setGuestEmail] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
 
   const { data: session, refetch } = useSession();
-  console.log('Current session:', session);
 
   const updateTicketQuantity = (ticketTypeId: string, change: number) => {
     setSelectedTickets((prev) => {
@@ -136,15 +146,40 @@ export function EventTicketBooking({
     }));
   };
 
-  const handleBookTickets = async () => {
-    // Check if user is authenticated first
-    if (!session?.user) {
+  const validateGuestForm = (): boolean => {
+    if (!guestName.trim()) {
+      toast.error('Please enter your name');
+      return false;
+    }
+
+    if (!guestEmail.trim()) {
+      toast.error('Please enter your email');
+      return false;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(guestEmail)) {
+      toast.error('Please enter a valid email address');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleBookTickets = async (isGuest: boolean = false) => {
+    if (getTotalQuantity() === 0) {
+      toast.error('Please select at least one ticket');
+      return;
+    }
+
+    // For authenticated purchase
+    if (!isGuest && !session?.user) {
       setShowAuthModal(true);
       return;
     }
 
-    if (getTotalQuantity() === 0) {
-      toast.error('Please select at least one ticket');
+    // For guest purchase
+    if (isGuest && !validateGuestForm()) {
       return;
     }
 
@@ -155,6 +190,11 @@ export function EventTicketBooking({
         eventId: event.id,
         ticketSelections: getTicketSelections(),
         purchaseNotes: purchaseNotes.trim() || undefined,
+        // Guest purchase data
+        isGuestPurchase: isGuest,
+        guestEmail: isGuest ? guestEmail : undefined,
+        guestName: isGuest ? guestName : undefined,
+        guestPhone: isGuest && guestPhone ? guestPhone : undefined,
       });
 
       if (!result.success) {
@@ -164,9 +204,17 @@ export function EventTicketBooking({
 
       // For free events, show success message
       if (event.isFree || getTotalPrice() === 0) {
-        toast.success('Free tickets booked successfully!');
-        // Redirect to tickets page or show confirmation
-        window.location.href = '/dashboard/tickets';
+        toast.success(
+          isGuest
+            ? `Free tickets sent to ${guestEmail}!`
+            : 'Free tickets booked successfully!'
+        );
+        // Clear form
+        setSelectedTickets({});
+        setGuestName('');
+        setGuestEmail('');
+        setGuestPhone('');
+        setPurchaseNotes('');
         return;
       }
 
@@ -185,27 +233,22 @@ export function EventTicketBooking({
     }
   };
 
-  // Update handleAuthSuccess
   const handleAuthSuccess = async () => {
-    // Refetch session after successful auth
     await refetch();
 
-    // Get the current session data from the hook
     if (session?.user) {
       toast.success('Welcome! You can now proceed with your booking.');
       setTimeout(() => {
-        handleBookTickets();
+        handleBookTickets(false);
       }, 100);
     } else {
-      // Fallback: wait a bit more and try again
       setTimeout(async () => {
         await refetch();
-        // Use a small delay to let the session state update
         setTimeout(() => {
           if (session?.user) {
             toast.success('Welcome! You can now proceed with your booking.');
             setTimeout(() => {
-              handleBookTickets();
+              handleBookTickets(false);
             }, 100);
           } else {
             toast.error(
@@ -237,13 +280,12 @@ export function EventTicketBooking({
   };
 
   const eventDate = new Date(event.startDateTime);
-  const isEventSoon = eventDate.getTime() - Date.now() < 24 * 60 * 60 * 1000; // Less than 24 hours
+  const isEventSoon = eventDate.getTime() - Date.now() < 24 * 60 * 60 * 1000;
   const isEventPast = eventDate.getTime() < Date.now();
   const hasAvailableTickets = ticketTypes.some((tt) => tt.quantity > 0);
   const isEventFull =
     event.attendeeLimit && currentAttendees >= event.attendeeLimit;
 
-  // Don't show booking if event is past
   if (isEventPast) {
     return (
       <Card className="sticky top-6">
@@ -257,7 +299,6 @@ export function EventTicketBooking({
     );
   }
 
-  // Show sold out message if no tickets available
   if (!hasAvailableTickets || isEventFull) {
     return (
       <Card className="sticky top-6">
@@ -281,7 +322,6 @@ export function EventTicketBooking({
             variant="outline"
             className="w-full"
             onClick={() => {
-              // Implement waiting list functionality
               toast.info('Waiting list feature coming soon!');
             }}
           >
@@ -302,7 +342,6 @@ export function EventTicketBooking({
             {event.isFree ? 'Get Free Tickets' : 'Book Tickets'}
           </CardTitle>
 
-          {/* Event Info */}
           <div className="space-y-2 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4" />
@@ -328,7 +367,6 @@ export function EventTicketBooking({
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {/* Alert for events happening soon */}
           {isEventSoon && (
             <Alert className="border-amber-200 bg-amber-50">
               <AlertCircle className="h-4 w-4 text-amber-600" />
@@ -338,24 +376,12 @@ export function EventTicketBooking({
             </Alert>
           )}
 
-          {/* Security Notice for Paid Events */}
           {!event.isFree && (
             <Alert className="border-blue-200 bg-blue-50">
               <Shield className="h-4 w-4 text-blue-600" />
               <AlertDescription className="text-blue-800">
                 Secure payment powered by Paystack. Your payment information is
                 protected.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Auth Notice for Non-logged in Users */}
-          {!session?.user && getTotalQuantity() > 0 && (
-            <Alert className="border-purple-200 bg-purple-50">
-              <AlertCircle className="h-4 w-4 text-purple-600" />
-              <AlertDescription className="text-purple-800">
-                You&apos;ll need to sign in or create an account to complete
-                your booking.
               </AlertDescription>
             </Alert>
           )}
@@ -416,10 +442,10 @@ export function EventTicketBooking({
                       disabled={
                         ticketType.quantity === 0 ||
                         (selectedTickets[ticketType.id] || 0) >=
-                          ticketType.quantity ||
+                        ticketType.quantity ||
                         (ticketType.maxPerOrder &&
                           (selectedTickets[ticketType.id] || 0) >=
-                            ticketType.maxPerOrder) ||
+                          ticketType.maxPerOrder) ||
                         isProcessing
                       }
                     >
@@ -436,8 +462,8 @@ export function EventTicketBooking({
                         {event.isFree
                           ? 'Free'
                           : formatPrice(
-                              ticketType.price * selectedTickets[ticketType.id]
-                            )}
+                            ticketType.price * selectedTickets[ticketType.id]
+                          )}
                       </div>
                     </div>
                   )}
@@ -526,42 +552,161 @@ export function EventTicketBooking({
             </>
           )}
 
-          {/* Booking Button */}
-          <Button
-            className="w-full"
-            size="lg"
-            onClick={handleBookTickets}
-            disabled={getTotalQuantity() === 0 || isProcessing}
-          >
-            {isProcessing ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Processing...
-              </div>
-            ) : !session?.user ? (
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4" />
-                Sign in to{' '}
-                {event.isFree
-                  ? 'Get Tickets'
-                  : 'Pay ' + formatPrice(getTotalPrice())}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                {event.isFree ? (
-                  <>
-                    <CheckCircle className="h-4 w-4" />
-                    Get Free Tickets
-                  </>
-                ) : (
-                  <>
-                    <CreditCard className="h-4 w-4" />
-                    Pay {formatPrice(getTotalPrice())}
-                  </>
+          {/* Purchase Mode Tabs */}
+          {getTotalQuantity() > 0 && (
+            <Tabs
+              value={purchaseMode}
+              onValueChange={(value) =>
+                setPurchaseMode(value as 'auth' | 'guest')
+              }
+              className="w-full"
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="auth">
+                  {session?.user ? 'Continue' : 'Sign In'}
+                </TabsTrigger>
+                <TabsTrigger value="guest">Guest Checkout</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="auth" className="space-y-4 mt-4">
+                {!session?.user && (
+                  <Alert className="border-purple-200 bg-purple-50">
+                    <AlertCircle className="h-4 w-4 text-purple-600" />
+                    <AlertDescription className="text-purple-800">
+                      You'll need to sign in or create an account to complete
+                      your booking.
+                    </AlertDescription>
+                  </Alert>
                 )}
-              </div>
-            )}
-          </Button>
+
+                <Button
+                  className="w-full"
+                  size="lg"
+                  onClick={() => handleBookTickets(false)}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Processing...
+                    </div>
+                  ) : !session?.user ? (
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4" />
+                      Sign in to{' '}
+                      {event.isFree
+                        ? 'Get Tickets'
+                        : 'Pay ' + formatPrice(getTotalPrice())}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      {event.isFree ? (
+                        <>
+                          <CheckCircle className="h-4 w-4" />
+                          Get Free Tickets
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="h-4 w-4" />
+                          Pay {formatPrice(getTotalPrice())}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </Button>
+              </TabsContent>
+
+              <TabsContent value="guest" className="space-y-4 mt-4">
+                <Alert className="border-green-200 bg-green-50">
+                  <Mail className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="text-green-800">
+                    Tickets will be sent to your email. No account needed!
+                  </AlertDescription>
+                </Alert>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="guestName">
+                      Full Name <span className="text-red-500">*</span>
+                    </Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="guestName"
+                        placeholder="John Doe"
+                        value={guestName}
+                        onChange={(e) => setGuestName(e.target.value)}
+                        className="pl-10"
+                        disabled={isProcessing}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="guestEmail">
+                      Email Address <span className="text-red-500">*</span>
+                    </Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="guestEmail"
+                        type="email"
+                        placeholder="john@example.com"
+                        value={guestEmail}
+                        onChange={(e) => setGuestEmail(e.target.value)}
+                        className="pl-10"
+                        disabled={isProcessing}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="guestPhone">Phone Number (Optional)</Label>
+                    <div className="relative">
+                      <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="guestPhone"
+                        type="tel"
+                        placeholder="+234 XXX XXX XXXX"
+                        value={guestPhone}
+                        onChange={(e) => setGuestPhone(e.target.value)}
+                        className="pl-10"
+                        disabled={isProcessing}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <Button
+                  className="w-full"
+                  size="lg"
+                  onClick={() => handleBookTickets(true)}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Processing...
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      {event.isFree ? (
+                        <>
+                          <CheckCircle className="h-4 w-4" />
+                          Get Free Tickets
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="h-4 w-4" />
+                          Pay {formatPrice(getTotalPrice())} as Guest
+                        </>
+                      )}
+                    </div>
+                  )}
+                </Button>
+              </TabsContent>
+            </Tabs>
+          )}
 
           {/* Additional Information */}
           <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">

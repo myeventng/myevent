@@ -33,6 +33,29 @@ enum VoteStatus {
   REFUNDED
 }
 
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  ATTENDED
+  NO_SHOW
+}
+
+// New enum for RSVP response
+enum RSVPResponse {
+  ATTENDING
+  NOT_ATTENDING
+  MAYBE
+}
+
+enum TableShape {
+  ROUND
+  RECTANGLE
+  SQUARE
+  OVAL
+  CUSTOM
+}
+
 // Enums
 enum NotificationType {
   EVENT_SUBMITTED
@@ -196,10 +219,11 @@ model Notification {
   orderId String?
   order   Order?  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  venueId     String?
-  venue       Venue?     @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  VoteOrder   VoteOrder? @relation(fields: [voteOrderId], references: [id])
-  voteOrderId String?
+  venueId       String?
+  venue         Venue?          @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  VoteOrder     VoteOrder?      @relation(fields: [voteOrderId], references: [id])
+  voteOrderId   String?
+  DonationOrder DonationOrder[]
 
   @@index([userId, status])
   @@index([isAdminNotification, status])
@@ -338,8 +362,8 @@ model Order {
 
   eventId       String
   event         Event   @relation(fields: [eventId], references: [id])
-  buyerId       String
-  buyer         User    @relation(fields: [buyerId], references: [id])
+  buyerId       String?
+  buyer         User?   @relation(fields: [buyerId], references: [id])
   purchaseNotes String?
 
   // Enhanced order fields
@@ -712,12 +736,14 @@ model Event {
   dressCode        DressCode?
   age              AgeRestriction?
 
-  imageUrls   String[]
-  tags        Tag[]
-  ratings     Rating[]
-  ticketTypes TicketType[]
-  orders      Order[]
-  waitingList WaitingList[]
+  imageUrls       String[]
+  tags            Tag[]
+  ratings         Rating[]
+  ticketTypes     TicketType[]
+  orders          Order[]
+  waitingList     WaitingList[]
+  inviteOnlyEvent InviteOnlyEvent?
+  donationOrders  DonationOrder[]
 
   userId     String?
   category   Category? @relation(fields: [categoryId], references: [id])
@@ -847,4 +873,180 @@ model AuditLog {
   @@index([action])
   @@index([entity])
   @@index([createdAt])
+}
+
+model InviteOnlyEvent {
+  id      String @id @default(cuid())
+  eventId String @unique
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  // Invitation settings
+  maxInvitations     Int? // Maximum number of invitations (null = unlimited)
+  allowPlusOnes      Boolean   @default(false)
+  maxPlusOnes        Int?      @default(1)
+  requireRSVP        Boolean   @default(true)
+  rsvpDeadline       DateTime?
+  sendAutoReminders  Boolean   @default(true)
+  reminderDaysBefore Int?      @default(7)
+
+  // Donation settings
+  acceptDonations     Boolean @default(false)
+  suggestedDonation   Float?
+  minimumDonation     Float?
+  donationDescription String?
+  showDonorNames      Boolean @default(true)
+
+  // Seating arrangement settings
+  enableSeatingArrangement Boolean        @default(false)
+  seatingTables            SeatingTable[]
+
+  // Privacy settings
+  isPrivate       Boolean @default(true)
+  requireApproval Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invitations Invitation[]
+
+  @@index([eventId])
+}
+
+// Model for individual invitations
+model Invitation {
+  id                String          @id @default(cuid())
+  inviteOnlyEventId String
+  inviteOnlyEvent   InviteOnlyEvent @relation(fields: [inviteOnlyEventId], references: [id], onDelete: Cascade)
+
+  // Guest information (no user account created)
+  guestName  String
+  guestEmail String
+  guestPhone String?
+
+  // Invitation details
+  invitationCode String           @unique
+  status         InvitationStatus @default(PENDING)
+  rsvpResponse   RSVPResponse?
+  rsvpDate       DateTime?
+
+  // Plus ones
+  plusOnesAllowed   Int      @default(0)
+  plusOnesConfirmed Int      @default(0)
+  plusOneNames      String[] // Array of plus one names
+
+  // Attendance tracking
+  checkedInAt DateTime?
+  checkedInBy String? // Staff/organizer who checked them in
+
+  // Donation
+  hasDonated      Boolean        @default(false)
+  donationAmount  Float?
+  donationOrderId String?        @unique
+  donationOrder   DonationOrder? @relation(fields: [donationOrderId], references: [id])
+
+  // Communication
+  invitationSentAt DateTime?
+  reminderSentAt   DateTime?
+  lastEmailSentAt  DateTime?
+
+  // Notes
+  specialRequirements String?
+  organizerNotes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  seat      Seat?
+
+  @@unique([inviteOnlyEventId, guestEmail])
+  @@index([inviteOnlyEventId, status])
+  @@index([invitationCode])
+  @@index([guestEmail])
+}
+
+// Model for donation orders
+model DonationOrder {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Payment details
+  paystackId    String        @unique
+  amount        Float
+  platformFee   Float         @default(0)
+  netAmount     Float
+  paymentStatus PaymentStatus @default(PENDING)
+  paymentMethod String?
+  currency      String        @default("NGN")
+
+  // Donor information (optional - can be anonymous)
+  donorName   String?
+  donorEmail  String?
+  donorPhone  String?
+  isAnonymous Boolean @default(false)
+
+  // Event reference
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id])
+
+  // Invitation reference (if donor is an invitee)
+  invitation Invitation?
+
+  // Message/dedication
+  donationMessage String?
+
+  // Receipt
+  receiptUrl    String?
+  receiptSentAt DateTime?
+
+  notifications Notification[]
+
+  @@index([eventId])
+  @@index([paymentStatus])
+  @@index([donorEmail])
+}
+
+model SeatingTable {
+  id                String          @id @default(cuid())
+  inviteOnlyEventId String
+  inviteOnlyEvent   InviteOnlyEvent @relation(fields: [inviteOnlyEventId], references: [id], onDelete: Cascade)
+
+  tableNumber Int // e.g., 1, 2, 3
+  tableName   String? // Optional name (e.g., "VIP Table", "Family Table")
+  capacity    Int // Maximum seats at this table
+  shape       TableShape @default(ROUND) // ROUND, RECTANGLE, SQUARE
+  notes       String?    @db.Text // Special notes about the table
+
+  // Position for visual layout (optional, for drag-and-drop)
+  positionX Float?
+  positionY Float?
+
+  seats Seat[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([inviteOnlyEventId, tableNumber])
+  @@index([inviteOnlyEventId])
+}
+
+// Individual Seat at a Table
+model Seat {
+  id      String       @id @default(cuid())
+  tableId String
+  table   SeatingTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  seatNumber   Int // Position at table (1, 2, 3...)
+  invitationId String?     @unique // Assigned guest
+  invitation   Invitation? @relation(fields: [invitationId], references: [id], onDelete: SetNull)
+
+  isReserved  Boolean @default(false) // Reserved but not assigned
+  reservedFor String? // Name of person it's reserved for
+  notes       String? // Special notes about this seat
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tableId, seatNumber])
+  @@index([tableId])
+  @@index([invitationId])
 }

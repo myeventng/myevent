@@ -4,8 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
-import { getCachedSetting } from '@/lib/platform-settings'; // Import your platform settings helper
-
+import { getCachedSetting } from '@/lib/platform-settings';
 interface TicketTypeInput {
   name: string;
   price: number;

@@ -41,12 +41,27 @@ import {
   Eye,
 } from 'lucide-react';
 import { getRevenueAnalytics } from '@/actions/analytics.actions';
+import { getPublicPlatformSettings } from '@/actions/platform-settings.actions';
 import Link from 'next/link';
 
 export function AdminRevenueAnalytics() {
   const [analytics, setAnalytics] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('30'); // days
+  const [platformFeePercentage, setPlatformFeePercentage] = useState<number>(5); // Default 5%
+
+  // Fetch platform fee percentage
+  const fetchPlatformFee = async () => {
+    try {
+      const response = await getPublicPlatformSettings();
+      if (response.success && response.data) {
+        setPlatformFeePercentage(response.data.defaultPlatformFeePercentage);
+      }
+    } catch (error) {
+      console.error('Error fetching platform fee:', error);
+      // Keep default 5% if fetch fails
+    }
+  };
 
   // Fetch analytics data
   const fetchAnalytics = async () => {
@@ -64,9 +79,19 @@ export function AdminRevenueAnalytics() {
     }
   };
 
+  // Fetch both platform fee and analytics on mount
   useEffect(() => {
-    fetchAnalytics();
+    const fetchData = async () => {
+      await fetchPlatformFee();
+      await fetchAnalytics();
+    };
+    fetchData();
   }, []);
+
+  // Calculate platform fee from revenue
+  const calculatePlatformFee = (revenue: number) => {
+    return (revenue * platformFeePercentage) / 100;
+  };
 
   if (isLoading) {
     return (
@@ -83,7 +108,7 @@ export function AdminRevenueAnalytics() {
         <div>
           <h1 className="text-2xl font-bold">Revenue Analytics</h1>
           <p className="text-muted-foreground">
-            Platform revenue, fees, and financial performance overview
+            Platform revenue, fees ({platformFeePercentage}%), and financial performance overview
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -216,7 +241,7 @@ export function AdminRevenueAnalytics() {
               Monthly Revenue Trend
             </CardTitle>
             <CardDescription>
-              Revenue and platform fees over the last 12 months
+              Revenue and platform fees ({platformFeePercentage}%) over the last 12 months
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -237,19 +262,21 @@ export function AdminRevenueAnalytics() {
                       ₦{item.revenue?.toLocaleString() || '0'}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {((item.fees / item.revenue) * 100).toFixed(1)}% fee rate
+                      {item.revenue > 0
+                        ? ((item.fees / item.revenue) * 100).toFixed(1)
+                        : platformFeePercentage.toFixed(1)}% fee rate
                     </p>
                   </div>
                 </div>
               )) || (
-                <div className="text-center py-8">
-                  <BarChart3 className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-lg font-medium">No revenue data</p>
-                  <p className="text-muted-foreground">
-                    Revenue data will appear here as events are sold
-                  </p>
-                </div>
-              )}
+                  <div className="text-center py-8">
+                    <BarChart3 className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-lg font-medium">No revenue data</p>
+                    <p className="text-muted-foreground">
+                      Revenue data will appear here as events are sold
+                    </p>
+                  </div>
+                )}
             </div>
           </CardContent>
         </Card>
@@ -279,7 +306,7 @@ export function AdminRevenueAnalytics() {
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <span>{event.tickets} tickets</span>
                         <span>
-                          ₦{(event.revenue * 0.05 || 0).toLocaleString()}{' '}
+                          ₦{calculatePlatformFee(event.revenue || 0).toLocaleString()}{' '}
                           platform fee
                         </span>
                       </div>
@@ -294,14 +321,14 @@ export function AdminRevenueAnalytics() {
                     </div>
                   </div>
                 )) || (
-                <div className="text-center py-8">
-                  <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-lg font-medium">No event data</p>
-                  <p className="text-muted-foreground">
-                    Top events will appear here based on revenue
-                  </p>
-                </div>
-              )}
+                  <div className="text-center py-8">
+                    <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-lg font-medium">No event data</p>
+                    <p className="text-muted-foreground">
+                      Top events will appear here based on revenue
+                    </p>
+                  </div>
+                )}
             </div>
           </CardContent>
         </Card>

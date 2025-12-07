@@ -112,7 +112,7 @@ export function EventMediaUpload({
                 <FormControl>
                   <FileUploader
                     onFieldChange={field.onChange}
-                    imageUrls={field.value}
+                    imageUrls={field.value || ''}
                     setFiles={setCoverFiles}
                     endpoint="eventCover"
                   />
@@ -150,7 +150,7 @@ export function EventMediaUpload({
                 <FormControl>
                   <FileUploader
                     onFieldChange={field.onChange}
-                    imageUrls={field.value}
+                    imageUrls={Array.isArray(field.value) ? field.value : []}
                     setFiles={setGalleryFiles}
                     endpoint="eventImage"
                     multipleImages={true}

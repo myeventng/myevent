@@ -33,6 +33,10 @@ interface InitiateOrderInput {
     quantity: number;
   }[];
   purchaseNotes?: string;
+  isGuestPurchase?: boolean;
+  guestEmail?: string;
+  guestName?: string;
+  guestPhone?: string;
 }
 
 interface PaystackConfig {
@@ -43,7 +47,7 @@ interface PaystackConfig {
 
 interface TicketToCreate {
   ticketId: string;
-  userId: string;
+  userId: string | null;
   ticketTypeId: string;
   status: TicketStatus;
   purchasedAt: Date;
@@ -77,6 +81,38 @@ const calculatePlatformFee = async (amount: number): Promise<number> => {
   return Math.round((amount * feePercentage) / 100);
 };
 
+// Validate guest purchase data
+const validateGuestData = (
+  guestEmail?: string,
+  guestName?: string
+): { valid: boolean; message?: string } => {
+  if (!guestEmail || !guestName) {
+    return {
+      valid: false,
+      message: 'Guest name and email are required for guest purchases',
+    };
+  }
+
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(guestEmail)) {
+    return {
+      valid: false,
+      message: 'Please provide a valid email address',
+    };
+  }
+
+  // Validate name (at least 2 characters)
+  if (guestName.trim().length < 2) {
+    return {
+      valid: false,
+      message: 'Please provide a valid name (at least 2 characters)',
+    };
+  }
+
+  return { valid: true };
+};
+
 // Initiate order and payment
 export async function initiateOrder(
   data: InitiateOrderInput
@@ -84,8 +120,30 @@ export async function initiateOrder(
   const headersList = await headers();
   const session = await auth.api.getSession({ headers: headersList });
 
-  if (!session) {
-    return { success: false, message: 'Not authenticated' };
+  // Handle guest vs authenticated purchase
+  let userId: string | null = null;
+  let buyerEmail: string;
+  let buyerName: string;
+
+  if (data.isGuestPurchase) {
+    // Guest purchase - validate guest data
+    const validation = validateGuestData(data.guestEmail, data.guestName);
+    if (!validation.valid) {
+      return { success: false, message: validation.message };
+    }
+
+    userId = null;
+    buyerEmail = data.guestEmail!;
+    buyerName = data.guestName!;
+  } else {
+    // Authenticated purchase
+    if (!session) {
+      return { success: false, message: 'Not authenticated' };
+    }
+
+    userId = session.user.id;
+    buyerEmail = session.user.email;
+    buyerName = session.user.name;
   }
 
   try {
@@ -160,26 +218,40 @@ export async function initiateOrder(
     const platformFee = await calculatePlatformFee(totalAmount);
     const paystackReference = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Create order with simplified data storage
+    // Create order with guest information
+    const orderData: any = {
+      paystackId: paystackReference,
+      totalAmount,
+      quantity: totalQuantity,
+      platformFee,
+      paymentStatus: 'PENDING',
+      eventId: data.eventId,
+      purchaseNotes: JSON.stringify({
+        note: data.purchaseNotes || '',
+        selections: validatedSelections,
+        // Store guest info if guest purchase
+        isGuestPurchase: data.isGuestPurchase || false,
+        guestEmail: data.guestEmail,
+        guestName: data.guestName,
+        guestPhone: data.guestPhone,
+      }),
+    };
+
+    // Add buyer ID only if authenticated
+    if (userId) {
+      orderData.buyerId = userId;
+    }
+
     const order = await prisma.order.create({
-      data: {
-        paystackId: paystackReference,
-        totalAmount,
-        quantity: totalQuantity,
-        platformFee,
-        paymentStatus: 'PENDING',
-        eventId: data.eventId,
-        buyerId: session.user.id,
-        purchaseNotes: JSON.stringify({
-          note: data.purchaseNotes || '',
-          selections: validatedSelections, // Store complete selection data
-        }),
-      },
+      data: orderData,
     });
 
     // Handle free events immediately
     if (event.isFree || totalAmount === 0) {
-      return await completeOrder(order.id);
+      return await completeOrder(order.id, undefined, {
+        guestEmail: data.guestEmail,
+        guestName: data.guestName,
+      });
     }
 
     // Initialize Paystack payment
@@ -198,15 +270,19 @@ export async function initiateOrder(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: session.user.email,
+          email: buyerEmail,
           amount: totalAmount * 100, // Convert to kobo
           reference: paystackReference,
           callback_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/payment/callback`,
           metadata: {
             orderId: order.id,
             eventId: data.eventId,
-            userId: session.user.id,
+            userId: userId || 'guest',
             eventTitle: event.title,
+            isGuestPurchase: data.isGuestPurchase || false,
+            guestEmail: data.guestEmail,
+            guestName: data.guestName,
+            guestPhone: data.guestPhone,
           },
         }),
       }
@@ -242,7 +318,8 @@ export async function initiateOrder(
 // Complete order after payment verification
 export async function completeOrder(
   orderId: string,
-  paystackReference?: string
+  paystackReference?: string,
+  guestInfo?: { guestEmail?: string; guestName?: string }
 ): Promise<ActionResponse<any>> {
   console.log(`Starting order completion for: ${orderId}`);
 
@@ -267,6 +344,18 @@ export async function completeOrder(
     if (order.paymentStatus === 'COMPLETED') {
       return { success: true, message: 'Order already completed', data: order };
     }
+
+    // Parse purchase notes to get guest info if available
+    let purchaseData: any = {};
+    try {
+      purchaseData = JSON.parse(order.purchaseNotes || '{}');
+    } catch (error) {
+      console.error('Failed to parse purchase notes:', error);
+    }
+
+    const isGuestPurchase = purchaseData.isGuestPurchase || false;
+    const guestEmail = guestInfo?.guestEmail || purchaseData.guestEmail;
+    const guestName = guestInfo?.guestName || purchaseData.guestName;
 
     // Verify payment for paid events
     if (!order.event.isFree && order.totalAmount > 0 && paystackReference) {
@@ -300,7 +389,6 @@ export async function completeOrder(
     // Parse ticket selections from order
     let ticketSelections = [];
     try {
-      const purchaseData = JSON.parse(order.purchaseNotes || '{}');
       ticketSelections = purchaseData.selections || [];
     } catch (error) {
       console.error('Failed to parse ticket selections:', error);
@@ -326,7 +414,7 @@ export async function completeOrder(
 
     // Execute order completion in transaction
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Create tickets
+      // 1. Create tickets (with null userId for guest purchases)
       const ticketsToCreate = [];
       for (const selection of ticketSelections) {
         for (let i = 0; i < selection.quantity; i++) {
@@ -335,14 +423,17 @@ export async function completeOrder(
             type: 'EVENT_TICKET',
             ticketId,
             eventId: order.event.id,
-            userId: order.buyerId,
+            userId: order.buyerId || null,
             orderId: order.id,
+            isGuestPurchase,
+            guestEmail,
+            guestName,
             issuedAt: Date.now(),
           });
 
           ticketsToCreate.push({
             ticketId,
-            userId: order.buyerId,
+            userId: order.buyerId || null, // null for guest purchases
             ticketTypeId: selection.ticketTypeId,
             orderId: order.id,
             status: TicketStatus.UNUSED,
@@ -362,6 +453,7 @@ export async function completeOrder(
                   event: { include: { venue: { include: { city: true } } } },
                 },
               },
+              user: true,
             },
           })
         )
@@ -394,8 +486,33 @@ export async function completeOrder(
 
     // Post-transaction operations (don't fail the order if these fail)
     try {
-      await createTicketNotification(result.order.id, 'TICKET_PURCHASED');
-      await ticketEmailService.sendTicketEmail(result.order, result.tickets);
+      // Create notification only for authenticated users
+      if (order.buyerId) {
+        await createTicketNotification(result.order.id, 'TICKET_PURCHASED');
+      }
+
+      // Send ticket email to guest or user
+      const recipientEmail = isGuestPurchase ? guestEmail : order.buyer?.email;
+      const recipientName = isGuestPurchase ? guestName : order.buyer?.name;
+
+      if (recipientEmail) {
+        // Enhance tickets with guest info for email
+        const ticketsWithGuestInfo = result.tickets.map((ticket) => ({
+          ...ticket,
+          user: isGuestPurchase
+            ? {
+                id: null,
+                name: recipientName,
+                email: recipientEmail,
+              }
+            : ticket.user,
+        }));
+
+        await ticketEmailService.sendTicketEmail(
+          result.order,
+          ticketsWithGuestInfo
+        );
+      }
     } catch (error) {
       console.error('Post-completion operations failed:', error);
     }
@@ -862,7 +979,11 @@ export async function processRefund(
     });
 
     // Create notification for user
-    await createTicketNotification(orderId, 'REFUND_PROCESSED', order.buyerId);
+    await createTicketNotification(
+      orderId,
+      'REFUND_PROCESSED',
+      order.buyerId ?? undefined
+    );
 
     // Process waiting list
     await processWaitingList(order.event.id);

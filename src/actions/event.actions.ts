@@ -9,9 +9,20 @@ import {
   DressCode,
   PublishedStatus,
   EventType,
+  VotingType,
 } from '@/generated/prisma';
 import { createEventNotification } from '@/actions/notification.actions';
-import { VotingContest, VotingType } from '@/generated/prisma';
+import crypto from 'crypto';
+
+interface PermissionValidationResult {
+  success: boolean;
+  message?: string;
+  userData?: {
+    userId: string;
+    isAdmin: boolean;
+    canCreateEvents: boolean;
+  };
+}
 
 interface EventInput {
   title: string;
@@ -39,38 +50,12 @@ interface EventInput {
 
 interface UpdateEventInput extends EventInput {
   id: string;
-  // Add voting contest support
-  votingContest?: {
-    votingType: VotingType;
-    votePackagesEnabled?: boolean;
-    defaultVotePrice?: number;
-    allowGuestVoting?: boolean;
-    maxVotesPerUser?: number;
-    allowMultipleVotes?: boolean;
-    votingStartDate?: Date;
-    votingEndDate?: Date;
-    showLiveResults?: boolean;
-    showVoterNames?: boolean;
-    votePackages?: any[];
-  };
-  contestants?: any[];
 }
 
 interface ActionResponse<T> {
   success: boolean;
   message?: string;
   data?: T;
-}
-
-// Fixed permission validation return type
-interface PermissionValidationResult {
-  success: boolean;
-  message?: string;
-  userData?: {
-    userId: string;
-    isAdmin: boolean;
-    canCreateEvents: boolean;
-  };
 }
 
 // Generate a unique slug from title
@@ -177,11 +162,9 @@ const validateUserPermission =
     };
   };
 
-// Create event with proper notification workflow
-export async function createEvent(
-  data: EventInput
-): Promise<ActionResponse<any>> {
-  // Validate user permission
+// CORRECTED: Create event - only handles base event creation
+// Type-specific setup (voting contests, invite-only) is handled by specialized actions
+export async function createEvent(data: any): Promise<ActionResponse<any>> {
   const permissionCheck = await validateUserPermission();
   if (!permissionCheck.success) {
     return {
@@ -219,24 +202,6 @@ export async function createEvent(
       }
     }
 
-    // Validate tags if provided
-    if (data.tagIds && data.tagIds.length > 0) {
-      const tagCount = await prisma.tag.count({
-        where: {
-          id: {
-            in: data.tagIds,
-          },
-        },
-      });
-
-      if (tagCount !== data.tagIds.length) {
-        return {
-          success: false,
-          message: 'One or more tags not found',
-        };
-      }
-    }
-
     // Generate unique slug
     const slug = await generateSlug(data.title);
 
@@ -247,18 +212,16 @@ export async function createEvent(
       };
     }
 
-    // Determine publish status based on user role
+    // Determine publish status
     let publishedStatus: PublishedStatus;
     if (isAdmin) {
-      // Admins can publish directly or set custom status
       publishedStatus = data.publishedStatus || 'PUBLISHED';
     } else {
-      // Organizers must submit for review unless saving as draft
       publishedStatus =
         data.publishedStatus === 'DRAFT' ? 'DRAFT' : 'PENDING_REVIEW';
     }
 
-    // Create new event
+    // Create base event only - no type-specific nested data
     const newEvent = await prisma.event.create({
       data: {
         title: data.title,
@@ -268,7 +231,11 @@ export async function createEvent(
         coverImageUrl: data.coverImageUrl,
         startDateTime: data.startDateTime,
         endDateTime: data.endDateTime,
-        isFree: data.isFree,
+        isFree:
+          data.eventType === EventType.VOTING_CONTEST ||
+          data.eventType === EventType.INVITE
+            ? true
+            : data.isFree,
         url: data.url,
         lateEntry: data.lateEntry,
         eventType: data.eventType || EventType.STANDARD,
@@ -279,7 +246,7 @@ export async function createEvent(
         age: data.age,
         imageUrls: data.imageUrls,
         tags: {
-          connect: data.tagIds.map((id) => ({ id })),
+          connect: data.tagIds.map((id: string) => ({ id })),
         },
         category: data.categoryId
           ? { connect: { id: data.categoryId } }
@@ -300,7 +267,12 @@ export async function createEvent(
       },
     });
 
-    // Create notification for admin if event is submitted for review
+    // NOTE: Type-specific setup is now handled by specialized actions:
+    // - createVotingContest() for voting contests
+    // - createInviteOnlyEvent() for invite-only events
+    // These are called from the form AFTER this function returns
+
+    // Create notification if pending review
     if (publishedStatus === 'PENDING_REVIEW') {
       await createEventNotification(newEvent.id, 'EVENT_SUBMITTED');
     }
@@ -330,12 +302,9 @@ export async function createEvent(
   }
 }
 
-// Update event
-
-export async function updateEvent(
-  data: UpdateEventInput & { votingContest?: any }
-): Promise<ActionResponse<any>> {
-  // Validate user permission
+// CORRECTED: Update event - only handles base event updates
+// Type-specific updates (voting contests, invite-only) are handled by specialized actions
+export async function updateEvent(data: any): Promise<ActionResponse<any>> {
   const permissionCheck = await validateUserPermission();
   if (!permissionCheck.success) {
     return {
@@ -347,11 +316,12 @@ export async function updateEvent(
   const { userId, isAdmin } = permissionCheck.userData!;
 
   try {
-    // Check if event exists - THIS WAS MISSING
     const existingEvent = await prisma.event.findUnique({
       where: { id: data.id },
       include: {
         tags: true,
+        votingContest: true,
+        inviteOnlyEvent: true,
       },
     });
 
@@ -362,56 +332,11 @@ export async function updateEvent(
       };
     }
 
-    // If not an admin, check if the user owns this event
     if (!isAdmin && existingEvent.userId !== userId) {
       return {
         success: false,
         message: 'You can only update events that you created',
       };
-    }
-
-    // Validate venue exists
-    const venue = await prisma.venue.findUnique({
-      where: { id: data.venueId },
-    });
-
-    if (!venue) {
-      return {
-        success: false,
-        message: 'Venue not found',
-      };
-    }
-
-    // Validate category if provided
-    if (data.categoryId) {
-      const category = await prisma.category.findUnique({
-        where: { id: data.categoryId },
-      });
-
-      if (!category) {
-        return {
-          success: false,
-          message: 'Category not found',
-        };
-      }
-    }
-
-    // Validate tags if provided
-    if (data.tagIds && data.tagIds.length > 0) {
-      const tagCount = await prisma.tag.count({
-        where: {
-          id: {
-            in: data.tagIds,
-          },
-        },
-      });
-
-      if (tagCount !== data.tagIds.length) {
-        return {
-          success: false,
-          message: 'One or more tags not found',
-        };
-      }
     }
 
     // Generate new slug if needed
@@ -420,14 +345,7 @@ export async function updateEvent(
       slug = await generateSlug(data.title, data.id);
     }
 
-    if (!slug) {
-      return {
-        success: false,
-        message: 'Failed to generate or maintain event slug',
-      };
-    }
-
-    // Handle tag updates - FIXED TYPE ANNOTATIONS
+    // Handle tag updates
     const existingTagIds = existingEvent.tags.map((tag: any) => tag.id);
     const disconnectTags = existingTagIds.filter(
       (id: any) => !data.tagIds.includes(id)
@@ -445,108 +363,58 @@ export async function updateEvent(
         data.publishedStatus === 'DRAFT' ? 'DRAFT' : 'PENDING_REVIEW';
     }
 
-    // Start transaction for atomic updates
-    const result = await prisma.$transaction(async (tx) => {
-      // Update the main event
-      const updatedEvent = await tx.event.update({
-        where: { id: data.id },
-        data: {
-          title: data.title,
-          slug,
-          description: data.description,
-          location: data.location,
-          coverImageUrl: data.coverImageUrl,
-          startDateTime: data.startDateTime,
-          endDateTime: data.endDateTime,
-          isFree: data.isFree,
-          url: data.url,
-          lateEntry: data.lateEntry,
-          idRequired: data.idRequired,
-          attendeeLimit: data.attendeeLimit,
-          embeddedVideoUrl: data.embeddedVideoUrl,
-          dressCode: data.dressCode,
-          age: data.age,
-          imageUrls: data.imageUrls,
-          tags: {
-            disconnect: disconnectTags.map((id: any) => ({ id })),
-            connect: connectTags.map((id: any) => ({ id })),
-          },
-          category: data.categoryId
-            ? { connect: { id: data.categoryId } }
-            : { disconnect: true },
-          venue: { connect: { id: data.venueId } },
-          City: data.cityId
-            ? { connect: { id: data.cityId } }
-            : { disconnect: true },
-          publishedStatus,
+    // Update base event only - no type-specific nested data
+    const updatedEvent = await prisma.event.update({
+      where: { id: data.id },
+      data: {
+        title: data.title,
+        slug,
+        description: data.description,
+        location: data.location,
+        coverImageUrl: data.coverImageUrl,
+        startDateTime: data.startDateTime,
+        endDateTime: data.endDateTime,
+        isFree:
+          data.eventType === EventType.VOTING_CONTEST ||
+          data.eventType === EventType.INVITE
+            ? true
+            : data.isFree,
+        url: data.url,
+        lateEntry: data.lateEntry,
+        idRequired: data.idRequired,
+        attendeeLimit: data.attendeeLimit,
+        embeddedVideoUrl: data.embeddedVideoUrl,
+        dressCode: data.dressCode,
+        age: data.age,
+        imageUrls: data.imageUrls,
+        tags: {
+          disconnect: disconnectTags.map((id: any) => ({ id })),
+          connect: connectTags.map((id: any) => ({ id })),
         },
-        include: {
-          tags: true,
-          category: true,
-          venue: {
-            include: {
-              city: true,
-            },
+        category: data.categoryId
+          ? { connect: { id: data.categoryId } }
+          : { disconnect: true },
+        venue: { connect: { id: data.venueId } },
+        City: data.cityId
+          ? { connect: { id: data.cityId } }
+          : { disconnect: true },
+        publishedStatus,
+      },
+      include: {
+        tags: true,
+        category: true,
+        venue: {
+          include: {
+            city: true,
           },
-          votingContest: true, // Include voting contest in response
         },
-      });
-
-      // Handle voting contest updates if this is a voting contest event
-      if (
-        updatedEvent.eventType === EventType.VOTING_CONTEST &&
-        data.votingContest
-      ) {
-        console.log('Updating voting contest with data:', data.votingContest);
-
-        // Check if voting contest exists
-        let votingContest = await tx.votingContest.findUnique({
-          where: { eventId: data.id },
-        });
-
-        if (votingContest) {
-          // Update existing voting contest
-          await tx.votingContest.update({
-            where: { id: votingContest.id },
-            data: {
-              votingType: data.votingContest.votingType,
-              votePackagesEnabled:
-                data.votingContest.votePackagesEnabled || false,
-              defaultVotePrice: data.votingContest.defaultVotePrice,
-              allowGuestVoting: data.votingContest.allowGuestVoting || false,
-              maxVotesPerUser: data.votingContest.maxVotesPerUser,
-              allowMultipleVotes:
-                data.votingContest.allowMultipleVotes !== false,
-              votingStartDate: data.votingContest.votingStartDate,
-              votingEndDate: data.votingContest.votingEndDate,
-              showLiveResults: data.votingContest.showLiveResults !== false,
-              showVoterNames: data.votingContest.showVoterNames || false,
-            },
-          });
-        } else {
-          // Create new voting contest if it doesn't exist
-          votingContest = await tx.votingContest.create({
-            data: {
-              eventId: data.id,
-              votingType: data.votingContest.votingType,
-              votePackagesEnabled:
-                data.votingContest.votePackagesEnabled || false,
-              defaultVotePrice: data.votingContest.defaultVotePrice,
-              allowGuestVoting: data.votingContest.allowGuestVoting || false,
-              maxVotesPerUser: data.votingContest.maxVotesPerUser,
-              allowMultipleVotes:
-                data.votingContest.allowMultipleVotes !== false,
-              votingStartDate: data.votingContest.votingStartDate,
-              votingEndDate: data.votingContest.votingEndDate,
-              showLiveResults: data.votingContest.showLiveResults !== false,
-              showVoterNames: data.votingContest.showVoterNames || false,
-            },
-          });
-        }
-      }
-
-      return updatedEvent;
+      },
     });
+
+    // NOTE: Type-specific updates are now handled by specialized actions:
+    // - updateVotingContest() for voting contests
+    // - updateInviteOnlyEvent() for invite-only events
+    // These are called from the form AFTER this function returns
 
     // Create notifications based on status change
     if (
@@ -569,7 +437,7 @@ export async function updateEvent(
 
     revalidatePath('/admin/events');
     revalidatePath('/dashboard/events');
-    revalidatePath(`/events/${result.slug}`);
+    revalidatePath(`/events/${updatedEvent.slug}`);
     revalidatePath(`/events/${data.id}`);
     revalidatePath('/events');
 
@@ -583,7 +451,7 @@ export async function updateEvent(
     return {
       success: true,
       message,
-      data: result,
+      data: updatedEvent,
     };
   } catch (error) {
     console.error('Error updating event:', error);
@@ -630,7 +498,6 @@ export async function updateEventStatus(
       where: { id },
       data: {
         publishedStatus: status,
-        // You might want to add a rejectionReason field to your Event model
       },
     });
 
@@ -741,9 +608,6 @@ export async function fixEventsWithNullSlugs(): Promise<
         });
 
         fixedCount++;
-        // console.log(
-        //   `Fixed slug for event ${event.id}: "${event.title}" -> "${newSlug}"`
-        // );
       } catch (error) {
         console.error(`Failed to fix slug for event ${event.id}:`, error);
       }
@@ -822,52 +686,40 @@ export async function toggleEventFeatured(
   }
 }
 
-export async function getEvents(
-  published: boolean = true
-): Promise<ActionResponse<any[]>> {
+export async function getEvents(publishedOnly: boolean = true) {
   try {
+    // ✅ FIXED: Add 'as const' to make it a literal type
+    const whereClause = publishedOnly
+      ? { publishedStatus: 'PUBLISHED' as const }
+      : {};
+
     const events = await prisma.event.findMany({
-      where: published ? { publishedStatus: 'PUBLISHED' } : {},
+      where: whereClause,
       include: {
-        tags: true,
         category: true,
         venue: {
           include: {
             city: true,
           },
         },
-        ticketTypes: {
-          where: {
-            quantity: {
-              gt: 0,
-            },
-          },
-        },
+        tags: true,
         user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            organizerProfile: {
-              select: {
-                organizationName: true,
-              },
-            },
+          include: {
+            organizerProfile: true,
           },
         },
-        // Include voting contest data with error handling
+        ticketTypes: {
+          include: {
+            tickets: true,
+          },
+        },
         votingContest: {
           include: {
             contestants: {
               include: {
-                _count: {
-                  select: {
-                    votes: true,
-                  },
-                },
+                votes: true,
               },
             },
-            votePackages: true,
             _count: {
               select: {
                 votes: true,
@@ -875,8 +727,29 @@ export async function getEvents(
             },
           },
         },
+        inviteOnlyEvent: {
+          include: {
+            invitations: {
+              select: {
+                id: true,
+                status: true,
+                rsvpResponse: true,
+                plusOnesConfirmed: true,
+                plusOnesAllowed: true,
+                createdAt: true,
+              },
+            },
+            _count: {
+              select: {
+                invitations: true,
+              },
+            },
+          },
+        },
       },
-      orderBy: { startDateTime: 'asc' },
+      orderBy: {
+        startDateTime: 'asc',
+      },
     });
 
     return {
@@ -885,56 +758,10 @@ export async function getEvents(
     };
   } catch (error) {
     console.error('Error fetching events:', error);
-
-    // Try to fetch events without voting contest data as fallback
-    try {
-      console.log('Attempting fallback query without voting contest data...');
-      const fallbackEvents = await prisma.event.findMany({
-        where: published ? { publishedStatus: 'PUBLISHED' } : {},
-        include: {
-          tags: true,
-          category: true,
-          venue: {
-            include: {
-              city: true,
-            },
-          },
-          ticketTypes: {
-            where: {
-              quantity: {
-                gt: 0,
-              },
-            },
-          },
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              organizerProfile: {
-                select: {
-                  organizationName: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: { startDateTime: 'asc' },
-      });
-
-      console.log('Fallback query successful');
-      return {
-        success: true,
-        data: fallbackEvents,
-      };
-    } catch (fallbackError) {
-      console.error('Fallback query also failed:', fallbackError);
-      return {
-        success: false,
-        message: 'Failed to fetch events',
-        data: [], // Return empty array instead of undefined
-      };
-    }
+    return {
+      success: false,
+      message: 'Failed to fetch events',
+    };
   }
 }
 
@@ -1496,7 +1323,7 @@ export async function getEventFilterOptions(): Promise<
   }
 }
 
-export async function getUserEvents(): Promise<ActionResponse<any[]>> {
+export async function getUserEvents() {
   try {
     const headersList = await headers();
     const session = await auth.api.getSession({
@@ -1515,16 +1342,60 @@ export async function getUserEvents(): Promise<ActionResponse<any[]>> {
         userId: session.user.id,
       },
       include: {
-        tags: true,
         category: true,
         venue: {
           include: {
             city: true,
           },
         },
-        ticketTypes: true,
+        tags: true,
+        user: {
+          include: {
+            organizerProfile: true,
+          },
+        },
+        ticketTypes: {
+          include: {
+            tickets: true,
+          },
+        },
+        votingContest: {
+          include: {
+            contestants: {
+              include: {
+                votes: true,
+              },
+            },
+            _count: {
+              select: {
+                votes: true,
+              },
+            },
+          },
+        },
+        inviteOnlyEvent: {
+          include: {
+            invitations: {
+              select: {
+                id: true,
+                status: true,
+                rsvpResponse: true,
+                plusOnesConfirmed: true,
+                plusOnesAllowed: true,
+                createdAt: true,
+              },
+            },
+            _count: {
+              select: {
+                invitations: true,
+              },
+            },
+          },
+        },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: {
+        startDateTime: 'desc',
+      },
     });
 
     return {
@@ -1539,8 +1410,6 @@ export async function getUserEvents(): Promise<ActionResponse<any[]>> {
     };
   }
 }
-
-// Add these functions to your existing event.actions.ts file
 
 // Get pending events specifically
 export async function getPendingEvents(): Promise<ActionResponse<any[]>> {
@@ -1785,394 +1654,94 @@ export async function bulkUnfeatureEvents(
 // Enhanced getEventById function with comprehensive nested data
 export async function getEventById(id: string): Promise<ActionResponse<any>> {
   try {
-    // First, fetch the basic event data to determine type
-    const basicEvent = await prisma.event.findUnique({
-      where: { id },
-      select: {
-        eventType: true,
-        id: true,
-      },
-    });
-
-    if (!basicEvent) {
-      return {
-        success: false,
-        message: 'Event not found',
-      };
-    }
-
-    // Build comprehensive query based on event type
     const event = await prisma.event.findUnique({
       where: { id },
       include: {
-        // Basic relations for all events
-        tags: {
-          select: {
-            id: true,
-            name: true,
-            bgColor: true,
-            slug: true,
-          },
-        },
-        category: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        tags: true,
+        category: true,
         venue: {
           include: {
-            city: {
-              select: {
-                id: true,
-                name: true,
-                state: true,
-                population: true,
-              },
-            },
+            city: true,
           },
         },
-        City: {
-          select: {
-            id: true,
-            name: true,
-            state: true,
-            population: true,
-          },
-        },
+        City: true,
         user: {
           select: {
             id: true,
             name: true,
             email: true,
             image: true,
-            firstName: true,
-            lastName: true,
-            organizerProfile: {
-              select: {
-                id: true,
-                organizationName: true,
-                bio: true,
-                website: true,
-                organizationType: true,
-                verificationStatus: true,
-                businessRegistrationNumber: true,
-                taxIdentificationNumber: true,
-                customPlatformFee: true,
-                bankAccount: true,
-                bankCode: true,
-                accountName: true,
-              },
-            },
+            organizerProfile: true,
           },
         },
-
-        // Standard event specific data
         ticketTypes: {
           include: {
             tickets: {
               include: {
-                order: {
-                  select: {
-                    id: true,
-                    totalAmount: true,
-                    quantity: true,
-                    paymentStatus: true,
-                    createdAt: true,
-                    buyer: {
-                      select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                      },
-                    },
-                  },
-                },
-                validations: {
-                  include: {
-                    validator: {
-                      select: {
-                        id: true,
-                        name: true,
-                      },
-                    },
-                  },
-                },
+                order: true,
+                validations: true,
               },
             },
-            _count: {
-              select: {
-                tickets: true,
-              },
-            },
-          },
-          orderBy: {
-            price: 'asc',
           },
         },
-
-        // Voting contest specific data
+        orders: {
+          include: {
+            buyer: true,
+            tickets: true,
+          },
+        },
+        ratings: {
+          include: {
+            user: true,
+          },
+        },
+        waitingList: {
+          include: {
+            user: true,
+          },
+        },
+        // Voting contest
         votingContest: {
           include: {
             contestants: {
               include: {
                 votes: {
                   include: {
-                    user: {
-                      select: {
-                        id: true,
-                        name: true,
-                        image: true,
-                      },
-                    },
-                    voteOrder: {
-                      select: {
-                        id: true,
-                        totalAmount: true,
-                        paymentStatus: true,
-                        createdAt: true,
-                      },
-                    },
-                  },
-                  orderBy: {
-                    createdAt: 'desc',
-                  },
-                },
-                _count: {
-                  select: {
-                    votes: true,
+                    user: true,
                   },
                 },
               },
-              orderBy: [
-                { status: 'asc' }, // ACTIVE first
-                { contestNumber: 'asc' },
-              ],
             },
             votePackages: {
-              orderBy: {
-                sortOrder: 'asc',
-              },
               include: {
-                voteOrders: {
-                  include: {
-                    user: {
-                      select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                      },
-                    },
-                    votes: {
-                      include: {
-                        contestant: {
-                          select: {
-                            id: true,
-                            name: true,
-                            contestNumber: true,
-                          },
-                        },
-                      },
-                    },
-                  },
-                  orderBy: {
-                    createdAt: 'desc',
-                  },
-                },
-                _count: {
-                  select: {
-                    voteOrders: true,
-                  },
-                },
+                voteOrders: true,
               },
             },
-            votes: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    image: true,
-                  },
-                },
-                contestant: {
-                  select: {
-                    id: true,
-                    name: true,
-                    contestNumber: true,
-                    imageUrl: true,
-                  },
-                },
-                voteOrder: {
-                  select: {
-                    id: true,
-                    totalAmount: true,
-                    paymentStatus: true,
-                    votePackage: {
-                      select: {
-                        id: true,
-                        name: true,
-                        voteCount: true,
-                        price: true,
-                      },
-                    },
-                  },
-                },
-              },
-              orderBy: {
-                createdAt: 'desc',
-              },
-            },
+            votes: true,
             VoteOrder: {
               include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true,
-                  },
-                },
-                votePackage: {
-                  select: {
-                    id: true,
-                    name: true,
-                    voteCount: true,
-                    price: true,
-                  },
-                },
-                votes: {
-                  include: {
-                    contestant: {
-                      select: {
-                        id: true,
-                        name: true,
-                        contestNumber: true,
-                      },
-                    },
-                  },
-                },
-                notifications: {
-                  select: {
-                    id: true,
-                    type: true,
-                    status: true,
-                    createdAt: true,
-                  },
-                },
+                user: true,
+                votes: true,
               },
+            },
+          },
+        },
+        // Invite-only
+        inviteOnlyEvent: {
+          include: {
+            invitations: {
               orderBy: {
                 createdAt: 'desc',
               },
             },
-            _count: {
-              select: {
-                contestants: true,
-                votes: true,
-                votePackages: true,
-                VoteOrder: true,
-              },
-            },
           },
         },
-
-        // Common relations for all events
-        orders: {
-          include: {
-            buyer: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                image: true,
-              },
-            },
-            tickets: {
-              include: {
-                ticketType: {
-                  select: {
-                    id: true,
-                    name: true,
-                    price: true,
-                  },
-                },
-                validations: {
-                  include: {
-                    validator: {
-                      select: {
-                        id: true,
-                        name: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-            Notification: {
-              select: {
-                id: true,
-                type: true,
-                status: true,
-                createdAt: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'desc',
+        donationOrders: {
+          where: {
+            paymentStatus: 'COMPLETED',
           },
         },
-        waitingList: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                image: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'asc',
-          },
-        },
-        ratings: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                image: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        },
-        Notification: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
-        },
-
-        // Aggregated counts for performance insights
-        _count: {
-          select: {
-            orders: true,
-            ratings: true,
-            waitingList: true,
-            Notification: true,
-          },
-        },
+        Notification: true,
       },
     });
 
@@ -2183,174 +1752,90 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
       };
     }
 
-    // Process and enhance the event data
+    // Calculate statistics based on event type
     const enhancedEvent = { ...event } as any;
 
-    // Calculate additional metrics for standard events
-    if (event.eventType === EventType.STANDARD && event.ticketTypes) {
-      enhancedEvent.ticketTypes = event.ticketTypes.map((ticketType) => {
-        const soldTickets = ticketType.tickets.filter(
-          (ticket) => ticket.order && ticket.order.paymentStatus === 'COMPLETED'
-        );
-        const totalRevenue = soldTickets.reduce(
-          (sum, ticket) => sum + (ticket.order?.totalAmount || 0),
-          0
-        );
-        const availableQuantity = ticketType.quantity - soldTickets.length;
-
-        return {
-          ...ticketType,
-          soldCount: soldTickets.length,
-          availableCount: Math.max(0, availableQuantity),
-          totalRevenue: totalRevenue,
-          conversionRate:
-            ticketType.quantity > 0
-              ? (soldTickets.length / ticketType.quantity) * 100
-              : 0,
-        };
-      });
-
-      // Calculate overall event statistics
-      const totalTicketsSold = event.ticketTypes.reduce(
-        (sum, tt) =>
-          sum +
-          tt.tickets.filter(
-            (t) => t.order && t.order.paymentStatus === 'COMPLETED'
-          ).length,
-        0
-      );
-      const totalRevenue = event.orders
-        .filter((order) => order.paymentStatus === 'COMPLETED')
-        .reduce((sum, order) => sum + order.totalAmount, 0);
-      const totalCapacity = event.ticketTypes.reduce(
-        (sum, tt) => sum + tt.quantity,
-        0
-      );
-
-      enhancedEvent.analytics = {
-        totalTicketsSold,
-        totalRevenue,
-        totalCapacity,
-        utilizationRate:
-          totalCapacity > 0 ? (totalTicketsSold / totalCapacity) * 100 : 0,
-        averageOrderValue:
-          event.orders.length > 0 ? totalRevenue / event.orders.length : 0,
-      };
-    }
-
-    // Calculate voting contest statistics
     if (event.eventType === EventType.VOTING_CONTEST && event.votingContest) {
-      const contest = event.votingContest;
-
-      // Calculate contestant vote counts and rankings
-      const contestantsWithStats = contest.contestants.map((contestant) => {
-        const voteCount = contestant._count.votes;
-        const recentVotes = contestant.votes.slice(0, 10); // Last 10 votes
-
-        return {
+      const contestantsWithStats = event.votingContest.contestants.map(
+        (contestant) => ({
           ...contestant,
-          voteCount,
-          recentVotes,
-          socialLinks: {
-            instagram: contestant.instagramUrl,
-            twitter: contestant.twitterUrl,
-            facebook: contestant.facebookUrl,
-          },
-        };
-      });
+          voteCount: contestant.votes.length,
+        })
+      );
 
-      // Sort by vote count for ranking
-      const rankedContestants = contestantsWithStats
-        .sort((a, b) => b.voteCount - a.voteCount)
-        .map((contestant, index) => ({
-          ...contestant,
-          rank: index + 1,
-        }));
+      enhancedEvent.votingContest.contestants = contestantsWithStats.sort(
+        (a, b) => b.voteCount - a.voteCount
+      );
 
-      enhancedEvent.votingContest = {
-        ...contest,
-        contestants: rankedContestants,
-        analytics: {
-          totalVotes: contest._count.votes,
-          totalContestants: contest._count.contestants,
-          totalVoteOrders: contest._count.VoteOrder,
-          totalVotePackages: contest._count.votePackages,
-          averageVotesPerContestant:
-            contest._count.contestants > 0
-              ? contest._count.votes / contest._count.contestants
-              : 0,
-          topContestant: rankedContestants[0] || null,
-          votingActivity: contest.votes.slice(0, 20), // Recent 20 votes
-          revenue: contest.VoteOrder.filter(
-            (order) => order.paymentStatus === 'COMPLETED'
-          ).reduce((sum, order) => sum + order.totalAmount, 0),
-        },
-      };
-
-      // For edit form compatibility, also set contestants at root level
-      enhancedEvent.contestants = rankedContestants.map((contestant) => ({
-        id: contestant.id,
-        name: contestant.name,
-        bio: contestant.bio || '',
-        imageUrl: contestant.imageUrl || '',
-        contestNumber: contestant.contestNumber,
-        instagramUrl: contestant.instagramUrl || '',
-        twitterUrl: contestant.twitterUrl || '',
-        facebookUrl: contestant.facebookUrl || '',
-        status: contestant.status,
-        voteCount: contestant.voteCount,
-        rank: contestant.rank,
+      // For edit form compatibility
+      enhancedEvent.contestants = contestantsWithStats.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        bio: c.bio,
+        imageUrl: c.imageUrl,
+        contestNumber: c.contestNumber,
+        instagramUrl: c.instagramUrl,
+        twitterUrl: c.twitterUrl,
+        facebookUrl: c.facebookUrl,
+        status: c.status,
       }));
     }
 
-    // Calculate average rating
-    if (event.ratings && event.ratings.length > 0) {
-      const totalRating = event.ratings.reduce(
-        (sum, rating) => sum + Number(rating.rating),
-        0
-      );
-      enhancedEvent.averageRating = totalRating / event.ratings.length;
-      enhancedEvent.ratingsCount = event.ratings.length;
-    } else {
-      enhancedEvent.averageRating = 0;
-      enhancedEvent.ratingsCount = 0;
+    if (event.eventType === EventType.INVITE && event.inviteOnlyEvent) {
+      const invitations = event.inviteOnlyEvent.invitations;
+
+      enhancedEvent.inviteOnlyEvent.stats = {
+        totalInvited: invitations.length,
+        accepted: invitations.filter((i) => i.status === 'ACCEPTED').length,
+        declined: invitations.filter((i) => i.status === 'DECLINED').length,
+        pending: invitations.filter((i) => i.status === 'PENDING').length,
+        attended: invitations.filter((i) => i.status === 'ATTENDED').length,
+        totalPlusOnes: invitations.reduce(
+          (sum, i) => sum + i.plusOnesConfirmed,
+          0
+        ),
+      };
+
+      // For edit form compatibility
+      enhancedEvent.guests = invitations.map((inv: any) => ({
+        id: inv.id,
+        guestName: inv.guestName,
+        guestEmail: inv.guestEmail,
+        guestPhone: inv.guestPhone,
+        plusOnesAllowed: inv.plusOnesAllowed,
+        specialRequirements: inv.specialRequirements,
+        organizerNotes: inv.organizerNotes,
+      }));
+
+      // Donation stats
+      if (event.donationOrders && event.donationOrders.length > 0) {
+        const totalDonations = event.donationOrders.reduce(
+          (sum, d) => sum + d.amount,
+          0
+        );
+        const totalFees = event.donationOrders.reduce(
+          (sum, d) => sum + d.platformFee,
+          0
+        );
+
+        enhancedEvent.inviteOnlyEvent.donationStats = {
+          totalDonations,
+          totalFees,
+          netTotal: totalDonations - totalFees,
+          donorCount: event.donationOrders.length,
+        };
+      }
     }
-
-    // Add computed fields for forms
-    enhancedEvent.isUpcoming = new Date(event.startDateTime) > new Date();
-    enhancedEvent.isOngoing =
-      new Date() >= new Date(event.startDateTime) &&
-      new Date() <= new Date(event.endDateTime);
-    enhancedEvent.isPast = new Date(event.endDateTime) < new Date();
-
-    // Add permissions context (you can expand this based on user role)
-    enhancedEvent.permissions = {
-      canEdit: true, // Will be determined by calling code based on user context
-      canDelete: true,
-      canPublish: true,
-      canViewAnalytics: true,
-    };
 
     return {
       success: true,
       data: enhancedEvent,
     };
   } catch (error) {
-    console.error(
-      `Error fetching comprehensive event data for ID ${id}:`,
-      error
-    );
-
-    // Provide detailed error logging
-    if (error instanceof Error) {
-      console.error('Error name:', error.name);
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
-    }
-
+    console.error('Error fetching event:', error);
     return {
       success: false,
-      message: 'Failed to fetch event details',
+      message: 'Failed to fetch event',
     };
   }
 }
@@ -2531,7 +2016,6 @@ export async function getEventBySlug(
 }
 
 export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
-  // Get session directly for delete operation
   const headersList = await headers();
   const session = await auth.api.getSession({
     headers: headersList,
@@ -2547,7 +2031,6 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
   const { role, subRole, id: userId } = session.user;
 
   try {
-    // Check if event exists with comprehensive relations including voting contest
     const event = await prisma.event.findUnique({
       where: { id },
       include: {
@@ -2556,15 +2039,7 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
             tickets: true,
           },
         },
-        orders: {
-          include: {
-            tickets: true,
-          },
-        },
-        waitingList: true,
-        ratings: true,
-        Notification: true,
-        // Include voting contest data
+        orders: true,
         votingContest: {
           include: {
             contestants: {
@@ -2572,25 +2047,15 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
                 votes: true,
               },
             },
-            votePackages: {
-              include: {
-                voteOrders: {
-                  include: {
-                    votes: true,
-                    notifications: true,
-                  },
-                },
-              },
-            },
-            votes: true,
-            VoteOrder: {
-              include: {
-                votes: true,
-                notifications: true,
-              },
-            },
+            VoteOrder: true,
           },
         },
+        inviteOnlyEvent: {
+          include: {
+            invitations: true,
+          },
+        },
+        donationOrders: true,
       },
     });
 
@@ -2601,7 +2066,6 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
       };
     }
 
-    // Permission check: Only SUPER_ADMIN can delete events, or event owner if organizer
     const isSuperAdmin = role === 'ADMIN' && subRole === 'SUPER_ADMIN';
     const isEventOwner = event.userId === userId && subRole === 'ORGANIZER';
 
@@ -2612,22 +2076,27 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
       };
     }
 
-    // Check if the event has orders, tickets, or voting activity
+    // Check if event has activity
     const hasOrders = event.orders.length > 0;
     const hasTickets = event.ticketTypes.some(
       (type) => type.tickets.length > 0
     );
-
-    // Fix: Properly check for voting activity with null/undefined safety
     const hasVotingActivity =
-      (event.votingContest?.votes?.length ?? 0) > 0 ||
-      (event.votingContest?.VoteOrder?.some(
-        (order) => (order.votes?.length ?? 0) > 0
-      ) ??
+      (event.votingContest?.VoteOrder?.length ?? 0) > 0 ||
+      (event.votingContest?.contestants?.some((c) => c.votes.length > 0) ??
         false);
+    const hasInvitations =
+      (event.inviteOnlyEvent?.invitations?.length ?? 0) > 0;
+    const hasDonations = event.donationOrders?.length > 0;
 
-    if (hasOrders || hasTickets || hasVotingActivity) {
-      // Instead of deleting, mark as cancelled
+    if (
+      hasOrders ||
+      hasTickets ||
+      hasVotingActivity ||
+      hasInvitations ||
+      hasDonations
+    ) {
+      // Mark as cancelled
       await prisma.event.update({
         where: { id },
         data: {
@@ -2637,77 +2106,70 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
       });
 
       revalidatePath('/admin/events');
-      revalidatePath('/admin/dashboard/events');
       revalidatePath('/dashboard/events');
       revalidatePath('/events');
 
       return {
         success: true,
         message:
-          'Event has been cancelled instead of deleted because it has associated orders, tickets, or voting activity',
+          'Event has been cancelled instead of deleted because it has associated activity',
       };
     }
 
-    // If no orders, tickets, or voting activity, delete in correct order
+    // Delete in transaction
     await prisma.$transaction(async (tx) => {
-      // Delete in reverse dependency order
-
-      // 1. Delete notifications first
-      await tx.notification.deleteMany({
-        where: { eventId: id },
-      });
-
-      // 2. If this is a voting contest, delete voting contest data
+      // Delete voting contest data
       if (event.votingContest) {
-        // Delete votes first
         await tx.vote.deleteMany({
           where: { contestId: event.votingContest.id },
         });
-
-        // Delete vote order notifications
-        const voteOrderIds =
-          event.votingContest.VoteOrder?.map((order) => order.id) || [];
-        if (voteOrderIds.length > 0) {
-          await tx.notification.deleteMany({
-            where: { voteOrderId: { in: voteOrderIds } },
-          });
-        }
-
-        // Delete vote orders
         await tx.voteOrder.deleteMany({
           where: { contestId: event.votingContest.id },
         });
-
-        // Delete vote packages
         await tx.votePackage.deleteMany({
           where: { contestId: event.votingContest.id },
         });
-
-        // Delete contestants
         await tx.contestant.deleteMany({
           where: { contestId: event.votingContest.id },
         });
-
-        // Delete voting contest
         await tx.votingContest.delete({
           where: { id: event.votingContest.id },
         });
       }
 
-      // 3. Delete ratings
+      // Delete invite-only data
+      if (event.inviteOnlyEvent) {
+        await tx.invitation.deleteMany({
+          where: { inviteOnlyEventId: event.inviteOnlyEvent.id },
+        });
+        await tx.inviteOnlyEvent.delete({
+          where: { id: event.inviteOnlyEvent.id },
+        });
+      }
+
+      // Delete donations
+      await tx.donationOrder.deleteMany({
+        where: { eventId: id },
+      });
+
+      // Delete notifications
+      await tx.notification.deleteMany({
+        where: { eventId: id },
+      });
+
+      // Delete ratings
       await tx.rating.deleteMany({
         where: { eventId: id },
       });
 
-      // 4. Delete waiting list entries
+      // Delete waiting list
       await tx.waitingList.deleteMany({
         where: { eventId: id },
       });
 
-      // 5. Delete tickets and ticket types (if any exist without orders)
+      // Delete ticket validations and tickets
       const ticketTypeIds = event.ticketTypes.map((tt) => tt.id);
       if (ticketTypeIds.length > 0) {
-        // Delete ticket validations first
         await tx.ticketValidation.deleteMany({
           where: {
             ticket: {
@@ -2716,7 +2178,6 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
           },
         });
 
-        // Delete tickets
         await tx.ticket.deleteMany({
           where: {
             ticketTypeId: { in: ticketTypeIds },
@@ -2724,29 +2185,28 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
         });
       }
 
-      // 6. Delete ticket types
+      // Delete ticket types
       await tx.ticketType.deleteMany({
         where: { eventId: id },
       });
 
-      // 7. Disconnect tags (many-to-many relationship)
+      // Disconnect tags
       await tx.event.update({
         where: { id },
         data: {
           tags: {
-            set: [], // Disconnect all tags
+            set: [],
           },
         },
       });
 
-      // 8. Finally delete the event
+      // Delete event
       await tx.event.delete({
         where: { id },
       });
     });
 
     revalidatePath('/admin/events');
-    revalidatePath('/admin/dashboard/events');
     revalidatePath('/dashboard/events');
     revalidatePath('/events');
 
@@ -2756,32 +2216,9 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
     };
   } catch (error) {
     console.error('Error deleting event:', error);
-
-    // Provide more specific error information
-    if (error instanceof Error) {
-      console.error('Error details:', error.message);
-      console.error('Error stack:', error.stack);
-
-      // Check for specific database constraint errors
-      if (error.message.includes('foreign key constraint')) {
-        return {
-          success: false,
-          message:
-            'Cannot delete event due to existing related data. Try cancelling the event instead.',
-        };
-      }
-
-      if (error.message.includes('Record to delete does not exist')) {
-        return {
-          success: false,
-          message: 'Event not found or already deleted',
-        };
-      }
-    }
-
     return {
       success: false,
-      message: 'Failed to delete event. Please try again or contact support.',
+      message: 'Failed to delete event',
     };
   }
 }

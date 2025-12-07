@@ -1,4 +1,4 @@
-// src/components/admin/admin-order-management.tsx
+// src/components/admin/admin-order-management.tsx - Complete Rewrite with Guest Support
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -29,18 +29,6 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -70,6 +58,7 @@ import {
   MapPin,
   Clock,
   Receipt,
+  Users,
 } from 'lucide-react';
 import { PaymentStatus, RefundStatus } from '@/generated/prisma';
 import { getAllOrders, processRefund } from '@/actions/order.actions';
@@ -82,6 +71,49 @@ interface AdminOrderManagementProps {
   userSubRole: string;
 }
 
+// Helper function to extract guest information from order
+const getGuestInfo = (order: any) => {
+  if (order.buyer) {
+    return null; // Not a guest purchase
+  }
+
+  try {
+    const purchaseData = JSON.parse(order.purchaseNotes || '{}');
+    if (purchaseData.isGuestPurchase) {
+      return {
+        name: purchaseData.guestName || 'Guest User',
+        email: purchaseData.guestEmail || 'No email',
+        phone: purchaseData.guestPhone || null,
+      };
+    }
+  } catch (error) {
+    console.error('Failed to parse guest info:', error);
+  }
+
+  return null;
+};
+
+// Helper function to get customer info (guest or registered)
+const getCustomerInfo = (order: any) => {
+  const guestInfo = getGuestInfo(order);
+
+  if (guestInfo) {
+    return {
+      name: guestInfo.name,
+      email: guestInfo.email,
+      phone: guestInfo.phone,
+      isGuest: true,
+    };
+  }
+
+  return {
+    name: order.buyer?.name || 'Unknown',
+    email: order.buyer?.email || 'Unknown',
+    phone: order.buyer?.phone || null,
+    isGuest: false,
+  };
+};
+
 export function AdminOrderManagement({
   initialOrders,
   userRole,
@@ -93,6 +125,7 @@ export function AdminOrderManagement({
   const [isExporting, setIsExporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [customerTypeFilter, setCustomerTypeFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState<string>('all');
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [showOrderDetail, setShowOrderDetail] = useState(false);
@@ -110,6 +143,8 @@ export function AdminOrderManagement({
       .length,
     pendingRefunds: orders.filter((order) => order.refundStatus === 'INITIATED')
       .length,
+    guestPurchases: orders.filter((order) => !order.buyer).length,
+    authenticatedPurchases: orders.filter((order) => order.buyer).length,
   };
 
   // Format currency
@@ -117,6 +152,7 @@ export function AdminOrderManagement({
     return new Intl.NumberFormat('en-NG', {
       style: 'currency',
       currency: 'NGN',
+      minimumFractionDigits: 0,
     }).format(amount);
   };
 
@@ -126,45 +162,49 @@ export function AdminOrderManagement({
 
     try {
       // Create CSV data from filtered orders
-      const csvData = filteredOrders.map((order) => ({
-        'Order ID': order.id,
-        'Paystack ID': order.paystackId,
-        'Customer Name': order.buyer.name,
-        'Customer Email': order.buyer.email,
-        'Event Title': order.event.title,
-        'Event Organizer': order.event.user?.name || 'Unknown',
-        Quantity: order.quantity,
-        'Total Amount (NGN)': order.totalAmount,
-        'Platform Fee (NGN)': order.platformFee || 0,
-        'Net Amount (NGN)': order.totalAmount - (order.platformFee || 0),
-        'Payment Status': order.paymentStatus,
-        'Refund Status': order.refundStatus || 'None',
-        'Payment Method': order.paymentMethod || 'Unknown',
-        Currency: order.currency || 'NGN',
-        'Purchase Notes': order.purchaseNotes || '',
-        'Order Date': format(new Date(order.createdAt), 'yyyy-MM-dd'),
-        'Order Time': format(new Date(order.createdAt), 'HH:mm:ss'),
-        'Order DateTime': format(
-          new Date(order.createdAt),
-          'yyyy-MM-dd HH:mm:ss'
-        ),
-        'Event Start Date': format(
-          new Date(order.event.startDateTime),
-          'yyyy-MM-dd'
-        ),
-        'Event Start Time': format(
-          new Date(order.event.startDateTime),
-          'HH:mm:ss'
-        ),
-        'Event Location': order.event.location || '',
-        'Event City': order.event.City?.name || '',
-        'Event Venue': order.event.venue?.name || '',
-        'Ticket Types':
-          order.tickets?.map((t: any) => t.ticketType?.name).join('; ') || '',
-        'Customer Phone': order.buyer.phone || '',
-        'Is Free Event': order.event.isFree ? 'Yes' : 'No',
-        'Event Category': order.event.category?.name || '',
-      }));
+      const csvData = filteredOrders.map((order) => {
+        const customerInfo = getCustomerInfo(order);
+
+        return {
+          'Order ID': order.id,
+          'Paystack ID': order.paystackId,
+          'Customer Type': customerInfo.isGuest ? 'Guest' : 'Registered',
+          'Customer Name': customerInfo.name,
+          'Customer Email': customerInfo.email,
+          'Customer Phone': customerInfo.phone || '',
+          'Event Title': order.event.title,
+          'Event Organizer': order.event.user?.name || 'Unknown',
+          Quantity: order.quantity,
+          'Total Amount (NGN)': order.totalAmount,
+          'Platform Fee (NGN)': order.platformFee || 0,
+          'Net Amount (NGN)': order.totalAmount - (order.platformFee || 0),
+          'Payment Status': order.paymentStatus,
+          'Refund Status': order.refundStatus || 'None',
+          'Payment Method': order.paymentMethod || 'Unknown',
+          Currency: order.currency || 'NGN',
+          'Order Date': format(new Date(order.createdAt), 'yyyy-MM-dd'),
+          'Order Time': format(new Date(order.createdAt), 'HH:mm:ss'),
+          'Order DateTime': format(
+            new Date(order.createdAt),
+            'yyyy-MM-dd HH:mm:ss'
+          ),
+          'Event Start Date': format(
+            new Date(order.event.startDateTime),
+            'yyyy-MM-dd'
+          ),
+          'Event Start Time': format(
+            new Date(order.event.startDateTime),
+            'HH:mm:ss'
+          ),
+          'Event Location': order.event.location || '',
+          'Event City': order.event.City?.name || '',
+          'Event Venue': order.event.venue?.name || '',
+          'Ticket Types':
+            order.tickets?.map((t: any) => t.ticketType?.name).join('; ') || '',
+          'Is Free Event': order.event.isFree ? 'Yes' : 'No',
+          'Event Category': order.event.category?.name || '',
+        };
+      });
 
       if (csvData.length === 0) {
         toast.error('No orders to export');
@@ -179,7 +219,6 @@ export function AdminOrderManagement({
           headers
             .map((header) => {
               const value = row[header as keyof typeof row];
-              // Escape commas and quotes in cell values
               const stringValue = String(value || '');
               if (
                 stringValue.includes(',') ||
@@ -204,9 +243,11 @@ export function AdminOrderManagement({
       const dateStr = format(now, 'yyyy-MM-dd_HHmm');
       let filename = `admin_orders_${dateStr}`;
 
-      // Add filter info to filename
       if (statusFilter !== 'all') {
         filename += `_${statusFilter}`;
+      }
+      if (customerTypeFilter !== 'all') {
+        filename += `_${customerTypeFilter}`;
       }
       if (dateRange !== 'all') {
         filename += `_${dateRange}days`;
@@ -326,14 +367,18 @@ export function AdminOrderManagement({
 
     // Search filter
     if (searchTerm) {
-      filtered = filtered.filter(
-        (order) =>
-          order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.paystackId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.buyer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.buyer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.event.title.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      filtered = filtered.filter((order) => {
+        const customerInfo = getCustomerInfo(order);
+        const searchLower = searchTerm.toLowerCase();
+
+        return (
+          order.id.toLowerCase().includes(searchLower) ||
+          order.paystackId.toLowerCase().includes(searchLower) ||
+          customerInfo.name.toLowerCase().includes(searchLower) ||
+          customerInfo.email.toLowerCase().includes(searchLower) ||
+          order.event.title.toLowerCase().includes(searchLower)
+        );
+      });
     }
 
     // Status filter
@@ -349,6 +394,15 @@ export function AdminOrderManagement({
       }
     }
 
+    // Customer type filter
+    if (customerTypeFilter !== 'all') {
+      if (customerTypeFilter === 'guest') {
+        filtered = filtered.filter((order) => !order.buyer);
+      } else if (customerTypeFilter === 'registered') {
+        filtered = filtered.filter((order) => order.buyer);
+      }
+    }
+
     // Date range filter
     if (dateRange !== 'all') {
       const now = new Date();
@@ -360,7 +414,7 @@ export function AdminOrderManagement({
     }
 
     setFilteredOrders(filtered);
-  }, [orders, searchTerm, statusFilter, dateRange]);
+  }, [orders, searchTerm, statusFilter, customerTypeFilter, dateRange]);
 
   // Handle refund approval/rejection
   const handleRefundAction = async (
@@ -419,7 +473,7 @@ export function AdminOrderManagement({
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
@@ -501,6 +555,26 @@ export function AdminOrderManagement({
             </div>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center">
+              <div className="p-2 bg-indigo-100 rounded-full">
+                <Users className="w-4 h-4 text-indigo-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-muted-foreground">
+                  Guest Purchases
+                </p>
+                <p className="text-2xl font-bold">{stats.guestPurchases}</p>
+                <div className="flex items-center text-xs text-indigo-600">
+                  <User className="w-3 h-3 mr-1" />
+                  {stats.authenticatedPurchases} registered
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters and Search */}
@@ -518,6 +592,19 @@ export function AdminOrderManagement({
                 />
               </div>
             </div>
+            <Select
+              value={customerTypeFilter}
+              onValueChange={setCustomerTypeFilter}
+            >
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Customer type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Customers</SelectItem>
+                <SelectItem value="guest">Guest Only</SelectItem>
+                <SelectItem value="registered">Registered Only</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="Filter by status" />
@@ -551,6 +638,11 @@ export function AdminOrderManagement({
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>
             Showing {filteredOrders.length} of {orders.length} orders
+            {stats.guestPurchases > 0 && (
+              <span className="ml-2 text-indigo-600">
+                ({stats.guestPurchases} guest purchases)
+              </span>
+            )}
           </span>
           <span>Export will include all filtered results</span>
         </div>
@@ -591,145 +683,190 @@ export function AdminOrderManagement({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredOrders.map((order) => (
-                    <TableRow key={order.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium font-mono text-sm">
-                            {order.id.slice(-8)}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {order.paystackId}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{order.buyer.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {order.buyer.email}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="max-w-48">
-                          <p className="font-medium truncate">
-                            {order.event.title}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {order.quantity} ticket(s)
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">
-                            {formatCurrency(order.totalAmount)}
-                          </p>
-                          {order.platformFee > 0 && (
-                            <p className="text-sm text-muted-foreground">
-                              Fee: {formatCurrency(order.platformFee)}
+                  filteredOrders.map((order) => {
+                    const customerInfo = getCustomerInfo(order);
+
+                    return (
+                      <TableRow key={order.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium font-mono text-sm">
+                              {order.id.slice(-8)}
                             </p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {getPaymentStatusBadge(order.paymentStatus)}
-                      </TableCell>
-                      <TableCell>
-                        {getRefundStatusBadge(order.refundStatus)}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="text-sm">
-                            {format(new Date(order.createdAt), 'MMM d, yyyy')}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(order.createdAt), 'h:mm a')}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem
-                              onClick={() => viewOrderDetails(order)}
-                            >
-                              <Eye className="w-4 h-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            {order.refundStatus === 'INITIATED' && (
+                            <p className="text-sm text-muted-foreground">
+                              {order.paystackId}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            {customerInfo.isGuest ? (
                               <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    handleRefundAction(order.id, true)
-                                  }
-                                  className="text-green-600"
-                                >
-                                  <CheckCircle className="w-4 h-4 mr-2" />
-                                  Approve Refund
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    handleRefundAction(order.id, false)
-                                  }
-                                  className="text-red-600"
-                                >
-                                  <XCircle className="w-4 h-4 mr-2" />
-                                  Reject Refund
-                                </DropdownMenuItem>
+                                <div className="flex items-center gap-1 mb-1">
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    Guest
+                                  </Badge>
+                                  <p className="font-medium">
+                                    {customerInfo.name}
+                                  </p>
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  {customerInfo.email}
+                                </p>
+                                {customerInfo.phone && (
+                                  <p className="text-xs text-muted-foreground">
+                                    {customerInfo.phone}
+                                  </p>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <p className="font-medium">
+                                  {customerInfo.name}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {customerInfo.email}
+                                </p>
                               </>
                             )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="max-w-48">
+                            <p className="font-medium truncate">
+                              {order.event.title}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {order.quantity} ticket(s)
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">
+                              {formatCurrency(order.totalAmount)}
+                            </p>
+                            {order.platformFee > 0 && (
+                              <p className="text-sm text-muted-foreground">
+                                Fee: {formatCurrency(order.platformFee)}
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {getPaymentStatusBadge(order.paymentStatus)}
+                        </TableCell>
+                        <TableCell>
+                          {getRefundStatusBadge(order.refundStatus)}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="text-sm">
+                              {format(new Date(order.createdAt), 'MMM d, yyyy')}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {format(new Date(order.createdAt), 'h:mm a')}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              <DropdownMenuItem
+                                onClick={() => viewOrderDetails(order)}
+                              >
+                                <Eye className="w-4 h-4 mr-2" />
+                                View Details
+                              </DropdownMenuItem>
+                              {order.refundStatus === 'INITIATED' && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      handleRefundAction(order.id, true)
+                                    }
+                                    className="text-green-600"
+                                  >
+                                    <CheckCircle className="w-4 h-4 mr-2" />
+                                    Approve Refund
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      handleRefundAction(order.id, false)
+                                    }
+                                    className="text-red-600"
+                                  >
+                                    <XCircle className="w-4 h-4 mr-2" />
+                                    Reject Refund
+                                  </DropdownMenuItem>
+                                </>
+                              )}
 
-                            {order.paymentStatus === 'COMPLETED' && (
-                              <>
-                                <DropdownMenuSeparator />
-
-                                {/* Download for admins */}
-                                <DropdownMenuItem
-                                  onClick={() =>
-                                    window.open(
-                                      `/api/orders/${order.id}/tickets`,
-                                      '_blank'
-                                    )
-                                  }
-                                >
-                                  <Download className="w-4 h-4 mr-2" />
-                                  Download Tickets (PDF)
-                                </DropdownMenuItem>
-
-                                {/* Email for admins */}
-                                <DropdownMenuItem
-                                  onClick={async () => {
-                                    const res = await resendOrderTickets(
-                                      order.id
-                                    );
-                                    if (res.success)
-                                      toast.success('Tickets email sent');
-                                    else
-                                      toast.error(
-                                        res.message ||
-                                          'Failed to send tickets email'
+                              {order.paymentStatus === 'COMPLETED' && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      window.open(
+                                        `/api/orders/${order.id}/tickets`,
+                                        '_blank'
+                                      )
+                                    }
+                                  >
+                                    <Download className="w-4 h-4 mr-2" />
+                                    Download Tickets (PDF)
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={async () => {
+                                      const res = await resendOrderTickets(
+                                        order.id
                                       );
-                                  }}
-                                >
-                                  <Mail className="w-4 h-4 mr-2" />
-                                  Send Tickets by Email
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                                      if (res.success)
+                                        toast.success('Tickets email sent');
+                                      else
+                                        toast.error(
+                                          res.message ||
+                                          'Failed to send tickets email'
+                                        );
+                                    }}
+                                  >
+                                    <Mail className="w-4 h-4 mr-2" />
+                                    Send Tickets by Email
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+
+                              {customerInfo.email && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      window.open(
+                                        `mailto:${customerInfo.email}`,
+                                        '_blank'
+                                      )
+                                    }
+                                  >
+                                    <Mail className="w-4 h-4 mr-2" />
+                                    Email Customer
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>

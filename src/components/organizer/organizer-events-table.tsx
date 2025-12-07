@@ -14,6 +14,9 @@ import {
   Plus,
   Calendar,
   TrendingUp,
+  Vote,
+  Shield,
+  Armchair,
 } from 'lucide-react';
 import {
   useReactTable,
@@ -44,9 +47,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { PublishedStatus } from '@/generated/prisma';
+import { PublishedStatus, EventType } from '@/generated/prisma';
 import { EventPreviewModal } from '@/components/events/event-preview-modal';
 import { EventAnalyticsModal } from '@/components/events/event-analystics-modal';
+import { VotingContestAnalyticsModal } from '@/components/events/voting-contest-analytics-modal';
+import { InviteOnlyAnalyticsModal } from '@/components/events/invite-only-analytics-modal';
 
 interface OrganizerEventsTableProps {
   initialData: any[];
@@ -68,6 +73,8 @@ export function OrganizerEventsTable({
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
+  const [showVotingAnalyticsModal, setShowVotingAnalyticsModal] = useState(false);
+  const [showInviteAnalyticsModal, setShowInviteAnalyticsModal] = useState(false);
 
   // Format date and time
   const formatDateTime = (dateString: string) => {
@@ -115,6 +122,35 @@ export function OrganizerEventsTable({
     }
   };
 
+  // Get event type badge
+  const getEventTypeBadge = (eventType: EventType) => {
+    switch (eventType) {
+      case 'STANDARD':
+        return (
+          <Badge variant="outline" className="bg-blue-100 text-blue-800">
+            <Calendar className="h-3 w-3 mr-1" />
+            Standard
+          </Badge>
+        );
+      case 'VOTING_CONTEST':
+        return (
+          <Badge variant="outline" className="bg-purple-100 text-purple-800">
+            <Vote className="h-3 w-3 mr-1" />
+            Voting Contest
+          </Badge>
+        );
+      case 'INVITE':
+        return (
+          <Badge variant="outline" className="bg-green-100 text-green-800">
+            <Shield className="h-3 w-3 mr-1" />
+            Invite Only
+          </Badge>
+        );
+      default:
+        return <Badge variant="outline">Unknown</Badge>;
+    }
+  };
+
   // Calculate tickets sold vs available
   const getTicketStats = (ticketTypes: any[]) => {
     const totalAvailable = ticketTypes.reduce(
@@ -126,8 +162,8 @@ export function OrganizerEventsTable({
         sum +
         (type.tickets
           ? type.tickets.filter(
-              (t: any) => t.status !== 'REFUNDED' && t.status !== 'CANCELLED'
-            ).length
+            (t: any) => t.status !== 'REFUNDED' && t.status !== 'CANCELLED'
+          ).length
           : 0)
       );
     }, 0);
@@ -141,10 +177,22 @@ export function OrganizerEventsTable({
     setShowPreviewModal(true);
   };
 
-  // Handle event analytics
+  // Handle event analytics (for standard events)
   const handleAnalyticsEvent = (event: any) => {
     setSelectedEvent(event);
     setShowAnalyticsModal(true);
+  };
+
+  // Handle voting contest analytics
+  const handleVotingAnalyticsEvent = (event: any) => {
+    setSelectedEvent(event);
+    setShowVotingAnalyticsModal(true);
+  };
+
+  // Handle invite-only analytics
+  const handleInviteAnalyticsEvent = (event: any) => {
+    setSelectedEvent(event);
+    setShowInviteAnalyticsModal(true);
   };
 
   // Table columns definition
@@ -163,12 +211,13 @@ export function OrganizerEventsTable({
             <div className="text-sm text-muted-foreground">
               {formatDateTime(event.startDateTime)}
             </div>
-            <div className="mt-1">
+            <div className="mt-1 flex flex-wrap gap-1">
               {getStatusBadge(event.publishedStatus, isCancelled)}
+              {getEventTypeBadge(event.eventType)}
               {event.featured && (
                 <Badge
                   variant="outline"
-                  className="ml-2 bg-purple-100 text-purple-800"
+                  className="bg-purple-100 text-purple-800"
                 >
                   Featured
                 </Badge>
@@ -177,6 +226,12 @@ export function OrganizerEventsTable({
           </div>
         );
       },
+    },
+    {
+      id: 'eventType',
+      header: 'Type',
+      accessorFn: (row) => row.eventType,
+      cell: ({ row }) => getEventTypeBadge(row.original.eventType),
     },
     {
       id: 'venue',
@@ -196,23 +251,65 @@ export function OrganizerEventsTable({
       },
     },
     {
-      id: 'tickets',
-      header: 'Tickets',
+      id: 'metrics',
+      header: 'Metrics',
       accessorFn: (row) => row.ticketTypes?.length || 0,
       cell: ({ row }) => {
-        const ticketTypes = row.original.ticketTypes || [];
-        const { totalAvailable, totalSold } = getTicketStats(ticketTypes);
+        const event = row.original;
 
-        return (
-          <div>
-            <div className="font-medium">
-              {totalSold} / {totalAvailable}
+        if (event.eventType === 'VOTING_CONTEST') {
+          const contestantCount = event.votingContest?.contestants?.length || 0;
+          const votesCount = event.votingContest?._count?.votes || 0;
+          return (
+            <div>
+              <div className="font-medium">
+                {contestantCount} contestant{contestantCount !== 1 ? 's' : ''}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {votesCount} votes
+              </div>
             </div>
-            <div className="text-sm text-muted-foreground">
-              {ticketTypes.length} type{ticketTypes.length !== 1 ? 's' : ''}
+          );
+        } else if (event.eventType === 'INVITE') {
+          const invitationCount = event.inviteOnlyEvent?._count?.invitations || 0;
+          const acceptedCount =
+            event.inviteOnlyEvent?.invitations?.filter(
+              (inv: any) => inv.status === 'ACCEPTED'
+            ).length || 0;
+          const seatingEnabled = event.inviteOnlyEvent?.enableSeatingArrangement;
+
+          return (
+            <div>
+              <div className="font-medium">
+                {invitationCount} invitation{invitationCount !== 1 ? 's' : ''}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {acceptedCount} accepted
+              </div>
+              {/* ✅ Seating Indicator */}
+              {seatingEnabled && (
+                <div className="flex items-center gap-1 text-xs text-purple-600 mt-1">
+                  <Armchair className="h-3 w-3" />
+                  <span>Seating enabled</span>
+                </div>
+              )}
             </div>
-          </div>
-        );
+          );
+        } else {
+          const ticketTypes = event.ticketTypes || [];
+          const { totalAvailable, totalSold } = getTicketStats(ticketTypes);
+
+          return (
+            <div>
+              <div className="font-medium">
+                {totalSold} / {totalAvailable}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {ticketTypes.length} type{ticketTypes.length !== 1 ? 's' : ''}
+              </div>
+            </div>
+          );
+        }
       },
     },
     {
@@ -220,14 +317,70 @@ export function OrganizerEventsTable({
       header: 'Revenue',
       cell: ({ row }) => {
         const event = row.original;
-        // Calculate revenue from sold tickets
+
+        // For voting contests, calculate from votes
+        if (event.eventType === 'VOTING_CONTEST') {
+          const votingContest = event.votingContest;
+          if (!votingContest || votingContest.votingType === 'FREE') {
+            return (
+              <div>
+                <div className="font-medium">Free Voting</div>
+                <div className="text-sm text-muted-foreground">No revenue</div>
+              </div>
+            );
+          }
+          // Calculate from paid votes if available
+          const paidVotes =
+            votingContest.votes?.filter((v: any) => v.voteType === 'PAID')
+              ?.length || 0;
+          const revenue = paidVotes * (votingContest.defaultVotePrice || 0);
+
+          return (
+            <div>
+              <div className="font-medium">
+                {new Intl.NumberFormat('en-NG', {
+                  style: 'currency',
+                  currency: 'NGN',
+                }).format(revenue)}
+              </div>
+              {revenue > 0 && (
+                <div className="text-sm text-muted-foreground flex items-center">
+                  <TrendingUp className="h-3 w-3 mr-1" />
+                  <span>{paidVotes} paid votes</span>
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // For invite-only events with donations
+        if (event.eventType === 'INVITE') {
+          const inviteEvent = event.inviteOnlyEvent;
+          if (!inviteEvent?.acceptDonations) {
+            return (
+              <div>
+                <div className="font-medium">No Revenue</div>
+                <div className="text-sm text-muted-foreground">Invite only</div>
+              </div>
+            );
+          }
+          // Would need to fetch donation data separately
+          return (
+            <div>
+              <div className="font-medium">Donations</div>
+              <div className="text-sm text-muted-foreground">View analytics</div>
+            </div>
+          );
+        }
+
+        // For standard events, calculate from tickets
         const revenue =
           event.ticketTypes?.reduce((total: number, type: any) => {
             const soldTickets = type.tickets
               ? type.tickets.filter(
-                  (t: any) =>
-                    t.status !== 'REFUNDED' && t.status !== 'CANCELLED'
-                ).length
+                (t: any) =>
+                  t.status !== 'REFUNDED' && t.status !== 'CANCELLED'
+              ).length
               : 0;
             return total + soldTickets * type.price;
           }, 0) || 0;
@@ -238,9 +391,9 @@ export function OrganizerEventsTable({
               {event.isFree
                 ? 'Free Event'
                 : new Intl.NumberFormat('en-NG', {
-                    style: 'currency',
-                    currency: 'NGN',
-                  }).format(revenue)}
+                  style: 'currency',
+                  currency: 'NGN',
+                }).format(revenue)}
             </div>
             {!event.isFree && revenue > 0 && (
               <div className="text-sm text-muted-foreground flex items-center">
@@ -271,17 +424,39 @@ export function OrganizerEventsTable({
               variant="ghost"
               size="sm"
               onClick={() => handlePreviewEvent(event)}
+              title="Preview Event"
             >
               <Eye className="h-4 w-4" />
             </Button>
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleAnalyticsEvent(event)}
-            >
-              <BarChart3 className="h-4 w-4" />
-            </Button>
+            {event.eventType === 'VOTING_CONTEST' ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleVotingAnalyticsEvent(event)}
+                title="Voting Analytics"
+              >
+                <Vote className="h-4 w-4" />
+              </Button>
+            ) : event.eventType === 'INVITE' ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleInviteAnalyticsEvent(event)}
+                title="Invite-Only Analytics"
+              >
+                <Shield className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleAnalyticsEvent(event)}
+                title="Event Analytics"
+              >
+                <BarChart3 className="h-4 w-4" />
+              </Button>
+            )}
 
             <Button variant="ghost" size="sm" asChild>
               <Link href={`/dashboard/events/${event.id}/edit`}>
@@ -327,6 +502,28 @@ export function OrganizerEventsTable({
             onChange={(e) => setGlobalFilter(e.target.value)}
             className="max-w-sm"
           />
+
+          {/* Event Type Filter */}
+          <Select
+            value={
+              (table.getColumn('eventType')?.getFilterValue() as string) || ''
+            }
+            onValueChange={(value) => {
+              table.getColumn('eventType')?.setFilterValue(value || undefined);
+            }}
+          >
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Filter by type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="STANDARD">Standard</SelectItem>
+              <SelectItem value="VOTING_CONTEST">Voting Contest</SelectItem>
+              <SelectItem value="INVITE">Invite Only</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Status Filter */}
           <Select
             value={
               (table
@@ -343,9 +540,7 @@ export function OrganizerEventsTable({
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem disabled value="placeholder">
-                All Statuses
-              </SelectItem>
+              <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="PUBLISHED">Published</SelectItem>
               <SelectItem value="PENDING_REVIEW">Pending Review</SelectItem>
               <SelectItem value="DRAFT">Draft</SelectItem>
@@ -407,9 +602,9 @@ export function OrganizerEventsTable({
                         {header.isPlaceholder
                           ? null
                           : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext()
-                            )}
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
                       </TableHead>
                     ))}
                   </TableRow>
@@ -516,6 +711,34 @@ export function OrganizerEventsTable({
           isOpen={showAnalyticsModal}
           onClose={() => {
             setShowAnalyticsModal(false);
+            setSelectedEvent(null);
+          }}
+          userRole={userRole}
+          userSubRole={userSubRole}
+        />
+      )}
+
+      {/* Voting Contest Analytics Modal */}
+      {selectedEvent && (
+        <VotingContestAnalyticsModal
+          event={selectedEvent}
+          isOpen={showVotingAnalyticsModal}
+          onClose={() => {
+            setShowVotingAnalyticsModal(false);
+            setSelectedEvent(null);
+          }}
+          userRole={userRole}
+          userSubRole={userSubRole}
+        />
+      )}
+
+      {/* Invite-Only Analytics Modal */}
+      {selectedEvent && (
+        <InviteOnlyAnalyticsModal
+          event={selectedEvent}
+          isOpen={showInviteAnalyticsModal}
+          onClose={() => {
+            setShowInviteAnalyticsModal(false);
             setSelectedEvent(null);
           }}
           userRole={userRole}

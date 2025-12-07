@@ -8,6 +8,7 @@ import {
   Calendar,
   Clock,
   Tag,
+  Armchair,
   Info,
   Ticket,
   User,
@@ -20,6 +21,10 @@ import {
   Globe,
   UserCheck,
   AlertCircle,
+  Mail,
+  Users,
+  Gift,
+  Shield,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -67,6 +72,7 @@ export function EventPreview({
   const [isLoading, setIsLoading] = useState(true);
   const [platformFeePercentage, setPlatformFeePercentage] = useState(5);
   const isVotingContest = formData.eventType === EventType.VOTING_CONTEST;
+  const isInviteOnly = formData.eventType === EventType.INVITE;
   const isStandardEvent = formData.eventType === EventType.STANDARD;
 
   // Load platform fee
@@ -174,9 +180,21 @@ export function EventPreview({
   const hasDefaultPrice =
     votingContest.defaultVotePrice && votingContest.defaultVotePrice > 0;
 
+  // Get invite-only data
+  const inviteOnly = formData.inviteOnly || {};
+  const guests = formData.guests || [];
+  const totalPlusOnes = guests.reduce((sum: number, g: any) => sum + (g.plusOnesAllowed || 0), 0);
+
   // Check if user can publish directly
   const canPublishDirectly =
     userRole === 'ADMIN' && ['STAFF', 'SUPER_ADMIN'].includes(userSubRole);
+
+  // Get event type label
+  const getEventTypeLabel = () => {
+    if (isVotingContest) return 'Contest';
+    if (isInviteOnly) return 'Invite-Only Event';
+    return 'Event';
+  };
 
   return (
     <div className="space-y-6">
@@ -184,17 +202,17 @@ export function EventPreview({
         <div className="flex items-center gap-3 mb-2">
           {isVotingContest ? (
             <Vote className="h-6 w-6 text-primary" />
+          ) : isInviteOnly ? (
+            <Mail className="h-6 w-6 text-primary" />
           ) : (
             <Calendar className="h-6 w-6 text-primary" />
           )}
-          <h2 className="text-2xl font-bold">
-            {isVotingContest ? 'Contest Preview' : 'Event Preview'}
-          </h2>
+          <h2 className="text-2xl font-bold">{getEventTypeLabel()} Preview</h2>
         </div>
         <p className="text-muted-foreground">
           {isEditing
-            ? `Review your updated ${isVotingContest ? 'contest' : 'event'} details before saving.`
-            : `Review your ${isVotingContest ? 'contest' : 'event'} details before submitting for review.`}
+            ? `Review your updated ${getEventTypeLabel().toLowerCase()} details before saving.`
+            : `Review your ${getEventTypeLabel().toLowerCase()} details before submitting for review.`}
         </p>
 
         {/* Admin Review Notice for Voting Contests */}
@@ -210,6 +228,22 @@ export function EventPreview({
                   Voting contests require admin approval before being published.
                   Your contest will be submitted for review and you&apos;ll be
                   notified once it&apos;s approved.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Privacy Notice for Invite-Only Events */}
+        {isInviteOnly && inviteOnly.isPrivate && (
+          <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <Shield className="h-5 w-5 text-purple-600 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-purple-900">Private Event</h4>
+                <p className="text-sm text-purple-800 mt-1">
+                  This is a private invite-only event. Only invited guests will be able to
+                  view event details and RSVP.
                 </p>
               </div>
             </div>
@@ -237,6 +271,14 @@ export function EventPreview({
               <Badge className="bg-blue-600 text-white">
                 <Vote className="h-3 w-3 mr-1" />
                 Voting Contest
+              </Badge>
+            </div>
+          )}
+          {isInviteOnly && (
+            <div className="absolute top-4 left-4">
+              <Badge className="bg-purple-600 text-white">
+                <Mail className="h-3 w-3 mr-1" />
+                Invite Only
               </Badge>
             </div>
           )}
@@ -270,13 +312,13 @@ export function EventPreview({
                 <Calendar className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
                 <div>
                   <p className="font-medium">
-                    {isVotingContest ? 'Contest Period' : 'Date & Time'}
+                    {isVotingContest ? 'Contest Period' : isInviteOnly ? 'Event Date' : 'Date & Time'}
                   </p>
                   <p className="text-muted-foreground">
                     {formatDateTime(formData.startDateTime)} -{' '}
                     {formatDateTime(formData.endDateTime)}
                   </p>
-                  {formData.lateEntry && !isVotingContest && (
+                  {formData.lateEntry && !isVotingContest && !isInviteOnly && (
                     <p className="text-sm text-amber-600">
                       Late entry until: {formatDateTime(formData.lateEntry)}
                     </p>
@@ -286,6 +328,11 @@ export function EventPreview({
                       Voting: {formatDateTime(votingContest.votingStartDate)}
                       {votingContest.votingEndDate &&
                         ` - ${formatDateTime(votingContest.votingEndDate)}`}
+                    </p>
+                  )}
+                  {isInviteOnly && inviteOnly.rsvpDeadline && (
+                    <p className="text-sm text-purple-600">
+                      RSVP by: {formatDateTime(inviteOnly.rsvpDeadline)}
                     </p>
                   )}
                 </div>
@@ -329,7 +376,7 @@ export function EventPreview({
                     {votingContest.votingType === 'PAID' && (
                       <div className="mt-2">
                         {votingContest.votePackagesEnabled &&
-                        votePackages.length > 0 ? (
+                          votePackages.length > 0 ? (
                           <p className="text-sm text-blue-600">
                             {votePackages.length} vote package
                             {votePackages.length !== 1 ? 's' : ''} available
@@ -343,6 +390,26 @@ export function EventPreview({
                           )
                         )}
                       </div>
+                    )}
+                  </div>
+                </div>
+              ) : isInviteOnly ? (
+                <div className="flex items-start gap-3">
+                  <Mail className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium">Invitation Details</p>
+                    <p className="text-muted-foreground">
+                      {guests.length} guest{guests.length !== 1 ? 's' : ''} invited
+                    </p>
+                    {inviteOnly.allowPlusOnes && totalPlusOnes > 0 && (
+                      <p className="text-sm text-purple-600">
+                        Up to {totalPlusOnes} plus one{totalPlusOnes !== 1 ? 's' : ''} allowed
+                      </p>
+                    )}
+                    {inviteOnly.requireRSVP && (
+                      <p className="text-sm text-muted-foreground">
+                        RSVP required
+                      </p>
                     )}
                   </div>
                 </div>
@@ -468,6 +535,87 @@ export function EventPreview({
                   </div>
                 </>
               )}
+
+              {/* Invite-only specific fields */}
+              {isInviteOnly && (
+                <>
+                  {inviteOnly.maxInvitations && (
+                    <div className="flex items-start gap-3">
+                      <Users className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Guest Capacity</p>
+                        <p className="text-muted-foreground">
+                          Maximum {inviteOnly.maxInvitations} invited guests
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ✅ NEW: Show Seating Arrangement Feature */}
+                  {inviteOnly.enableSeatingArrangement && (
+                    <div className="flex items-start gap-3">
+                      <Armchair className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Seating Arrangement Enabled</p>
+                        <p className="text-muted-foreground">
+                          Table and seat assignments available
+                        </p>
+                        <p className="text-xs text-purple-600 mt-1">
+                          Configure seating after event creation
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {inviteOnly.acceptDonations && (
+                    <div className="flex items-start gap-3">
+                      <Gift className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Donations Accepted</p>
+                        {inviteOnly.suggestedDonation && (
+                          <p className="text-muted-foreground">
+                            Suggested: {formatPrice(inviteOnly.suggestedDonation)}
+                          </p>
+                        )}
+                        {inviteOnly.minimumDonation && (
+                          <p className="text-sm text-muted-foreground">
+                            Minimum: {formatPrice(inviteOnly.minimumDonation)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-start gap-3">
+                    <Info className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium">Event Settings</p>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        <p>
+                          {inviteOnly.isPrivate
+                            ? '• Private event (invitation required)'
+                            : '• Public event listing'}
+                        </p>
+                        {inviteOnly.requireRSVP && (
+                          <p>• RSVP required from guests</p>
+                        )}
+                        {inviteOnly.requireApproval && (
+                          <p>• RSVPs require organizer approval</p>
+                        )}
+                        {inviteOnly.sendAutoReminders && (
+                          <p>
+                            • Auto-reminders {inviteOnly.reminderDaysBefore} days before
+                          </p>
+                        )}
+                        {/* ✅ NEW: Show seating in settings summary */}
+                        {inviteOnly.enableSeatingArrangement && (
+                          <p>• Seating arrangement feature enabled</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -476,6 +624,8 @@ export function EventPreview({
               <TabsTrigger value="overview">Overview</TabsTrigger>
               {isVotingContest ? (
                 <TabsTrigger value="voting">Voting & Pricing</TabsTrigger>
+              ) : isInviteOnly ? (
+                <TabsTrigger value="guests">Guest List</TabsTrigger>
               ) : (
                 <TabsTrigger value="tickets">Tickets</TabsTrigger>
               )}
@@ -487,7 +637,7 @@ export function EventPreview({
             <TabsContent value="overview" className="mt-4">
               <div className="prose max-w-none">
                 <h3 className="text-xl font-medium mb-2">
-                  {isVotingContest ? 'About This Contest' : 'About This Event'}
+                  {isVotingContest ? 'About This Contest' : isInviteOnly ? 'About This Event' : 'About This Event'}
                 </h3>
                 <div className="whitespace-pre-wrap">
                   {formData.description}
@@ -559,9 +709,9 @@ export function EventPreview({
                                 <span>
                                   {formatPrice(
                                     votingContest.defaultVotePrice -
-                                      calculatePlatformFee(
-                                        votingContest.defaultVotePrice
-                                      )
+                                    calculatePlatformFee(
+                                      votingContest.defaultVotePrice
+                                    )
                                   )}
                                 </span>
                               </div>
@@ -612,7 +762,7 @@ export function EventPreview({
                                         <span>
                                           {formatPrice(
                                             pkg.price -
-                                              calculatePlatformFee(pkg.price)
+                                            calculatePlatformFee(pkg.price)
                                           )}
                                         </span>
                                       </div>
@@ -622,7 +772,7 @@ export function EventPreview({
                                           {formatPrice(
                                             (pkg.price -
                                               calculatePlatformFee(pkg.price)) /
-                                              pkg.voteCount
+                                            pkg.voteCount
                                           )}
                                         </span>
                                       </div>
@@ -774,6 +924,186 @@ export function EventPreview({
                   </div>
                 </div>
               </TabsContent>
+            ) : isInviteOnly ? (
+              <TabsContent value="guests" className="mt-4">
+                <h3 className="text-xl font-medium mb-4">Guest List</h3>
+
+                <div className="space-y-6">
+                  {/* Guest Statistics */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">
+                          Total Guests
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{guests.length}</div>
+                        {inviteOnly.maxInvitations && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            of {inviteOnly.maxInvitations} maximum
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {inviteOnly.allowPlusOnes && (
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">
+                            Plus Ones
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-2xl font-bold">{totalPlusOnes}</div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            additional guests allowed
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">
+                          Total Capacity
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">
+                          {guests.length + totalPlusOnes}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          guests + plus ones
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Seating Arrangement Info */}
+                  {inviteOnly.enableSeatingArrangement && (
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <Armchair className="h-5 w-5 text-blue-600 mt-0.5" />
+                        <div>
+                          <h4 className="font-medium text-blue-900">Seating Arrangement Enabled</h4>
+                          <p className="text-sm text-blue-800 mt-1">
+                            After saving this event, you'll be able to create tables and assign guests to specific seats from the event management page. Navigate to the "Seating" tab to configure your venue layout.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Guest List Preview */}
+                  {guests.length > 0 && (
+                    <div>
+                      <h4 className="font-medium mb-4">
+                        Invited Guests ({guests.length})
+                      </h4>
+                      <div className="border rounded-lg divide-y max-h-96 overflow-y-auto">
+                        {guests.map((guest: any, index: number) => (
+                          <div key={index} className="p-4 hover:bg-muted/50">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="font-medium">{guest.guestName}</p>
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                                  <Mail className="h-3 w-3" />
+                                  {guest.guestEmail}
+                                </div>
+                                {guest.guestPhone && (
+                                  <p className="text-sm text-muted-foreground">
+                                    {guest.guestPhone}
+                                  </p>
+                                )}
+                                {inviteOnly.enableSeatingArrangement && (
+                                  <div className="mt-2">
+                                    <Badge variant="outline" className="text-xs">
+                                      <Armchair className="h-3 w-3 mr-1" />
+                                      Seating: Unassigned
+                                    </Badge>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      Seats will be assigned after event creation
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                              {guest.plusOnesAllowed > 0 && (
+                                <Badge variant="secondary">
+                                  +{guest.plusOnesAllowed}
+                                </Badge>
+                              )}
+                            </div>
+                            {guest.specialRequirements && (
+                              <p className="text-xs text-muted-foreground mt-2">
+                                <strong>Special Requirements:</strong> {guest.specialRequirements}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Event Settings */}
+                  <div className="p-4 border rounded-lg">
+                    <h4 className="font-medium mb-2">Event Settings</h4>
+                    <div className="text-sm text-muted-foreground space-y-2">
+                      <p>
+                        • {inviteOnly.isPrivate ? 'Private event' : 'Public event'}
+                      </p>
+                      {inviteOnly.requireRSVP && (
+                        <p>• RSVP required from all guests</p>
+                      )}
+                      {inviteOnly.requireApproval && (
+                        <p>• RSVPs require organizer approval</p>
+                      )}
+                      {inviteOnly.sendAutoReminders && (
+                        <p>
+                          • Automated reminders sent {inviteOnly.reminderDaysBefore} days
+                          before event
+                        </p>
+                      )}
+                      {inviteOnly.acceptDonations && (
+                        <p>• Accepting donations from guests</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Donation Information */}
+                  {inviteOnly.acceptDonations && (
+                    <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                      <h5 className="font-medium text-purple-900 mb-2 flex items-center gap-2">
+                        <Gift className="h-4 w-4" />
+                        Donation Information
+                      </h5>
+                      <div className="text-sm text-purple-800 space-y-1">
+                        {inviteOnly.suggestedDonation && (
+                          <p>
+                            • Suggested donation: {formatPrice(inviteOnly.suggestedDonation)}
+                          </p>
+                        )}
+                        {inviteOnly.minimumDonation && (
+                          <p>
+                            • Minimum donation: {formatPrice(inviteOnly.minimumDonation)}
+                          </p>
+                        )}
+                        {inviteOnly.donationDescription && (
+                          <p className="mt-2">{inviteOnly.donationDescription}</p>
+                        )}
+                        <p className="mt-2">
+                          • Platform fee: {platformFeePercentage}% of donations
+                        </p>
+                        {inviteOnly.showDonorNames ? (
+                          <p>• Donor names will be displayed</p>
+                        ) : (
+                          <p>• Anonymous donations allowed</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
             ) : (
               <TabsContent value="tickets" className="mt-4">
                 <h3 className="text-xl font-medium mb-4">Ticket Information</h3>
@@ -845,7 +1175,7 @@ export function EventPreview({
             >
               {isSubmitting
                 ? 'Publishing...'
-                : `Publish ${isVotingContest ? 'Contest' : 'Event'}`}
+                : `Publish ${getEventTypeLabel()}`}
             </Button>
           ) : (
             <Button

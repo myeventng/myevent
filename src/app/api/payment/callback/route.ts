@@ -66,7 +66,12 @@ export async function GET(request: NextRequest) {
     // Handle regular ticket order callback
     const order = await prisma.order.findUnique({
       where: { paystackId: reference },
-      select: { id: true, paymentStatus: true },
+      select: {
+        id: true,
+        paymentStatus: true,
+        buyerId: true,
+        purchaseNotes: true,
+      },
     });
 
     if (!order) {
@@ -76,10 +81,29 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Check if this is a guest purchase
+    let isGuestPurchase = false;
+    let guestEmail: string | undefined;
+    let guestName: string | undefined;
+
+    try {
+      const purchaseData = JSON.parse(order.purchaseNotes || '{}');
+      isGuestPurchase = purchaseData.isGuestPurchase || false;
+      guestEmail = purchaseData.guestEmail;
+      guestName = purchaseData.guestName;
+    } catch (error) {
+      console.error('Failed to parse purchase notes:', error);
+    }
+
     // Complete the order if not already completed
     if (order.paymentStatus !== 'COMPLETED') {
       console.log(`Completing order ${order.id} via callback`);
-      const result = await completeOrder(order.id, reference);
+
+      const result = await completeOrder(
+        order.id,
+        reference,
+        isGuestPurchase ? { guestEmail, guestName } : undefined
+      );
 
       if (!result.success) {
         console.error(`Failed to complete order ${order.id}:`, result.message);
@@ -89,14 +113,99 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Redirect to unified success page with regular order parameters
-    return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/payment/success?orderId=${order.id}`
+    // Redirect to unified success page with appropriate parameters
+    const successUrl = new URL(
+      `${process.env.NEXT_PUBLIC_APP_URL}/payment/success`
     );
+    successUrl.searchParams.set('orderId', order.id);
+
+    if (isGuestPurchase && guestEmail) {
+      successUrl.searchParams.set('guest', 'true');
+      successUrl.searchParams.set('email', guestEmail);
+    }
+
+    return NextResponse.redirect(successUrl.toString());
   } catch (error) {
     console.error('Payment callback error:', error);
     return NextResponse.redirect(
       `${process.env.NEXT_PUBLIC_APP_URL}/payment/error?error=system_error`
+    );
+  }
+}
+
+// Handle POST requests (Paystack webhook)
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+
+    // Verify Paystack signature
+    const signature = request.headers.get('x-paystack-signature');
+    const secretKey = process.env.PAYSTACK_SECRET_KEY;
+
+    if (!signature || !secretKey) {
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+    }
+
+    const crypto = require('crypto');
+    const hash = crypto
+      .createHmac('sha512', secretKey)
+      .update(JSON.stringify(body))
+      .digest('hex');
+
+    if (hash !== signature) {
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+    }
+
+    // Process webhook event
+    if (body.event === 'charge.success') {
+      const reference = body.data.reference;
+
+      // Check for vote order
+      const voteOrder = await prisma.voteOrder.findUnique({
+        where: { paystackId: reference },
+        select: { id: true },
+      });
+
+      if (voteOrder) {
+        await verifyVotePayment({
+          voteOrderId: voteOrder.id,
+          paystackReference: reference,
+          paystackData: body.data,
+        });
+        return NextResponse.json({ received: true });
+      }
+
+      // Check for regular order
+      const order = await prisma.order.findUnique({
+        where: { paystackId: reference },
+        select: { id: true, purchaseNotes: true },
+      });
+
+      if (order) {
+        // Parse guest info
+        let guestInfo: { guestEmail?: string; guestName?: string } | undefined;
+        try {
+          const purchaseData = JSON.parse(order.purchaseNotes || '{}');
+          if (purchaseData.isGuestPurchase) {
+            guestInfo = {
+              guestEmail: purchaseData.guestEmail,
+              guestName: purchaseData.guestName,
+            };
+          }
+        } catch (error) {
+          console.error('Error parsing purchase notes:', error);
+        }
+
+        await completeOrder(order.id, reference, guestInfo);
+      }
+    }
+
+    return NextResponse.json({ received: true });
+  } catch (error) {
+    console.error('Webhook error:', error);
+    return NextResponse.json(
+      { error: 'Webhook processing failed' },
+      { status: 500 }
     );
   }
 }

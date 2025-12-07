@@ -11,8 +11,12 @@ import {
   createContestant,
   createVotePackage,
 } from '@/actions/voting-contest.actions';
+import {
+  createInviteOnlyEvent,
+  bulkCreateInvitations,
+} from '@/actions/invite-only.action';
 import { createTicketType } from '@/actions/ticket.actions';
-import { AgeRestriction, DressCode, EventType } from '@/generated/prisma';
+import { AgeRestriction, DressCode, EventType, VotingType } from '@/generated/prisma';
 import { toast } from 'sonner';
 
 // Step components
@@ -24,10 +28,11 @@ import { EventMediaUpload } from './event-media-upload';
 import { EventTickets } from './event-tickets';
 import { VotingContestSetup } from './voting-contest-setup';
 import { ContestantManagement } from './contestant-management';
+import { InviteOnlySetup } from './invite-only-setup';
+import { GuestManagement } from './guest-management';
 import { EventPreview } from './event-preview';
-import { VotingType } from '@/generated/prisma';
 
-// Base schema for all events
+// Schemas
 const baseEventSchema = z.object({
   eventType: z.nativeEnum(EventType),
   title: z.string().min(3, 'Title must be at least 3 characters'),
@@ -46,7 +51,6 @@ const baseEventSchema = z.object({
   embeddedVideoUrl: z.string().optional().or(z.literal('')),
 });
 
-// Extended schema for standard events
 const standardEventSchema = baseEventSchema.extend({
   age: z.nativeEnum(AgeRestriction).optional(),
   dressCode: z.nativeEnum(DressCode).optional(),
@@ -55,19 +59,20 @@ const standardEventSchema = baseEventSchema.extend({
   attendeeLimit: z.number().optional(),
 });
 
-// Schema for voting contest events (simplified)
 const votingContestEventSchema = baseEventSchema.extend({
-  // Voting contests are always free in terms of event tickets
-  // Voting itself may be paid, but handled separately
   isFree: z.literal(true).default(true),
-  // No age restrictions, dress codes, etc. for voting contests
+});
+
+const inviteOnlyEventSchema = baseEventSchema.extend({
+  isFree: z.literal(true).default(true),
 });
 
 type BaseEventFormValues = z.infer<typeof baseEventSchema>;
 type StandardEventFormValues = z.infer<typeof standardEventSchema>;
 type VotingContestEventFormValues = z.infer<typeof votingContestEventSchema>;
+type InviteOnlyEventFormValues = z.infer<typeof inviteOnlyEventSchema>;
 
-// Define the steps for different event types
+// Steps configuration
 const getStepsForEventType = (eventType: EventType) => {
   const baseSteps = [
     { id: 'event-type', title: 'Event Type' },
@@ -82,6 +87,13 @@ const getStepsForEventType = (eventType: EventType) => {
       ...baseSteps,
       { id: 'voting-setup', title: 'Voting Setup' },
       { id: 'contestants', title: 'Contestants' },
+      { id: 'preview', title: 'Preview' },
+    ];
+  } else if (eventType === EventType.INVITE) {
+    return [
+      ...baseSteps,
+      { id: 'invite-setup', title: 'Invite Settings' },
+      { id: 'guest-management', title: 'Guest List' },
       { id: 'preview', title: 'Preview' },
     ];
   } else {
@@ -122,17 +134,17 @@ export function CreateEventForm({
 
   const steps = getStepsForEventType(formData.eventType);
   const isVotingContest = formData.eventType === EventType.VOTING_CONTEST;
+  const isInviteOnly = formData.eventType === EventType.INVITE;
+  const isStandardEvent = formData.eventType === EventType.STANDARD;
 
-  // Helper to update form data - ensure no undefined values
-  // 2. Fix the updateFormData function to handle nested structures better
+  // Update form data helper
   const updateFormData = (data: any) => {
     setFormData((prev: any) => {
       const updated = { ...prev };
 
-      // Handle deep merging for nested objects like votingContest
       Object.keys(data).forEach((key) => {
         if (
-          key === 'votingContest' &&
+          (key === 'votingContest' || key === 'inviteOnly') &&
           typeof data[key] === 'object' &&
           data[key] !== null
         ) {
@@ -140,7 +152,10 @@ export function CreateEventForm({
             ...updated[key],
             ...data[key],
           };
-        } else if (key === 'contestants' && Array.isArray(data[key])) {
+        } else if (
+          (key === 'contestants' || key === 'guests') &&
+          Array.isArray(data[key])
+        ) {
           updated[key] = [...data[key]];
         } else {
           updated[key] = data[key];
@@ -151,6 +166,7 @@ export function CreateEventForm({
       if (!updated.tagIds) updated.tagIds = [];
       if (!updated.imageUrls) updated.imageUrls = [];
       if (!updated.contestants) updated.contestants = [];
+      if (!updated.guests) updated.guests = [];
 
       // Ensure strings are never undefined
       if (updated.title === undefined) updated.title = '';
@@ -160,11 +176,9 @@ export function CreateEventForm({
       if (updated.url === undefined) updated.url = '';
       if (updated.embeddedVideoUrl === undefined) updated.embeddedVideoUrl = '';
 
-      // For voting contests, ensure certain defaults
+      // Event type specific defaults
       if (updated.eventType === EventType.VOTING_CONTEST) {
-        updated.isFree = true; // Voting contests are always "free" events
-
-        // Initialize votingContest if it doesn't exist
+        updated.isFree = true;
         if (!updated.votingContest) {
           updated.votingContest = {
             votingType: VotingType.FREE,
@@ -178,17 +192,30 @@ export function CreateEventForm({
         }
       }
 
+      if (updated.eventType === EventType.INVITE) {
+        updated.isFree = true;
+        if (!updated.inviteOnly) {
+          updated.inviteOnly = {
+            allowPlusOnes: false,
+            requireRSVP: true,
+            sendAutoReminders: true,
+            reminderDaysBefore: 7,
+            acceptDonations: false,
+            showDonorNames: true,
+            isPrivate: true,
+            requireApproval: false,
+          };
+        }
+      }
+
       return updated;
     });
   };
 
-  // Helper to handle next/previous step
+  // Navigation handlers
   const handleNext = () => {
-    // Special handling when event type changes
     if (currentStep === 0) {
-      // Reset step to 0 if event type changed to rebuild flow
-      const newSteps = getStepsForEventType(formData.eventType);
-      setCurrentStep(1); // Move to basic info
+      setCurrentStep(1);
     } else {
       setCurrentStep(Math.min(currentStep + 1, steps.length - 1));
     }
@@ -198,8 +225,7 @@ export function CreateEventForm({
     setCurrentStep(Math.max(currentStep - 1, 0));
   };
 
-  // Submit the event
-  // Key changes in the CreateEventForm component:
+  // Submit handler
   const handleSubmit = async (
     publishStatus: 'DRAFT' | 'PENDING_REVIEW' | 'PUBLISHED'
   ) => {
@@ -210,32 +236,36 @@ export function CreateEventForm({
       let validatedData;
       if (isVotingContest) {
         validatedData = votingContestEventSchema.parse(formData);
+      } else if (isInviteOnly) {
+        validatedData = inviteOnlyEventSchema.parse(formData);
       } else {
         validatedData = standardEventSchema.parse(formData);
       }
 
-      const eventData = {
+      // Prepare base event data (without type-specific data)
+      const eventData: any = {
         ...validatedData,
         eventType: formData.eventType,
         publishedStatus: publishStatus,
       };
 
-      // Create the event
+      console.log('Submitting event data:', eventData);
+
+      // Create the base event first
       const result = await createEvent(eventData);
 
       if (result.success && result.data) {
         const eventId = result.data.id;
 
+        // Handle Voting Contest using specialized actions
         if (isVotingContest) {
-          // FIX: Check if votingContest data exists with better validation
           if (!formData.votingContest) {
-            toast.error(
-              'Voting contest configuration is missing. Please go back and set up the voting contest.'
-            );
+            toast.error('Voting contest configuration is missing.');
             return;
           }
 
-          // Create voting contest with proper data structure
+          console.log('Creating voting contest with data:', formData.votingContest);
+
           const contestResult = await createVotingContest({
             eventId,
             votingType: formData.votingContest.votingType,
@@ -251,28 +281,24 @@ export function CreateEventForm({
           });
 
           if (!contestResult.success) {
-            toast.error(
-              contestResult.message || 'Failed to create voting contest'
-            );
+            toast.error(contestResult.message || 'Failed to create voting contest');
             return;
           }
 
           const contestId = contestResult.data.id;
+          console.log('Voting contest created with ID:', contestId);
 
-          // Create contestants - FIX: Better validation and error handling
+          // Create contestants using specialized action
           if (
             formData.contestants &&
             Array.isArray(formData.contestants) &&
             formData.contestants.length > 0
           ) {
+            console.log('Creating', formData.contestants.length, 'contestants');
             const contestantPromises = formData.contestants.map(
               async (contestant: any) => {
                 if (!contestant.name || !contestant.contestNumber) {
-                  console.warn('Skipping invalid contestant:', contestant);
-                  return {
-                    success: false,
-                    message: 'Missing required contestant data',
-                  };
+                  return { success: false };
                 }
 
                 return createContestant({
@@ -288,41 +314,20 @@ export function CreateEventForm({
               }
             );
 
-            const contestantResults =
-              await Promise.allSettled(contestantPromises);
-            const failedContestants = contestantResults.filter(
-              (result) =>
-                result.status === 'rejected' ||
-                (result.status === 'fulfilled' && !result.value.success)
-            );
-
-            if (failedContestants.length > 0) {
-              console.warn('Failed contestants:', failedContestants);
-              toast.error(
-                `Contest created but ${failedContestants.length} contestant(s) failed to create`
-              );
-            }
-          } else {
-            toast.warning(
-              'No contestants were added to the contest. You can add them later.'
-            );
+            await Promise.allSettled(contestantPromises);
           }
 
-          // Create vote packages - FIX: Better validation and structure
+          // Create vote packages using specialized action
           if (
             formData.votingContest.votePackagesEnabled &&
             formData.votingContest.votePackages &&
-            Array.isArray(formData.votingContest.votePackages) &&
-            formData.votingContest.votePackages.length > 0
+            Array.isArray(formData.votingContest.votePackages)
           ) {
+            console.log('Creating', formData.votingContest.votePackages.length, 'vote packages');
             const packagePromises = formData.votingContest.votePackages.map(
               async (pkg: any) => {
                 if (!pkg.name || !pkg.voteCount || pkg.price === undefined) {
-                  console.warn('Skipping invalid vote package:', pkg);
-                  return {
-                    success: false,
-                    message: 'Missing required package data',
-                  };
+                  return { success: false };
                 }
 
                 return createVotePackage({
@@ -336,45 +341,66 @@ export function CreateEventForm({
               }
             );
 
-            const packageResults = await Promise.allSettled(packagePromises);
-            const failedPackages = packageResults.filter(
-              (result) =>
-                result.status === 'rejected' ||
-                (result.status === 'fulfilled' && !result.value.success)
-            );
-
-            if (failedPackages.length > 0) {
-              console.warn('Failed packages:', failedPackages);
-              toast.error(
-                `Contest created but ${failedPackages.length} vote package(s) failed to create`
-              );
-            }
+            await Promise.allSettled(packagePromises);
           }
-        } else {
-          // Create ticket types for standard events (existing logic)
-          if (ticketTypes.length > 0) {
-            const ticketPromises = ticketTypes.map(async (ticketType) => {
-              return createTicketType({
-                name: ticketType.name,
-                price: ticketType.price,
-                quantity: ticketType.quantity,
-                eventId: eventId,
-              });
+        }
+        // Handle Invite-Only using specialized actions
+        else if (isInviteOnly) {
+          if (!formData.inviteOnly) {
+            toast.error('Invite-only event configuration is missing.');
+            return;
+          }
+
+          console.log('Creating invite-only event with data:', formData.inviteOnly);
+
+          const inviteOnlyResult = await createInviteOnlyEvent({
+            eventId,
+            ...formData.inviteOnly,
+          });
+
+          if (!inviteOnlyResult.success) {
+            toast.error(
+              inviteOnlyResult.message || 'Failed to create invite-only configuration'
+            );
+            return;
+          }
+
+          const inviteOnlyEventId = inviteOnlyResult.data.id;
+          console.log('Invite-only event created with ID:', inviteOnlyEventId);
+
+          // Create invitations using specialized action
+          if (
+            formData.guests &&
+            Array.isArray(formData.guests) &&
+            formData.guests.length > 0
+          ) {
+            console.log('Creating', formData.guests.length, 'invitations');
+            await bulkCreateInvitations({
+              inviteOnlyEventId,
+              guests: formData.guests.map((guest: any) => ({
+                guestName: guest.guestName,
+                guestEmail: guest.guestEmail,
+                guestPhone: guest.guestPhone || '',
+                plusOnesAllowed: guest.plusOnesAllowed || 0,
+                specialRequirements: guest.specialRequirements || '',
+                organizerNotes: guest.organizerNotes || '',
+              })),
+              sendEmails: false,
             });
-
-            const ticketResults = await Promise.allSettled(ticketPromises);
-            const failedTickets = ticketResults.filter(
-              (result) =>
-                result.status === 'rejected' ||
-                (result.status === 'fulfilled' && !result.value.success)
-            );
-
-            if (failedTickets.length > 0) {
-              toast.error(
-                `Event created but ${failedTickets.length} ticket type(s) failed to create`
-              );
-            }
           }
+        }
+        // Handle Standard Event - ticket types
+        else if (isStandardEvent && ticketTypes.length > 0) {
+          const ticketPromises = ticketTypes.map(async (ticketType) => {
+            return createTicketType({
+              name: ticketType.name,
+              price: ticketType.price,
+              quantity: ticketType.quantity,
+              eventId: eventId,
+            });
+          });
+
+          await Promise.allSettled(ticketPromises);
         }
 
         toast.success(result.message || 'Event created successfully');
@@ -389,7 +415,6 @@ export function CreateEventForm({
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
-        // Display validation errors
         error.errors.forEach((err) => {
           toast.error(`${err.path.join('.')}: ${err.message}`);
         });
@@ -402,7 +427,7 @@ export function CreateEventForm({
     }
   };
 
-  // Render the current step
+  // Render current step
   const renderStep = () => {
     switch (currentStep) {
       case 0:
@@ -458,6 +483,15 @@ export function CreateEventForm({
               onPrevious={handlePrevious}
             />
           );
+        } else if (isInviteOnly) {
+          return (
+            <InviteOnlySetup
+              formData={formData}
+              updateFormData={updateFormData}
+              onNext={handleNext}
+              onPrevious={handlePrevious}
+            />
+          );
         } else {
           return (
             <EventTickets
@@ -479,6 +513,15 @@ export function CreateEventForm({
               onPrevious={handlePrevious}
             />
           );
+        } else if (isInviteOnly) {
+          return (
+            <GuestManagement
+              formData={formData}
+              updateFormData={updateFormData}
+              onNext={handleNext}
+              onPrevious={handlePrevious}
+            />
+          );
         } else {
           return (
             <EventPreview
@@ -493,11 +536,10 @@ export function CreateEventForm({
           );
         }
       case 7:
-        // This will be the preview step for voting contests
         return (
           <EventPreview
             formData={formData}
-            ticketTypes={isVotingContest ? [] : ticketTypes}
+            ticketTypes={isVotingContest || isInviteOnly ? [] : ticketTypes}
             onPrevious={handlePrevious}
             onSubmit={handleSubmit}
             isSubmitting={isSubmitting}
@@ -517,13 +559,12 @@ export function CreateEventForm({
         {steps.map((step, index) => (
           <div key={step.id} className="flex items-center flex-shrink-0">
             <div
-              className={`rounded-full h-10 w-10 flex items-center justify-center ${
-                index < currentStep
-                  ? 'bg-green-500 text-white'
-                  : index === currentStep
-                    ? 'bg-primary text-white'
-                    : 'bg-gray-200 text-gray-700'
-              }`}
+              className={`rounded-full h-10 w-10 flex items-center justify-center ${index < currentStep
+                ? 'bg-green-500 text-white'
+                : index === currentStep
+                  ? 'bg-primary text-white'
+                  : 'bg-gray-200 text-gray-700'
+                }`}
             >
               {index < currentStep ? '✓' : index + 1}
             </div>
@@ -531,9 +572,8 @@ export function CreateEventForm({
             {index < steps.length - 1 && (
               <div className="w-12 h-1 mx-2 bg-gray-200">
                 <div
-                  className={`h-full ${
-                    index < currentStep ? 'bg-green-500' : 'bg-gray-200'
-                  }`}
+                  className={`h-full ${index < currentStep ? 'bg-green-500' : 'bg-gray-200'
+                    }`}
                   style={{ width: `${index < currentStep ? '100%' : '0%'}` }}
                 ></div>
               </div>

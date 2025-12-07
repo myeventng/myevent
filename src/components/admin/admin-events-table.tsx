@@ -18,6 +18,7 @@ import {
   Vote,
   Users,
   Calendar,
+  Shield,
 } from 'lucide-react';
 import {
   useReactTable,
@@ -70,6 +71,7 @@ import { PublishedStatus, EventType } from '@/generated/prisma';
 import { EventPreviewModal } from '../events/event-preview-modal';
 import { EventAnalyticsModal } from '@/components/events/event-analystics-modal';
 import { VotingContestAnalyticsModal } from '@/components/events/voting-contest-analytics-modal';
+import { InviteOnlyAnalyticsModal } from '@/components/events/invite-only-analytics-modal';
 import { HardDeleteConfirmationDialog } from '@/components/admin/hard-delete-confirmation-dialog';
 
 interface AdminEventsTableProps {
@@ -95,6 +97,8 @@ export function AdminEventsTable({
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
   const [showVotingAnalyticsModal, setShowVotingAnalyticsModal] =
     useState(false);
+  const [showInviteAnalyticsModal, setShowInviteAnalyticsModal] =
+    useState(false);
 
   // Check if user is SUPER_ADMIN
   const isSuperAdmin = userRole === 'ADMIN' && userSubRole === 'SUPER_ADMIN';
@@ -104,6 +108,7 @@ export function AdminEventsTable({
     const date = new Date(dateString);
     return format(date, 'PPP p');
   };
+
 
   // Get badge color based on publication status
   const getStatusBadge = (status: PublishedStatus, isCancelled: boolean) => {
@@ -165,7 +170,7 @@ export function AdminEventsTable({
       case 'INVITE':
         return (
           <Badge variant="outline" className="bg-green-100 text-green-800">
-            <Users className="h-3 w-3 mr-1" />
+            <Shield className="h-3 w-3 mr-1" />
             Invite Only
           </Badge>
         );
@@ -315,6 +320,12 @@ export function AdminEventsTable({
     setShowVotingAnalyticsModal(true);
   };
 
+  // Handle invite-only analytics
+  const handleInviteAnalyticsEvent = (event: any) => {
+    setSelectedEvent(event);
+    setShowInviteAnalyticsModal(true);
+  };
+
   // Table columns definition
   const columns: ColumnDef<any>[] = [
     {
@@ -407,8 +418,8 @@ export function AdminEventsTable({
       },
     },
     {
-      id: 'tickets',
-      header: 'Tickets/Contestants',
+      id: 'metrics',
+      header: 'Metrics',
       accessorFn: (row) => row.ticketTypes?.length || 0,
       cell: ({ row }) => {
         const event = row.original;
@@ -423,6 +434,21 @@ export function AdminEventsTable({
               </div>
               <div className="text-sm text-muted-foreground">
                 {votesCount} votes
+              </div>
+            </div>
+          );
+        } else if (event.eventType === 'INVITE') {
+          const invitationCount = event.inviteOnlyEvent?._count?.invitations || 0;
+          const acceptedCount = event.inviteOnlyEvent?.invitations?.filter(
+            (inv: any) => inv.status === 'ACCEPTED'
+          ).length || 0;
+          return (
+            <div>
+              <div>
+                {invitationCount} invitation{invitationCount !== 1 ? 's' : ''}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {acceptedCount} accepted
               </div>
             </div>
           );
@@ -485,6 +511,15 @@ export function AdminEventsTable({
               >
                 <Vote className="h-4 w-4" />
               </Button>
+            ) : event.eventType === 'INVITE' ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleInviteAnalyticsEvent(event)}
+                title="Invite-Only Analytics"
+              >
+                <Shield className="h-4 w-4" />
+              </Button>
             ) : (
               <Button
                 variant="ghost"
@@ -510,9 +545,8 @@ export function AdminEventsTable({
                 disabled={isUpdating[`feature-${event.id}`]}
               >
                 <Star
-                  className={`h-4 w-4 ${
-                    event.featured ? 'fill-yellow-400 text-yellow-400' : ''
-                  }`}
+                  className={`h-4 w-4 ${event.featured ? 'fill-yellow-400 text-yellow-400' : ''
+                    }`}
                 />
               </Button>
             )}
@@ -727,9 +761,9 @@ export function AdminEventsTable({
                     {header.isPlaceholder
                       ? null
                       : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
+                        header.column.columnDef.header,
+                        header.getContext()
+                      )}
                   </TableHead>
                 ))}
               </TableRow>
@@ -826,12 +860,12 @@ export function AdminEventsTable({
               selectedEvent.publishedStatus
             ) && !selectedEvent.isCancelled
               ? (id: string) =>
-                  handlePublishEvent(id, selectedEvent.publishedStatus)
+                handlePublishEvent(id, selectedEvent.publishedStatus)
               : undefined
           }
           onToggleFeature={
             userRole === 'ADMIN' &&
-            ['STAFF', 'SUPER_ADMIN'].includes(userSubRole)
+              ['STAFF', 'SUPER_ADMIN'].includes(userSubRole)
               ? (id: string) => handleToggleFeature(id, selectedEvent.featured)
               : undefined
           }
@@ -870,6 +904,20 @@ export function AdminEventsTable({
           isOpen={showVotingAnalyticsModal}
           onClose={() => {
             setShowVotingAnalyticsModal(false);
+            setSelectedEvent(null);
+          }}
+          userRole={userRole}
+          userSubRole={userSubRole}
+        />
+      )}
+
+      {/* Invite-Only Analytics Modal */}
+      {selectedEvent && (
+        <InviteOnlyAnalyticsModal
+          event={selectedEvent}
+          isOpen={showInviteAnalyticsModal}
+          onClose={() => {
+            setShowInviteAnalyticsModal(false);
             setSelectedEvent(null);
           }}
           userRole={userRole}

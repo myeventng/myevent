@@ -1,3 +1,4 @@
+// src/actions/platform-settings.actions.ts
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -218,7 +219,7 @@ export async function getPlatformFeePercentage(): Promise<number> {
     const feePercentage = await getSetting(
       'financial.defaultPlatformFeePercentage'
     );
-    return feePercentage || 5; // Default to 5%
+    return feePercentage;
   } catch (error) {
     console.error('Error fetching platform fee percentage:', error);
     return 5;

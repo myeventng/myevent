@@ -24,6 +24,10 @@ import {
   Crown,
   Medal,
   Award,
+  Shield,
+  Mail,
+  UserPlus,
+  Gift,
 } from 'lucide-react';
 import {
   Dialog,
@@ -39,6 +43,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { EventType } from '@/generated/prisma';
 
 interface EventPreviewModalProps {
@@ -97,6 +109,15 @@ export function EventPreviewModal({
   const contestantCount = event.votingContest?.contestants?.length || 0;
   const totalVotes = event.votingContest?.votes?.length || 0;
 
+  // Calculate invite-only stats
+  const invitationCount = event.inviteOnlyEvent?.invitations?.length || 0;
+  const acceptedInvitations = event.inviteOnlyEvent?.invitations?.filter(
+    (inv: any) => inv.status === 'ACCEPTED'
+  ).length || 0;
+  const pendingInvitations = event.inviteOnlyEvent?.invitations?.filter(
+    (inv: any) => inv.status === 'PENDING'
+  ).length || 0;
+
   // Check if user can perform admin actions
   const isAdmin =
     userRole === 'ADMIN' && ['STAFF', 'SUPER_ADMIN'].includes(userSubRole);
@@ -151,7 +172,7 @@ export function EventPreviewModal({
       case 'INVITE':
         return (
           <Badge variant="outline" className="bg-green-100 text-green-800">
-            <Users className="h-3 w-3 mr-1" />
+            <Shield className="h-3 w-3 mr-1" />
             Invite Only
           </Badge>
         );
@@ -171,6 +192,35 @@ export function EventPreviewModal({
         return <Award className="h-4 w-4 text-amber-600" />;
       default:
         return <span className="text-sm font-medium">#{rank}</span>;
+    }
+  };
+
+  // Get invitation status badge
+  const getInvitationStatusBadge = (status: string) => {
+    switch (status) {
+      case 'ACCEPTED':
+        return (
+          <Badge variant="outline" className="bg-green-100 text-green-800">
+            <CheckCircle className="w-3 h-3 mr-1" />
+            Accepted
+          </Badge>
+        );
+      case 'DECLINED':
+        return (
+          <Badge variant="outline" className="bg-red-100 text-red-800">
+            <X className="w-3 h-3 mr-1" />
+            Declined
+          </Badge>
+        );
+      case 'PENDING':
+        return (
+          <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
+            <Clock className="w-3 h-3 mr-1" />
+            Pending
+          </Badge>
+        );
+      default:
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
@@ -301,6 +351,23 @@ export function EventPreviewModal({
                       )}
                     </div>
                   </div>
+                ) : event.eventType === 'INVITE' ? (
+                  <div className="flex items-start gap-3">
+                    <Shield className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium">Invite-Only Event</p>
+                      <p className="text-muted-foreground">
+                        {invitationCount} invitation
+                        {invitationCount !== 1 ? 's' : ''}, {acceptedInvitations}{' '}
+                        accepted, {pendingInvitations} pending
+                      </p>
+                      {event.inviteOnlyEvent?.isPrivate && (
+                        <p className="text-sm mt-1">
+                          <Badge variant="secondary">Private Event</Badge>
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 ) : (
                   <div className="flex items-start gap-3">
                     <Ticket className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
@@ -402,6 +469,8 @@ export function EventPreviewModal({
                 <TabsTrigger value="description">Description</TabsTrigger>
                 {event.eventType === 'VOTING_CONTEST' ? (
                   <TabsTrigger value="contestants">Contestants</TabsTrigger>
+                ) : event.eventType === 'INVITE' ? (
+                  <TabsTrigger value="invitations">Invitations</TabsTrigger>
                 ) : (
                   <TabsTrigger value="tickets">Tickets</TabsTrigger>
                 )}
@@ -533,6 +602,112 @@ export function EventPreviewModal({
                         <p className="text-muted-foreground">
                           Contestants will appear here once they are added to
                           the contest.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+              )}
+
+              {/* Invitations Tab (for Invite-Only Events) */}
+              {event.eventType === 'INVITE' && (
+                <TabsContent value="invitations" className="mt-4">
+                  <div className="space-y-4">
+                    {/* Invite-Only Event Settings Summary */}
+                    {event.inviteOnlyEvent && (
+                      <div className="border rounded-lg p-4 bg-muted/50 space-y-2">
+                        <h4 className="font-medium flex items-center gap-2">
+                          <Shield className="h-4 w-4" />
+                          Invite Configuration
+                        </h4>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Privacy:</span>
+                            <span className="font-medium">
+                              {event.inviteOnlyEvent.isPrivate ? 'Private' : 'Public'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Plus Ones:</span>
+                            <span className="font-medium">
+                              {event.inviteOnlyEvent.allowPlusOnes ? 'Allowed' : 'Not Allowed'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">RSVP Required:</span>
+                            <span className="font-medium">
+                              {event.inviteOnlyEvent.requireRSVP ? 'Yes' : 'No'}
+                            </span>
+                          </div>
+                          {event.inviteOnlyEvent.acceptDonations && (
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Donations:</span>
+                              <span className="font-medium flex items-center gap-1">
+                                <Gift className="h-3 w-3" />
+                                Enabled
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Guest List */}
+                    {event.inviteOnlyEvent?.invitations?.length > 0 ? (
+                      <div className="border rounded-lg">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Guest Name</TableHead>
+                              <TableHead>Contact</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Plus Ones</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {event.inviteOnlyEvent.invitations.map((invitation: any) => (
+                              <TableRow key={invitation.id}>
+                                <TableCell className="font-medium">
+                                  {invitation.guestName}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="text-sm">
+                                    <div>{invitation.guestEmail}</div>
+                                    {invitation.guestPhone && (
+                                      <div className="text-muted-foreground">
+                                        {invitation.guestPhone}
+                                      </div>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {getInvitationStatusBadge(invitation.status)}
+                                </TableCell>
+                                <TableCell>
+                                  {invitation.plusOnesConfirmed > 0 ? (
+                                    <span>
+                                      {invitation.plusOnesConfirmed} of{' '}
+                                      {invitation.plusOnesAllowed}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground">
+                                      0 / {invitation.plusOnesAllowed}
+                                    </span>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <Mail className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <p className="text-lg font-medium">
+                          No invitations yet
+                        </p>
+                        <p className="text-muted-foreground">
+                          Invitations will appear here once guests are added.
                         </p>
                       </div>
                     )}

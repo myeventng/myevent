@@ -1,3 +1,4 @@
+//app/admin/dashboard/events/create/page.tsx
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { CreateEventForm } from '@/components/events/create-event-form';
 import { getServerSideAuth } from '@/lib/auth-server';

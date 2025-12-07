@@ -1,3 +1,4 @@
+//src/app/(root)/events/[slug]/page.tsx
 import { notFound } from 'next/navigation';
 import { Metadata } from 'next';
 import { format } from 'date-fns';
@@ -59,11 +60,10 @@ export async function generateMetadata({ params }: EventPageProps) {
 
   let description = event.description
     ? `${event.description.slice(0, 160)}...`
-    : `${isVotingContest ? 'Vote in' : 'Join us for'} ${event.title}! ${
-        ratingsCount > 0
-          ? `Rated ${averageRating}/5 stars by ${ratingsCount} ${isVotingContest ? 'participants' : 'attendees'}.`
-          : ''
-      }`;
+    : `${isVotingContest ? 'Vote in' : 'Join us for'} ${event.title}! ${ratingsCount > 0
+      ? `Rated ${averageRating}/5 stars by ${ratingsCount} ${isVotingContest ? 'participants' : 'attendees'}.`
+      : ''
+    }`;
 
   if (isVotingContest && event.votingContest) {
     description = `Vote for your favorite contestant in ${event.title}! ${event.votingContest.contestants?.length || 0} contestants competing.`;
@@ -142,9 +142,9 @@ export default async function EventPage({ params }: EventPageProps) {
   const availableTickets = isVotingContest
     ? 0
     : event.ticketTypes?.reduce(
-        (sum: number, type: any) => sum + type.quantity,
-        0
-      ) || 0;
+      (sum: number, type: any) => sum + type.quantity,
+      0
+    ) || 0;
 
   // Calculate average rating for display
   const averageRating =
@@ -383,8 +383,8 @@ export default async function EventPage({ params }: EventPageProps) {
                         {isVotingActive
                           ? 'Cast your vote for your favorite contestant below'
                           : event.votingContest.votingStartDate &&
-                              new Date() <
-                                new Date(event.votingContest.votingStartDate)
+                            new Date() <
+                            new Date(event.votingContest.votingStartDate)
                             ? `Voting starts ${format(new Date(event.votingContest.votingStartDate), 'PPP p')}`
                             : 'Voting has ended'}
                       </p>
@@ -753,10 +753,10 @@ export default async function EventPage({ params }: EventPageProps) {
                           ? 'Free'
                           : event.ticketTypes && event.ticketTypes.length > 0
                             ? `₦${Math.min(
-                                ...event.ticketTypes.map((t: any) => t.price)
-                              )} - ₦${Math.max(
-                                ...event.ticketTypes.map((t: any) => t.price)
-                              )}`
+                              ...event.ticketTypes.map((t: any) => t.price)
+                            )} - ₦${Math.max(
+                              ...event.ticketTypes.map((t: any) => t.price)
+                            )}`
                             : 'N/A'}
                       </span>
                     </div>
@@ -842,11 +842,10 @@ export default async function EventPage({ params }: EventPageProps) {
                         {[1, 2, 3, 4, 5].map((star) => (
                           <Star
                             key={star}
-                            className={`h-4 w-4 ${
-                              star <= Math.round(averageRating)
-                                ? 'fill-yellow-400 text-yellow-400'
-                                : 'fill-muted stroke-muted-foreground'
-                            }`}
+                            className={`h-4 w-4 ${star <= Math.round(averageRating)
+                              ? 'fill-yellow-400 text-yellow-400'
+                              : 'fill-muted stroke-muted-foreground'
+                              }`}
                           />
                         ))}
                       </div>

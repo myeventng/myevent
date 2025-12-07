@@ -1,3 +1,4 @@
+// src/app/admin/dashboard/events/page.tsx
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { AdminEventsTable } from '@/components/admin/admin-events-table';
 import { getEvents } from '@/actions/event.actions';
@@ -166,7 +167,7 @@ export default async function AdminEvents() {
 
         {/* Events Table */}
         <AdminEventsTable
-          initialData={events} // Remove the ?? [] since events is now guaranteed to be an array
+          initialData={events}
           userRole={session.user.role}
           userSubRole={session.user.subRole}
         />

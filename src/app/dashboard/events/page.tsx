@@ -1,3 +1,4 @@
+// src/app/dashboard/events/page.tsx
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { OrganizerEventsTable } from '@/components/organizer/organizer-events-table';
 import { getUserEvents } from '@/actions/event.actions';

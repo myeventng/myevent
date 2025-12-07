@@ -1,3 +1,4 @@
+//src/components/auth/auth-modal.tsx
 'use client';
 
 import React, { useState } from 'react';

@@ -100,7 +100,7 @@ export function EventTypeSelection({
         'Private event access',
         'Invitation customization',
       ],
-      comingSoon: true,
+      comingSoon: false,
     },
   ];
 
@@ -150,21 +150,19 @@ export function EventTypeSelection({
                             className={`block cursor-pointer ${isDisabled ? 'cursor-not-allowed opacity-60' : ''}`}
                           >
                             <Card
-                              className={`transition-all duration-200 ${
-                                isSelected
-                                  ? 'ring-2 ring-primary border-primary bg-primary/5'
-                                  : 'hover:shadow-md hover:border-primary/30'
-                              } ${isDisabled ? 'pointer-events-none' : ''}`}
+                              className={`transition-all duration-200 ${isSelected
+                                ? 'ring-2 ring-primary border-primary bg-primary/5'
+                                : 'hover:shadow-md hover:border-primary/30'
+                                } ${isDisabled ? 'pointer-events-none' : ''}`}
                             >
                               <CardHeader className="pb-3">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-3">
                                     <div
-                                      className={`p-2 rounded-lg ${
-                                        isSelected
-                                          ? 'bg-primary text-primary-foreground'
-                                          : 'bg-muted'
-                                      }`}
+                                      className={`p-2 rounded-lg ${isSelected
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'bg-muted'
+                                        }`}
                                     >
                                       <Icon className="h-5 w-5" />
                                     </div>
@@ -263,18 +261,35 @@ export function EventTypeSelection({
           )}
 
           {form.watch('eventType') === EventType.INVITE && (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
               <div className="flex items-start gap-3">
-                <Mail className="h-5 w-5 text-amber-600 mt-0.5" />
+                <Mail className="h-5 w-5 text-purple-600 mt-0.5" />
                 <div>
-                  <h3 className="font-medium text-amber-900">
+                  <h3 className="font-medium text-purple-900">
                     Invite-Only Event
                   </h3>
-                  <p className="text-sm text-amber-700 mt-1">
-                    This feature is coming soon! Invite-only events will allow
-                    you to create private events with invitation management and
-                    RSVP tracking.
+                  <p className="text-sm text-purple-700 mt-1">
+                    You&apos;re creating an invite-only event. This type of event is private
+                    and guests will receive personalized invitations via email.
                   </p>
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2 text-sm text-purple-700">
+                      <Mail className="h-4 w-4" />
+                      <span>Email invitations to guests</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-purple-700">
+                      <Users className="h-4 w-4" />
+                      <span>RSVP and guest list management</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-purple-700">
+                      <Clock className="h-4 w-4" />
+                      <span>Plus-ones and special requirements</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-purple-700">
+                      <DollarSign className="h-4 w-4" />
+                      <span>Optional donation collection</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -283,9 +298,9 @@ export function EventTypeSelection({
           <div className="flex justify-end">
             <Button
               type="submit"
-              disabled={form.watch('eventType') === EventType.INVITE}
+              disabled={form.watch('eventType') === EventType.INVITE && eventTypes.find(t => t.type === EventType.INVITE)?.comingSoon}
             >
-              {form.watch('eventType') === EventType.INVITE
+              {form.watch('eventType') === EventType.INVITE && eventTypes.find(t => t.type === EventType.INVITE)?.comingSoon
                 ? 'Coming Soon'
                 : 'Continue'}
             </Button>
