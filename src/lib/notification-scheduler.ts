@@ -63,8 +63,15 @@ export class NotificationScheduler {
       let remindersSent = 0;
 
       for (const event of upcomingEvents) {
+        // ✅ Filter out orders without buyers (guest purchases) and get unique buyers
         const uniqueBuyers = event.orders.reduce((acc, order) => {
-          if (!acc.find((buyer) => buyer.id === order.buyer.id)) {
+          // Skip if buyer is null (guest purchase without user account)
+          if (!order.buyer) {
+            return acc;
+          }
+
+          // Check if buyer already exists in accumulator
+          if (!acc.find((buyer) => buyer.id === order.buyer!.id)) {
             acc.push(order.buyer);
           }
           return acc;
@@ -92,6 +99,33 @@ export class NotificationScheduler {
           } catch (error) {
             console.error(
               `❌ Failed to send reminder to ${buyer.email}:`,
+              error
+            );
+          }
+        }
+
+        // ✅ Handle guest purchases separately (send email directly without notification)
+        const guestOrders = event.orders.filter((order) => !order.buyer);
+
+        for (const guestOrder of guestOrders) {
+          try {
+            // Parse guest info from purchaseNotes
+            const purchaseData = JSON.parse(guestOrder.purchaseNotes || '{}');
+            if (purchaseData.isGuestPurchase && purchaseData.guestEmail) {
+              // Send email reminder directly to guest
+              // Note: You might want to create a separate email service method for this
+              console.log(
+                `📧 Sending reminder email to guest: ${purchaseData.guestEmail}`
+              );
+
+              // If you have an email service method for guest reminders, call it here:
+              // await emailService.sendEventReminderToGuest(purchaseData.guestEmail, event);
+
+              remindersSent++;
+            }
+          } catch (error) {
+            console.error(
+              `❌ Failed to send reminder to guest order ${guestOrder.id}:`,
               error
             );
           }
