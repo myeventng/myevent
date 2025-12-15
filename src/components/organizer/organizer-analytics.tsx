@@ -1,4 +1,5 @@
 
+// src/components/organizer/organizer-analytics.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
