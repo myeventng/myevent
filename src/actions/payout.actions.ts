@@ -1,3 +1,4 @@
+//src/actions/payout.actions.ts
 'use server';
 
 import { prisma } from '@/lib/prisma';
@@ -25,47 +26,22 @@ export async function verifyBankAccount(
   bankCode: string
 ): Promise<ActionResponse<any>> {
   try {
-    // Debug: Log what we're trying to fetch
-    // console.log('🔍 Debug: Starting bank account verification');
-    // console.log('🔍 Debug: Account number:', accountNumber);
-    // console.log('🔍 Debug: Bank code:', bankCode);
-
-    // Try to get from platform settings first, then fallback to env
-    // console.log('🔍 Debug: Fetching Paystack key from platform settings...');
     let paystackSecretKey = await getSetting('financial.paystackSecretKey');
-    // console.log(
-    //   '🔍 Debug: Platform settings key:',
-    //   paystackSecretKey ? 'Found' : 'Not found'
-    // );
 
     if (!paystackSecretKey) {
-      //   console.log('🔍 Debug: Falling back to environment variable...');
       paystackSecretKey = process.env.PAYSTACK_SECRET_KEY;
-      //   console.log(
-      //     '🔍 Debug: Environment key:',
-      //     paystackSecretKey ? 'Found' : 'Not found'
-      //   );
     }
 
     if (!paystackSecretKey) {
-      //   console.log('❌ Debug: No Paystack key found in either location');
-      //   return {
-      //     success: false,
-      //     message: 'Payment system not configured. Please contact administrator.',
-      //   };
+      return {
+        success: false,
+        message: 'Payment system not configured. Please contact administrator.',
+      };
     }
 
-    // console.log(
-    //   '🔍 Debug: Using Paystack key:',
-    //   paystackSecretKey.substring(0, 10) + '...'
-    // );
-
-    // Build URL with query parameters
     const url = new URL('https://api.paystack.co/bank/resolve');
     url.searchParams.set('account_number', accountNumber);
     url.searchParams.set('bank_code', bankCode);
-
-    // console.log('🔍 Debug: Making request to:', url.toString());
 
     const verifyResponse = await fetch(url.toString(), {
       method: 'GET',
@@ -75,13 +51,9 @@ export async function verifyBankAccount(
       },
     });
 
-    // console.log('🔍 Debug: Response status:', verifyResponse.status);
-
     const data = await verifyResponse.json();
-    // console.log('🔍 Debug: Response data:', JSON.stringify(data, null, 2));
 
     if (data.status) {
-      //   console.log('✅ Debug: Bank verification successful');
       return {
         success: true,
         data: {
@@ -92,13 +64,12 @@ export async function verifyBankAccount(
       };
     }
 
-    console.log('❌ Debug: Bank verification failed:', data.message);
     return {
       success: false,
       message: data.message || 'Failed to verify bank account',
     };
   } catch (error) {
-    console.error('❌ Debug: Error in verifyBankAccount:', error);
+    console.error('Error in verifyBankAccount:', error);
     return {
       success: false,
       message: 'Failed to verify bank account',
@@ -123,7 +94,6 @@ export async function updateOrganizerBankDetails(
   }
 
   try {
-    // Verify bank account first
     const verification = await verifyBankAccount(
       bankData.account_number,
       bankData.bank_code
@@ -133,12 +103,10 @@ export async function updateOrganizerBankDetails(
       return verification;
     }
 
-    // Import the organizer actions function
     const { updateOrganizerBankDetails: updateBankDetails } = await import(
       '@/actions/organizer.actions'
     );
 
-    // Update organizer profile with bank details
     const result = await updateBankDetails(
       bankData.account_number,
       bankData.bank_code,
@@ -170,7 +138,6 @@ export async function requestPayout(): Promise<ActionResponse<any>> {
   }
 
   try {
-    // Check if organizer has bank details
     const organizerProfile = await prisma.organizerProfile.findUnique({
       where: { userId: session.user.id },
     });
@@ -182,7 +149,6 @@ export async function requestPayout(): Promise<ActionResponse<any>> {
       };
     }
 
-    // Check for recent payout request (14 days)
     const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
     const recentPayout = await prisma.payout.findFirst({
       where: {
@@ -200,7 +166,6 @@ export async function requestPayout(): Promise<ActionResponse<any>> {
       };
     }
 
-    // Calculate payout amount
     const payoutCalculation = await calculateOrganizerPayout(session.user.id);
 
     if (payoutCalculation.netAmount <= 0) {
@@ -210,7 +175,6 @@ export async function requestPayout(): Promise<ActionResponse<any>> {
       };
     }
 
-    // Create payout request
     const payout = await prisma.payout.create({
       data: {
         organizerId: session.user.id,
@@ -226,7 +190,6 @@ export async function requestPayout(): Promise<ActionResponse<any>> {
       },
     });
 
-    // Create notification for admins
     await createNotification({
       type: 'PAYMENT_RECEIVED',
       title: 'New Payout Request',
@@ -262,7 +225,6 @@ export async function requestPayout(): Promise<ActionResponse<any>> {
 
 // Calculate organizer payout
 async function calculateOrganizerPayout(organizerId: string) {
-  // Get all completed orders for organizer's events since last payout
   const lastPayout = await prisma.payout.findFirst({
     where: {
       organizerId,
@@ -274,6 +236,7 @@ async function calculateOrganizerPayout(organizerId: string) {
   const periodStart = lastPayout ? new Date(lastPayout.createdAt) : new Date(0);
   const periodEnd = new Date();
 
+  // Get all completed orders (both authenticated and guest orders)
   const orders = await prisma.order.findMany({
     where: {
       event: {
@@ -430,7 +393,6 @@ export async function processPayout(
     }
 
     if (!approve) {
-      // Reject payout
       await prisma.payout.update({
         where: { id: payoutId },
         data: {
@@ -439,7 +401,6 @@ export async function processPayout(
         },
       });
 
-      // Notify organizer
       await createNotification({
         type: 'PAYMENT_RECEIVED',
         title: 'Payout Request Rejected',
@@ -460,7 +421,6 @@ export async function processPayout(
       };
     }
 
-    // Approve and process payout
     const updatedPayout = await prisma.payout.update({
       where: { id: payoutId },
       data: {
@@ -469,10 +429,6 @@ export async function processPayout(
       },
     });
 
-    // Simulate Paystack transfer (implement actual transfer in production)
-    // const transferResult = await initiatePaystackTransfer(payout);
-
-    // For now, mark as completed
     await prisma.payout.update({
       where: { id: payoutId },
       data: {
@@ -480,7 +436,6 @@ export async function processPayout(
       },
     });
 
-    // Notify organizer
     await createNotification({
       type: 'PAYMENT_RECEIVED',
       title: 'Payout Processed Successfully',
@@ -552,7 +507,7 @@ export async function bulkProcessPayouts(
   }
 }
 
-// Get organizer revenue analytics
+// Get organizer revenue analytics - Updated to handle guest orders
 export async function getOrganizerRevenueAnalytics(): Promise<
   ActionResponse<any>
 > {
@@ -569,17 +524,14 @@ export async function getOrganizerRevenueAnalytics(): Promise<
   }
 
   try {
-    // Calculate pending payout amount
     const pendingPayoutData = await calculateOrganizerPayout(session.user.id);
 
-    // Get payout history
     const payoutHistory = await prisma.payout.findMany({
       where: { organizerId: session.user.id },
       orderBy: { createdAt: 'desc' },
       take: 5,
     });
 
-    // Get total earnings
     const totalEarnings = await prisma.payout.aggregate({
       where: {
         organizerId: session.user.id,
@@ -588,7 +540,7 @@ export async function getOrganizerRevenueAnalytics(): Promise<
       _sum: { netAmount: true },
     });
 
-    // Get recent orders
+    // Get recent orders including both authenticated and guest orders
     const recentOrders = await prisma.order.findMany({
       where: {
         event: { userId: session.user.id },
@@ -596,11 +548,29 @@ export async function getOrganizerRevenueAnalytics(): Promise<
       },
       include: {
         event: { select: { title: true } },
-        buyer: { select: { name: true, email: true } },
+        buyer: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: 10,
     });
+
+    // Transform orders to include guest information when buyer is null
+    const transformedOrders = recentOrders.map((order) => ({
+      id: order.id,
+      paystackId: order.paystackId,
+      totalAmount: order.totalAmount,
+      platformFee: order.platformFee,
+      quantity: order.quantity,
+      createdAt: order.createdAt,
+      purchaseNotes: order.purchaseNotes, // Keep for guest info extraction
+      event: order.event,
+      buyer: order.buyer, // Will be null for guest orders
+    }));
 
     return {
       success: true,
@@ -612,7 +582,7 @@ export async function getOrganizerRevenueAnalytics(): Promise<
         },
         totalEarnings: totalEarnings._sum.netAmount || 0,
         payoutHistory,
-        recentOrders,
+        recentOrders: transformedOrders,
       },
     };
   } catch (error) {
