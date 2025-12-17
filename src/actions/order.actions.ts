@@ -309,6 +309,7 @@ export async function initiateOrder(
 }
 
 // Complete order after payment verification
+// Complete order after payment verification - FIXED VERSION
 export async function completeOrder(
   orderId: string,
   paystackReference?: string,
@@ -327,6 +328,13 @@ export async function completeOrder(
             venue: { include: { city: true } },
           },
         },
+        tickets: {
+          include: {
+            user: {
+              select: { id: true, name: true, email: true },
+            },
+          },
+        }, // IMPORTANT: Include existing tickets to check
       },
     });
 
@@ -334,8 +342,65 @@ export async function completeOrder(
       return { success: false, message: 'Order not found' };
     }
 
-    if (order.paymentStatus === 'COMPLETED') {
-      return { success: true, message: 'Order already completed', data: order };
+    // CRITICAL FIX: Check if order already has tickets generated
+    if (
+      order.paymentStatus === 'COMPLETED' &&
+      order.tickets &&
+      order.tickets.length > 0
+    ) {
+      console.log(
+        `⚠️ Order ${orderId} already completed with ${order.tickets.length} tickets. Skipping duplicate generation.`
+      );
+
+      // Still send email if requested (in case previous email failed)
+      try {
+        const purchaseData = JSON.parse(order.purchaseNotes || '{}');
+        const isGuestPurchase = purchaseData.isGuestPurchase || false;
+        const guestEmail = guestInfo?.guestEmail || purchaseData.guestEmail;
+        const guestName = guestInfo?.guestName || purchaseData.guestName;
+
+        const recipientEmail = isGuestPurchase
+          ? guestEmail
+          : order.buyer?.email;
+        const recipientName = isGuestPurchase ? guestName : order.buyer?.name;
+
+        if (recipientEmail && recipientName) {
+          const ticketsWithGuestInfo = order.tickets.map((ticket) => ({
+            ...ticket,
+            user: isGuestPurchase
+              ? {
+                  id: null,
+                  name: recipientName,
+                  email: recipientEmail,
+                }
+              : ticket.user,
+          }));
+
+          await ticketEmailService.sendTicketEmail(
+            {
+              ...order,
+              buyer: isGuestPurchase
+                ? {
+                    id: null,
+                    name: recipientName,
+                    email: recipientEmail,
+                  }
+                : order.buyer,
+            },
+            ticketsWithGuestInfo
+          );
+
+          console.log(`✅ Ticket email re-sent to ${recipientEmail}`);
+        }
+      } catch (emailError) {
+        console.error('Failed to resend email:', emailError);
+      }
+
+      return {
+        success: true,
+        message: 'Order already completed',
+        data: order,
+      };
     }
 
     // Parse purchase notes
@@ -389,6 +454,11 @@ export async function completeOrder(
       return { success: false, message: 'No ticket selections found' };
     }
 
+    console.log(
+      `📊 Processing ${ticketSelections.length} ticket type(s) for order ${orderId}`
+    );
+    console.log('Selections:', JSON.stringify(ticketSelections, null, 2));
+
     // Validate ticket availability
     for (const selection of ticketSelections) {
       const ticketType = order.event.ticketTypes.find(
@@ -403,77 +473,108 @@ export async function completeOrder(
     }
 
     // Execute order completion in transaction (SINGLE TRANSACTION TO PREVENT DUPLICATES)
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. Update order status FIRST to prevent race conditions
-      const updatedOrder = await tx.order.update({
-        where: { id: order.id },
-        data: { paymentStatus: 'COMPLETED' },
-        include: {
-          buyer: true,
-          event: { include: { venue: { include: { city: true } } } },
-        },
-      });
+    const result = await prisma.$transaction(
+      async (tx) => {
+        // 1. FIRST: Check again if tickets already exist within transaction (race condition protection)
+        const existingTicketsCount = await tx.ticket.count({
+          where: { orderId: order.id },
+        });
 
-      // 2. Create tickets
-      const ticketsToCreate = [];
-      for (const selection of ticketSelections) {
-        for (let i = 0; i < selection.quantity; i++) {
-          const ticketId = generateTicketId();
-          const qrCodeData = JSON.stringify({
-            type: 'EVENT_TICKET',
-            ticketId,
-            eventId: order.event.id,
-            userId: order.buyerId || null,
-            orderId: order.id,
-            isGuestPurchase,
-            guestEmail,
-            guestName,
-            issuedAt: Date.now(),
-          });
-
-          ticketsToCreate.push({
-            ticketId,
-            userId: order.buyerId || null,
-            ticketTypeId: selection.ticketTypeId,
-            orderId: order.id,
-            status: TicketStatus.UNUSED,
-            purchasedAt: new Date(),
-            qrCodeData,
-          });
+        if (existingTicketsCount > 0) {
+          console.log(
+            `⚠️ Found ${existingTicketsCount} existing tickets in transaction. Aborting to prevent duplicates.`
+          );
+          throw new Error(
+            'DUPLICATE_PREVENTION: Tickets already exist for this order'
+          );
         }
-      }
 
-      const createdTickets = await Promise.all(
-        ticketsToCreate.map((ticket) =>
-          tx.ticket.create({
-            data: ticket,
-            include: {
-              ticketType: {
-                include: {
-                  event: { include: { venue: { include: { city: true } } } },
+        // 2. Update order status FIRST to prevent race conditions
+        const updatedOrder = await tx.order.update({
+          where: { id: order.id },
+          data: { paymentStatus: 'COMPLETED' },
+          include: {
+            buyer: true,
+            event: { include: { venue: { include: { city: true } } } },
+          },
+        });
+
+        // 3. Create tickets - FIXED: Ensure we respect the exact quantities
+        const ticketsToCreate = [];
+        for (const selection of ticketSelections) {
+          console.log(
+            `Creating ${selection.quantity} ticket(s) for type ${selection.ticketTypeId}`
+          );
+
+          for (let i = 0; i < selection.quantity; i++) {
+            const ticketId = generateTicketId();
+            const qrCodeData = JSON.stringify({
+              type: 'EVENT_TICKET',
+              ticketId,
+              eventId: order.event.id,
+              userId: order.buyerId || null,
+              orderId: order.id,
+              isGuestPurchase,
+              guestEmail,
+              guestName,
+              issuedAt: Date.now(),
+            });
+
+            ticketsToCreate.push({
+              ticketId,
+              userId: order.buyerId || null,
+              ticketTypeId: selection.ticketTypeId,
+              orderId: order.id,
+              status: TicketStatus.UNUSED,
+              purchasedAt: new Date(),
+              qrCodeData,
+            });
+          }
+        }
+
+        console.log(`🎫 Creating exactly ${ticketsToCreate.length} tickets`);
+
+        const createdTickets = await Promise.all(
+          ticketsToCreate.map((ticket) =>
+            tx.ticket.create({
+              data: ticket,
+              include: {
+                ticketType: {
+                  include: {
+                    event: { include: { venue: { include: { city: true } } } },
+                  },
+                },
+                user: {
+                  select: { id: true, name: true, email: true },
                 },
               },
-              user: {
-                select: { id: true, name: true, email: true },
-              },
-            },
-          })
-        )
-      );
+            })
+          )
+        );
 
-      // 3. Update ticket type quantities
-      for (const selection of ticketSelections) {
-        await tx.ticketType.update({
-          where: { id: selection.ticketTypeId },
-          data: { quantity: { decrement: selection.quantity } },
-        });
+        console.log(`✅ Successfully created ${createdTickets.length} tickets`);
+
+        // 4. Update ticket type quantities
+        for (const selection of ticketSelections) {
+          await tx.ticketType.update({
+            where: { id: selection.ticketTypeId },
+            data: { quantity: { decrement: selection.quantity } },
+          });
+          console.log(
+            `📉 Decremented ${selection.quantity} from ticket type ${selection.ticketTypeId}`
+          );
+        }
+
+        return { tickets: createdTickets, order: updatedOrder };
+      },
+      {
+        maxWait: 5000, // Maximum time to wait for transaction to start
+        timeout: 10000, // Maximum time for transaction to complete
       }
-
-      return { tickets: createdTickets, order: updatedOrder };
-    });
+    );
 
     console.log(
-      `Order ${orderId} completed with ${result.tickets.length} tickets`
+      `✅ Order ${orderId} completed with ${result.tickets.length} tickets`
     );
 
     // Post-transaction operations
@@ -536,6 +637,28 @@ export async function completeOrder(
     };
   } catch (error) {
     console.error('Error completing order:', error);
+
+    // Check if error is our duplicate prevention error
+    if (
+      error instanceof Error &&
+      error.message.includes('DUPLICATE_PREVENTION')
+    ) {
+      // Fetch the completed order to return
+      const completedOrder = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: {
+          buyer: true,
+          event: { include: { venue: { include: { city: true } } } },
+          tickets: true,
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Order already completed (duplicate prevention)',
+        data: completedOrder,
+      };
+    }
 
     try {
       await prisma.order.update({
@@ -828,7 +951,7 @@ export async function resendOrderTickets(orderId: string) {
       ...ticket,
       user: guestInfo
         ? { id: null, name: guestInfo.name, email: guestInfo.email }
-        : ticket.user,
+        : { id: null, name: '', email: '' },
     }));
 
     await ticketEmailService.sendTicketEmail(

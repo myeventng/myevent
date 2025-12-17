@@ -1,4 +1,4 @@
-// lib/email-service.ts - FIXED VERSION WITH GUEST SUPPORT
+// lib/email-service.ts -
 import nodemailer from 'nodemailer';
 import QRCode from 'qrcode';
 import { TicketEmailTemplate } from '@/components/email/ticket-template';
