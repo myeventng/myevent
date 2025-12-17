@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import {
   ChevronRight,
@@ -14,7 +14,6 @@ import {
   RefreshCw,
   Ticket,
   DollarSign,
-  TrendingUp,
   CheckCircle,
   Clock,
   XCircle,
@@ -24,6 +23,7 @@ import {
   MapPin,
   Trash2,
   UserX,
+  UserCheck,
 } from 'lucide-react';
 import {
   useReactTable,
@@ -89,6 +89,12 @@ interface AdminTicketsTableProps {
   userSubRole: string;
 }
 
+interface GuestInfo {
+  name: string;
+  email: string;
+  phone?: string;
+}
+
 export function AdminTicketsTable({
   initialData,
   userRole,
@@ -103,21 +109,97 @@ export function AdminTicketsTable({
   const [isLoading, setIsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('cards');
   const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [userTypeFilter, setUserTypeFilter] = useState<string>('all');
 
   const isSuperAdmin = userRole === 'ADMIN' && userSubRole === 'SUPER_ADMIN';
 
-  // Calculate statistics
-  const stats = {
-    totalTickets: data.length,
-    unusedTickets: data.filter((t) => t.status === 'UNUSED').length,
-    usedTickets: data.filter((t) => t.status === 'USED').length,
-    refundedTickets: data.filter((t) => t.status === 'REFUNDED').length,
-    cancelledTickets: data.filter((t) => t.status === 'CANCELLED').length,
-    guestTickets: data.filter((t) => !t.userId).length,
-    totalRevenue: data
-      .filter((t) => t.status !== 'REFUNDED' && t.status !== 'CANCELLED')
-      .reduce((total, ticket) => total + ticket.ticketType.price, 0),
+  // Extract guest info from ticket
+  const extractGuestInfo = (ticket: any): GuestInfo | null => {
+    if (ticket.guestInfo) return ticket.guestInfo;
+
+    if (!ticket.userId && ticket.order?.purchaseNotes) {
+      try {
+        const notes = JSON.parse(ticket.order.purchaseNotes);
+        if (notes.isGuestPurchase) {
+          return {
+            name: notes.guestName,
+            email: notes.guestEmail,
+            phone: notes.guestPhone,
+          };
+        }
+      } catch (error) {
+        console.error('Failed to parse guest info:', error);
+      }
+    }
+    return null;
   };
+
+  // Filter data based on selected filters
+  const filteredData = useMemo(() => {
+    let filtered = [...data];
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((ticket) => ticket.status === statusFilter);
+    }
+
+    // User type filter
+    if (userTypeFilter !== 'all') {
+      filtered = filtered.filter((ticket) => {
+        const isGuest = !ticket.userId || extractGuestInfo(ticket);
+        return userTypeFilter === 'guest' ? isGuest : !isGuest;
+      });
+    }
+
+    // Global search filter
+    if (globalFilter) {
+      const searchTerm = globalFilter.toLowerCase();
+      filtered = filtered.filter((ticket) => {
+        // Search in ticket ID
+        if (ticket.ticketId.toLowerCase().includes(searchTerm)) return true;
+
+        // Search in authenticated user info
+        if (ticket.user) {
+          if (ticket.user.name?.toLowerCase().includes(searchTerm)) return true;
+          if (ticket.user.email?.toLowerCase().includes(searchTerm)) return true;
+        }
+
+        // Search in guest info
+        const guestInfo = extractGuestInfo(ticket);
+        if (guestInfo) {
+          if (guestInfo.name?.toLowerCase().includes(searchTerm)) return true;
+          if (guestInfo.email?.toLowerCase().includes(searchTerm)) return true;
+          if (guestInfo.phone?.toLowerCase().includes(searchTerm)) return true;
+        }
+
+        // Search in ticket type and event
+        if (ticket.ticketType.name.toLowerCase().includes(searchTerm)) return true;
+        if (ticket.ticketType.event.title.toLowerCase().includes(searchTerm)) return true;
+
+        return false;
+      });
+    }
+
+    return filtered;
+  }, [data, statusFilter, userTypeFilter, globalFilter]);
+
+
+  // Calculate statistics with guest tracking
+  const stats = useMemo(() => {
+    return {
+      totalTickets: filteredData.length,
+      unusedTickets: filteredData.filter((t) => t.status === 'UNUSED').length,
+      usedTickets: filteredData.filter((t) => t.status === 'USED').length,
+      refundedTickets: filteredData.filter((t) => t.status === 'REFUNDED').length,
+      cancelledTickets: filteredData.filter((t) => t.status === 'CANCELLED').length,
+      guestTickets: filteredData.filter((t) => !t.userId || extractGuestInfo(t)).length,
+      authenticatedTickets: filteredData.filter((t) => t.userId && !extractGuestInfo(t)).length,
+      totalRevenue: filteredData
+        .filter((t) => t.status !== 'REFUNDED' && t.status !== 'CANCELLED')
+        .reduce((total, ticket) => total + ticket.ticketType.price, 0),
+    };
+  }, [filteredData]);
 
   // Format date and time
   const formatDateTime = (dateString: string) => {
@@ -131,6 +213,17 @@ export function AdminTicketsTable({
       style: 'currency',
       currency: 'NGN',
     }).format(price);
+  };
+
+  // Format currency in short form
+  const formatCurrencyShort = (amount: number) => {
+    if (amount >= 1_000_000) {
+      return `₦${(amount / 1_000_000).toFixed(1)}M`;
+    }
+    if (amount >= 1_000) {
+      return `₦${(amount / 1_000).toFixed(1)}K`;
+    }
+    return formatPrice(amount);
   };
 
   // Get status badge with icons
@@ -160,9 +253,7 @@ export function AdminTicketsTable({
         icon: XCircle,
         className: 'bg-red-100 text-red-800',
       },
-    };
-
-    const config = variants[status] || {
+    }; const config = variants[status] || {
       variant: 'outline' as const,
       text: 'Unknown',
       icon: AlertCircle,
@@ -194,10 +285,13 @@ export function AdminTicketsTable({
 
   const resendAllTicketEmails = async () => {
     try {
-      const ticketsWithEmails = data.filter((ticket) => ticket.user?.email);
+      const ticketsWithEmails = filteredData.filter((ticket) => {
+        const guestInfo = extractGuestInfo(ticket);
+        return ticket.user?.email || guestInfo?.email;
+      });
 
       if (ticketsWithEmails.length === 0) {
-        toast.error('No tickets with valid customer emails found');
+        toast.error('No tickets with valid emails found');
         return;
       }
 
@@ -216,14 +310,16 @@ export function AdminTicketsTable({
   };
 
   const resendSingleTicketEmail = async (ticket: any) => {
-    if (!ticket.user?.email) {
+    const guestInfo = extractGuestInfo(ticket);
+    const email = ticket.user?.email || guestInfo?.email;
+
+    if (!email) {
       toast.error('No email address found for this customer');
       return;
     }
 
     try {
       const result = await resendTicketEmail(ticket.id);
-
       if (result.success) {
         toast.success(result.message || 'Ticket email sent successfully');
       } else {
@@ -260,7 +356,6 @@ export function AdminTicketsTable({
     setIsLoading(true);
     try {
       const response = await fetch('/api/admin/tickets');
-
       if (response.ok) {
         const freshData = await response.json();
         setData(freshData.tickets || freshData);
@@ -276,15 +371,15 @@ export function AdminTicketsTable({
     }
   };
 
-  // Export to CSV function
+  // Export all tickets to PDF
   const exportAllTicketsPDF = () => {
     try {
-      if (data.length === 0) {
+      if (filteredData.length === 0) {
         toast.error('No tickets to export');
         return;
       }
 
-      data.forEach((ticket, index) => {
+      filteredData.forEach((ticket, index) => {
         setTimeout(() => {
           generateTicketPDF(
             ticket,
@@ -293,12 +388,13 @@ export function AdminTicketsTable({
         }, index * 100);
       });
 
-      toast.success(`Started download of ${data.length} ticket PDFs`);
+      toast.success(`Started download of ${filteredData.length} ticket PDFs`);
     } catch (error) {
       console.error('Error exporting tickets to PDF:', error);
       toast.error('Failed to export tickets to PDF');
     }
   };
+
 
   // Table columns definition
   const columns: ColumnDef<any>[] = [
@@ -358,22 +454,45 @@ export function AdminTicketsTable({
     {
       id: 'user',
       header: 'Customer',
-      accessorFn: (row) => row.user?.name || 'Guest User',
+      accessorFn: (row) => {
+        const guestInfo = extractGuestInfo(row);
+        return row.user?.name || guestInfo?.name || 'Guest User';
+      },
       cell: ({ row }) => {
         const user = row.original.user;
+        const guestInfo = extractGuestInfo(row.original);
+
         return (
           <div>
             {user ? (
               <>
-                <div className="font-medium">{user.name}</div>
+                <div className="flex items-center gap-1">
+                  <UserCheck className="h-3 w-3 text-green-600" />
+                  <span className="font-medium">{user.name}</span>
+                </div>
                 <div className="text-sm text-muted-foreground">
                   {user.email}
                 </div>
               </>
+            ) : guestInfo ? (
+              <>
+                <div className="flex items-center gap-1">
+                  <UserX className="h-3 w-3 text-orange-600" />
+                  <span className="font-medium text-orange-700">{guestInfo.name}</span>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {guestInfo.email}
+                </div>
+                {guestInfo.phone && (
+                  <div className="text-xs text-muted-foreground">
+                    {guestInfo.phone}
+                  </div>
+                )}
+              </>
             ) : (
               <div className="flex items-center gap-1 text-muted-foreground">
                 <UserX className="h-4 w-4" />
-                <span>Guest User</span>
+                <span>Guest User (No Info)</span>
               </div>
             )}
           </div>
@@ -392,6 +511,8 @@ export function AdminTicketsTable({
       cell: ({ row }) => {
         const ticket = row.original;
         const isDeleting = deletingTicketId === ticket.id;
+        const guestInfo = extractGuestInfo(ticket);
+        const hasEmail = ticket.user?.email || guestInfo?.email;
 
         return (
           <div className="flex items-center gap-2">
@@ -413,12 +534,12 @@ export function AdminTicketsTable({
               <Download className="h-4 w-4" />
             </Button>
 
-            {ticket.user?.email && (
+            {hasEmail && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => resendSingleTicketEmail(ticket)}
-                title="Resend Email"
+                title={`Send Email to ${ticket.user?.email || guestInfo?.email}`}
               >
                 <Mail className="h-4 w-4" />
               </Button>
@@ -452,15 +573,6 @@ export function AdminTicketsTable({
                         <p className="font-semibold text-red-900 mb-2">
                           ⚠️ Warning: This action cannot be undone!
                         </p>
-                        <p className="text-red-800 text-sm">
-                          You are about to permanently delete this ticket from
-                          the system. This will:
-                        </p>
-                        <ul className="list-disc list-inside text-red-800 text-sm mt-2 space-y-1">
-                          <li>Remove all ticket data permanently</li>
-                          <li>Delete validation history</li>
-                          <li>Cannot be recovered after deletion</li>
-                        </ul>
                       </div>
 
                       <div className="bg-gray-50 rounded-lg p-4 space-y-2">
@@ -478,7 +590,7 @@ export function AdminTicketsTable({
                           </p>
                           <p>
                             <span className="font-medium">Customer:</span>{' '}
-                            {ticket.user?.name || 'Guest User'}
+                            {ticket.user?.name || guestInfo?.name || 'Guest User'}
                           </p>
                           <p>
                             <span className="font-medium">Status:</span>{' '}
@@ -486,10 +598,6 @@ export function AdminTicketsTable({
                           </p>
                         </div>
                       </div>
-
-                      <p className="text-sm text-gray-600">
-                        Are you absolutely sure you want to delete this ticket?
-                      </p>
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -512,7 +620,7 @@ export function AdminTicketsTable({
   ];
 
   const table = useReactTable({
-    data,
+    data: filteredData,
     columns,
     state: {
       sorting,
@@ -534,141 +642,165 @@ export function AdminTicketsTable({
   });
 
   // Card component for individual tickets
-  const TicketCard = ({ ticket }: { ticket: any }) => (
-    <Card className="hover:shadow-md transition-shadow">
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Ticket className="w-4 h-4 text-blue-600" />
-              <span className="font-mono text-sm font-medium">
-                {ticket.ticketId}
-              </span>
+  const TicketCard = ({ ticket }: { ticket: any }) => {
+    const guestInfo = extractGuestInfo(ticket);
+    const isGuest = !ticket.userId || !!guestInfo;
+    const hasEmail = ticket.user?.email || guestInfo?.email;
+
+    return (
+      <Card className="hover:shadow-md transition-shadow">
+        <CardContent className="p-6">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Ticket className="w-4 h-4 text-blue-600" />
+                <span className="font-mono text-sm font-medium">
+                  {ticket.ticketId}
+                </span>
+              </div>
+              {getStatusBadge(ticket.status)}
             </div>
-            {getStatusBadge(ticket.status)}
-          </div>
-          <div className="flex items-center gap-1">
-            <TicketPreviewModal
-              ticket={ticket}
-              trigger={
-                <Button variant="ghost" size="sm" title="View Ticket">
-                  <Eye className="h-4 w-4" />
-                </Button>
-              }
-            />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => downloadTicket(ticket)}
-              title="Download PDF"
-            >
-              <Download className="h-4 w-4" />
-            </Button>
-            {ticket.user?.email && (
+            <div className="flex items-center gap-1">
+              <TicketPreviewModal
+                ticket={ticket}
+                trigger={
+                  <Button variant="ghost" size="sm" title="View Ticket">
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                }
+              />
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => resendSingleTicketEmail(ticket)}
-                title="Resend Email"
+                onClick={() => downloadTicket(ticket)}
+                title="Download PDF"
               >
-                <Mail className="h-4 w-4" />
+                <Download className="h-4 w-4" />
               </Button>
-            )}
-            {isSuperAdmin && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={ticket.status === 'USED'}
-                    title={
-                      ticket.status === 'USED'
-                        ? 'Cannot delete used tickets'
-                        : 'Delete Ticket'
-                    }
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle className="flex items-center gap-2">
-                      <AlertCircle className="h-5 w-5 text-red-600" />
-                      Delete Ticket
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will permanently delete ticket {ticket.ticketId}.
-                      This action cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => handleDeleteTicket(ticket.id)}
-                      className="bg-red-600 hover:bg-red-700"
+              {hasEmail && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => resendSingleTicketEmail(ticket)}
+                  title="Resend Email"
+                >
+                  <Mail className="h-4 w-4" />
+                </Button>
+              )}
+              {isSuperAdmin && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={ticket.status === 'USED'}
+                      title={
+                        ticket.status === 'USED'
+                          ? 'Cannot delete used tickets'
+                          : 'Delete Ticket'
+                      }
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
                     >
-                      Delete
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div>
-            <h4 className="font-medium text-lg mb-1">
-              {ticket.ticketType.event.title}
-            </h4>
-            <div className="flex items-center text-sm text-muted-foreground mb-1">
-              <Calendar className="w-4 h-4 mr-1" />
-              {formatDateTime(ticket.ticketType.event.startDateTime)}
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="flex items-center gap-2">
+                        <AlertCircle className="h-5 w-5 text-red-600" />
+                        Delete Ticket
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete ticket {ticket.ticketId}.
+                        This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => handleDeleteTicket(ticket.id)}
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
             </div>
-            <div className="flex items-center text-sm text-muted-foreground">
-              <MapPin className="w-4 h-4 mr-1" />
-              {ticket.ticketType.event.venue.name},{' '}
-              {ticket.ticketType.event.venue.city?.name}
-            </div>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="space-y-3">
             <div>
-              <p className="font-medium">{ticket.ticketType.name}</p>
-              <p className="text-sm text-muted-foreground">Ticket Type</p>
+              <h4 className="font-medium text-lg mb-1">
+                {ticket.ticketType.event.title}
+              </h4>
+              <div className="flex items-center text-sm text-muted-foreground mb-1">
+                <Calendar className="w-4 h-4 mr-1" />
+                {formatDateTime(ticket.ticketType.event.startDateTime)}
+              </div>
+              <div className="flex items-center text-sm text-muted-foreground">
+                <MapPin className="w-4 h-4 mr-1" />
+                {ticket.ticketType.event.venue.name},{' '}
+                {ticket.ticketType.event.venue.city?.name}
+              </div>
             </div>
-            <div className="text-right">
-              <p className="font-bold text-lg">
-                {formatPrice(ticket.ticketType.price)}
-              </p>
-            </div>
-          </div>
 
-          {ticket.user ? (
-            <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-              <Users className="w-4 h-4 text-gray-600" />
+            <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium text-sm">{ticket.user.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {ticket.user.email}
+                <p className="font-medium">{ticket.ticketType.name}</p>
+                <p className="text-sm text-muted-foreground">Ticket Type</p>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-lg">
+                  {formatPrice(ticket.ticketType.price)}
                 </p>
               </div>
             </div>
-          ) : (
-            <div className="flex items-center gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
-              <UserX className="w-4 h-4 text-amber-600" />
-              <p className="text-sm font-medium text-amber-800">Guest User</p>
-            </div>
-          )}
 
-          <div className="text-xs text-muted-foreground border-t pt-3">
-            Purchased on {formatDateTime(ticket.purchasedAt)}
+            {ticket.user ? (
+              <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
+                <UserCheck className="w-4 h-4 text-green-600" />
+                <div>
+                  <p className="font-medium text-sm">{ticket.user.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {ticket.user.email}
+                  </p>
+                </div>
+              </div>
+            ) : guestInfo ? (
+              <div className="flex items-center gap-2 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                <UserX className="w-4 h-4 text-orange-600" />
+                <div>
+                  <p className="font-medium text-sm text-orange-800">
+                    {guestInfo.name} (Guest)
+                  </p>
+                  <p className="text-xs text-orange-600">{guestInfo.email}</p>
+                  {guestInfo.phone && (
+                    <p className="text-xs text-muted-foreground">
+                      {guestInfo.phone}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <UserX className="w-4 h-4 text-gray-600" />
+                <p className="text-sm font-medium text-gray-800">
+                  Guest User (No Info)
+                </p>
+              </div>
+            )}
+
+            <div className="text-xs text-muted-foreground border-t pt-3">
+              Purchased on {formatDateTime(ticket.purchasedAt)}
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+        </CardContent>
+      </Card>
+    );
+  };
+
 
   return (
     <div className="space-y-6">
@@ -697,7 +829,7 @@ export function AdminTicketsTable({
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-6">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
@@ -706,7 +838,7 @@ export function AdminTicketsTable({
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">
-                  Total Tickets
+                  Total
                 </p>
                 <p className="text-2xl font-bold">{stats.totalTickets}</p>
               </div>
@@ -765,6 +897,22 @@ export function AdminTicketsTable({
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
+              <div className="p-2 bg-emerald-100 rounded-full">
+                <UserCheck className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-muted-foreground">
+                  Auth Users
+                </p>
+                <p className="text-2xl font-bold">{stats.authenticatedTickets}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center">
               <div className="p-2 bg-purple-100 rounded-full">
                 <DollarSign className="w-4 h-4 text-purple-600" />
               </div>
@@ -773,7 +921,7 @@ export function AdminTicketsTable({
                   Revenue
                 </p>
                 <p className="text-xl font-bold">
-                  {formatPrice(stats.totalRevenue)}
+                  {formatCurrencyShort(stats.totalRevenue)}
                 </p>
               </div>
             </div>
@@ -814,6 +962,39 @@ export function AdminTicketsTable({
                 <SelectItem value="USED">Used</SelectItem>
                 <SelectItem value="REFUNDED">Refunded</SelectItem>
                 <SelectItem value="CANCELLED">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={
+                (columnFilters.find((f) => f.id === 'userType')?.value as string) || 'all'
+              }
+              onValueChange={(value) => {
+                if (value === 'all') {
+                  setColumnFilters(columnFilters.filter((f) => f.id !== 'userType'));
+                } else {
+                  const filtered = data.filter((ticket) => {
+                    const isGuest = !ticket.userId || extractGuestInfo(ticket);
+                    return value === 'guest' ? isGuest : !isGuest;
+                  });
+
+                  // Apply filter through global filter for simplicity
+                  if (value === 'guest') {
+                    setColumnFilters([...columnFilters.filter((f) => f.id !== 'userType'),
+                    { id: 'userType', value: 'guest' }]);
+                  } else {
+                    setColumnFilters([...columnFilters.filter((f) => f.id !== 'userType'),
+                    { id: 'userType', value: 'authenticated' }]);
+                  }
+                }
+              }}
+            >
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Filter by user type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Users</SelectItem>
+                <SelectItem value="guest">Guest Users</SelectItem>
+                <SelectItem value="authenticated">Authenticated Users</SelectItem>
               </SelectContent>
             </Select>
             <Select

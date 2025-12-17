@@ -1,3 +1,4 @@
+// src/app/admin/dashboard/tickets/page.tsx
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { AdminTicketsTable } from '@/components/admin/admin-tickets-table';
 import { getServerSideAuth } from '@/lib/auth-server';

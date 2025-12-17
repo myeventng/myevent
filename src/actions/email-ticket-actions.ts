@@ -1,4 +1,4 @@
-// actions/email-ticket.actions.ts
+// actions/email-ticket-actions.ts - Updated with guest support
 'use server';
 
 import { headers } from 'next/headers';
@@ -11,6 +11,26 @@ interface ActionResponse<T> {
   success: boolean;
   message?: string;
   data?: T;
+}
+
+// Helper to extract guest info
+function extractGuestInfo(order: any) {
+  if (!order?.purchaseNotes) return null;
+
+  try {
+    const notes = JSON.parse(order.purchaseNotes);
+    if (notes.isGuestPurchase) {
+      return {
+        name: notes.guestName,
+        email: notes.guestEmail,
+        phone: notes.guestPhone,
+      };
+    }
+  } catch (error) {
+    console.error('Failed to parse guest info:', error);
+  }
+
+  return null;
 }
 
 // Define the ticket type with includes
@@ -42,6 +62,7 @@ type TicketWithIncludes = Prisma.TicketGetPayload<{
         totalAmount: true;
         quantity: true;
         paymentStatus: true;
+        purchaseNotes: true;
       };
     };
     validations: {
@@ -84,12 +105,13 @@ type BulkTicketWithIncludes = Prisma.TicketGetPayload<{
         totalAmount: true;
         quantity: true;
         paymentStatus: true;
+        purchaseNotes: true;
       };
     };
   };
 }>;
 
-// Resend individual ticket email
+// Resend individual ticket email with guest support
 export async function resendTicketEmail(
   ticketId: string
 ): Promise<ActionResponse<any>> {
@@ -136,6 +158,7 @@ export async function resendTicketEmail(
             totalAmount: true,
             quantity: true,
             paymentStatus: true,
+            purchaseNotes: true,
           },
         },
         validations: {
@@ -160,10 +183,17 @@ export async function resendTicketEmail(
       };
     }
 
-    if (!ticket.user || !ticket.user.email) {
+    // Extract guest info or use authenticated user info
+    const guestInfo = extractGuestInfo(ticket.order);
+    const isGuest = !ticket.userId || !!guestInfo;
+
+    const customerEmail = ticket.user?.email || guestInfo?.email;
+    const customerName = ticket.user?.name || guestInfo?.name || 'Guest User';
+
+    if (!customerEmail) {
       return {
         success: false,
-        message: 'Customer email not found for this ticket',
+        message: 'No email address found for this ticket',
       };
     }
 
@@ -181,15 +211,15 @@ export async function resendTicketEmail(
       };
     }
 
-    // Send the email
+    // Send the email with guest information
     const emailResult = await emailTicketService.sendTicketEmail({
       ticket,
-      customerEmail: ticket.user.email,
-      customerName: ticket.user.name,
+      customerEmail,
+      customerName,
     });
 
     if (emailResult.success) {
-      // Log the email activity (optional)
+      // Log the email activity
       await prisma.auditLog.create({
         data: {
           userId: session.user.id,
@@ -197,7 +227,9 @@ export async function resendTicketEmail(
           entity: 'TICKET',
           entityId: ticket.id,
           newValues: {
-            recipientEmail: ticket.user.email,
+            recipientEmail: customerEmail,
+            recipientName: customerName,
+            isGuest,
             sentAt: new Date().toISOString(),
           },
         },
@@ -209,7 +241,9 @@ export async function resendTicketEmail(
       message: emailResult.message,
       data: {
         ticketId: ticket.ticketId,
-        customerEmail: ticket.user.email,
+        customerEmail,
+        customerName,
+        isGuest,
         eventTitle: ticket.ticketType.event.title,
       },
     };
@@ -222,7 +256,7 @@ export async function resendTicketEmail(
   }
 }
 
-// Resend multiple ticket emails (for bulk operations)
+// Resend multiple ticket emails with guest tracking
 export async function resendBulkTicketEmails(
   ticketIds: string[]
 ): Promise<ActionResponse<any>> {
@@ -250,14 +284,10 @@ export async function resendBulkTicketEmails(
   }
 
   try {
-    // Fetch all tickets
+    // Fetch all tickets including guest purchases
     const tickets: BulkTicketWithIncludes[] = await prisma.ticket.findMany({
       where: {
         id: { in: ticketIds },
-        userId: { not: null },
-        user: {
-          email: { not: null as any },
-        },
       },
       include: {
         user: {
@@ -286,30 +316,45 @@ export async function resendBulkTicketEmails(
             totalAmount: true,
             quantity: true,
             paymentStatus: true,
+            purchaseNotes: true,
           },
         },
       },
     });
 
-    if (tickets.length === 0) {
+    // Prepare tickets for bulk email, including guest tickets
+    const ticketEmailData = tickets
+      .map((ticket) => {
+        const guestInfo = extractGuestInfo(ticket.order);
+        const email = ticket.user?.email || guestInfo?.email;
+        const name = ticket.user?.name || guestInfo?.name || 'Guest User';
+
+        if (!email) return null;
+
+        return {
+          ticket,
+          customerEmail: email,
+          customerName: name,
+        };
+      })
+      .filter((data): data is NonNullable<typeof data> => data !== null);
+
+    if (ticketEmailData.length === 0) {
       return {
         success: false,
         message: 'No valid tickets found with customer emails',
       };
     }
 
-    // Prepare tickets for bulk email
-    const ticketEmailData = tickets
-      .filter((ticket) => ticket.user?.email)
-      .map((ticket) => ({
-        ticket,
-        customerEmail: ticket.user!.email,
-        customerName: ticket.user!.name,
-      }));
-
     // Send bulk emails
     const bulkResult =
       await emailTicketService.sendBulkTicketEmails(ticketEmailData);
+
+    // Count guest vs authenticated tickets
+    const guestCount = ticketEmailData.filter(
+      (data) => !data.ticket.userId || !!extractGuestInfo(data.ticket.order)
+    ).length;
+    const authenticatedCount = bulkResult.results.length - guestCount;
 
     // Log the bulk operation
     await prisma.auditLog.create({
@@ -321,6 +366,8 @@ export async function resendBulkTicketEmails(
           ticketCount: tickets.length,
           successCount: bulkResult.results.filter((r) => r.success).length,
           failureCount: bulkResult.results.filter((r) => !r.success).length,
+          guestCount,
+          authenticatedCount,
           sentAt: new Date().toISOString(),
         },
       },
@@ -331,6 +378,9 @@ export async function resendBulkTicketEmails(
       message: bulkResult.message,
       data: {
         totalTickets: tickets.length,
+        successCount: bulkResult.results.filter((r) => r.success).length,
+        guestCount,
+        authenticatedCount,
         results: bulkResult.results,
       },
     };
@@ -343,7 +393,7 @@ export async function resendBulkTicketEmails(
   }
 }
 
-// Get email history for a ticket (optional feature)
+// Get email history for a ticket
 export async function getTicketEmailHistory(
   ticketId: string
 ): Promise<ActionResponse<any[]>> {

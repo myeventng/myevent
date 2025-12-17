@@ -1,4 +1,4 @@
-// lib/email-ticket-service.ts
+// lib/email-ticket-service.ts - Updated with guest support
 import { resend, emailConfig } from '@/lib/resend';
 import {
   PDFTicketGenerator,
@@ -10,12 +10,36 @@ interface EmailTicketData {
   ticket: any;
   customerEmail: string;
   customerName: string;
+  isGuest?: boolean;
+  guestPhone?: string;
+}
+
+// Helper to extract guest info
+function extractGuestInfo(order: any) {
+  if (!order?.purchaseNotes) return null;
+
+  try {
+    const notes = JSON.parse(order.purchaseNotes);
+    if (notes.isGuestPurchase) {
+      return {
+        name: notes.guestName,
+        email: notes.guestEmail,
+        phone: notes.guestPhone,
+      };
+    }
+  } catch (error) {
+    console.error('Failed to parse guest info:', error);
+  }
+
+  return null;
 }
 
 export class EmailTicketService {
   // Generate ticket PDF as attachment
   private async generateTicketPDFBuffer(ticket: any): Promise<Buffer> {
     const generator = new PDFTicketGenerator();
+    const guestInfo = extractGuestInfo(ticket.order);
+    const isGuest = !ticket.userId || !!guestInfo;
 
     const ticketData = {
       ticketId: ticket.ticketId,
@@ -24,27 +48,47 @@ export class EmailTicketService {
       venue: `${ticket.ticketType.event.venue.name}${ticket.ticketType.event.venue.city?.name ? `, ${ticket.ticketType.event.venue.city.name}` : ''}`,
       ticketType: ticket.ticketType.name,
       price: formatPrice(ticket.ticketType.price),
-      customerName: ticket.user?.name || 'Unknown',
-      customerEmail: ticket.user?.email || 'Unknown',
+      customerName: ticket.user?.name || guestInfo?.name || 'Guest User',
+      customerEmail: ticket.user?.email || guestInfo?.email || 'No email',
       purchaseDate: formatDateTime(ticket.purchasedAt),
       status: ticket.status,
       qrCode: ticket.qrCodeData || 'available',
       orderId: ticket.order?.id,
       quantity: ticket.order?.quantity,
+      eventId: ticket.ticketType.event.id,
+      isGuest,
     };
 
-    generator.generateTicket(ticketData);
+    await generator.generateTicket(ticketData);
     const pdfBlob = generator.getBlob();
 
-    // Convert blob to buffer
     const arrayBuffer = await pdfBlob.arrayBuffer();
     return Buffer.from(arrayBuffer);
   }
 
-  // Create HTML email template
-  private createEmailTemplate(ticket: any): string {
+  // Create HTML email template with guest support
+  private createEmailTemplate(ticket: any, isGuest: boolean = false): string {
     const event = ticket.ticketType.event;
     const ticketType = ticket.ticketType;
+    const guestInfo = extractGuestInfo(ticket.order);
+
+    const customerName = ticket.user?.name || guestInfo?.name || 'Guest';
+    const customerEmail = ticket.user?.email || guestInfo?.email || '';
+    const customerPhone = guestInfo?.phone || '';
+
+    const guestBadge = isGuest
+      ? `
+      <div style="background-color: #fff7ed; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 20px;">👤</span>
+          <strong style="color: #92400e;">Guest Purchase</strong>
+        </div>
+        <p style="margin: 8px 0 0 0; color: #78350f; font-size: 14px;">
+          This ticket was purchased as a guest. Create an account at www.eventhub.ng to manage your tickets easily!
+        </p>
+      </div>
+    `
+      : '';
 
     return `
       <!DOCTYPE html>
@@ -192,6 +236,20 @@ export class EmailTicketService {
           .attachment-note strong {
             color: #0277bd;
           }
+          .guest-info-box {
+            background-color: #fef3c7;
+            border: 2px solid #fbbf24;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+          }
+          .guest-info-box h3 {
+            margin-top: 0;
+            color: #92400e;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
           @media (max-width: 600px) {
             body {
               padding: 10px;
@@ -216,6 +274,8 @@ export class EmailTicketService {
             <h1>Your Event Ticket</h1>
             <p>Thank you for your purchase!</p>
           </div>
+
+          ${guestBadge}
 
           <div class="ticket-id">
             Ticket ID: ${ticket.ticketId}
@@ -263,17 +323,34 @@ export class EmailTicketService {
               <span class="detail-label">Purchase Date:</span>
               <span class="detail-value">${formatDateTime(ticket.purchasedAt)}</span>
             </div>
-            ${
-              ticket.order
-                ? `
-            <div class="detail-row">
-              <span class="detail-label">Order ID:</span>
-              <span class="detail-value">${ticket.order.id}</span>
-            </div>
-            `
-                : ''
-            }
           </div>
+
+          ${
+            isGuest
+              ? `
+          <div class="guest-info-box">
+            <h3>
+              <span style="font-size: 24px;">👤</span>
+              Your Contact Information
+            </h3>
+            <div style="margin-top: 10px;">
+              <p style="margin: 5px 0;"><strong>Name:</strong> ${customerName}</p>
+              <p style="margin: 5px 0;"><strong>Email:</strong> ${customerEmail}</p>
+              ${customerPhone ? `<p style="margin: 5px 0;"><strong>Phone:</strong> ${customerPhone}</p>` : ''}
+            </div>
+            <p style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #fbbf24; color: #78350f; font-size: 14px;">
+              💡 <strong>Tip:</strong> Create a free account at www.eventhub.ng to:
+            </p>
+            <ul style="color: #78350f; font-size: 14px; margin: 10px 0;">
+              <li>View all your tickets in one place</li>
+              <li>Get instant notifications about your events</li>
+              <li>Manage ticket transfers easily</li>
+              <li>Access exclusive organizer features</li>
+            </ul>
+          </div>
+          `
+              : ''
+          }
 
           <div class="instructions">
             <h3>📋 Important Instructions</h3>
@@ -295,7 +372,8 @@ export class EmailTicketService {
           </div>
 
           <div class="footer">
-            <p>This email was sent to ${ticket.user?.email || 'you'} regarding your ticket purchase.</p>
+            <p>This email was sent to ${customerEmail} regarding your ticket purchase.</p>
+            ${isGuest ? '<p style="margin-top: 10px; color: #f59e0b; font-weight: 600;">Guest Purchase - No account required</p>' : ''}
             <p>© 2024 EventHub Nigeria. All rights reserved.</p>
           </div>
         </div>
@@ -304,24 +382,34 @@ export class EmailTicketService {
     `;
   }
 
-  // Send ticket email
+  // Send ticket email with guest support
   async sendTicketEmail({
     ticket,
     customerEmail,
     customerName,
+    isGuest,
+    guestPhone,
   }: EmailTicketData): Promise<{ success: boolean; message: string }> {
     try {
+      // Detect guest status if not provided
+      if (isGuest === undefined) {
+        const guestInfo = extractGuestInfo(ticket.order);
+        isGuest = !ticket.userId || !!guestInfo;
+      }
+
       // Generate PDF attachment
       const pdfBuffer = await this.generateTicketPDFBuffer(ticket);
 
       // Create email template
-      const htmlContent = this.createEmailTemplate(ticket);
+      const htmlContent = this.createEmailTemplate(ticket, isGuest);
+
+      const subjectPrefix = isGuest ? '👤 Guest Ticket' : '🎟️ Your Ticket';
 
       // Prepare email data
       const emailData = {
         from: emailConfig.from,
         to: emailConfig.testMode ? [emailConfig.testEmail!] : [customerEmail],
-        subject: `🎟️ Your Ticket for ${ticket.ticketType.event.title} - ${ticket.ticketId}`,
+        subject: `${subjectPrefix} for ${ticket.ticketType.event.title} - ${ticket.ticketId}`,
         html: htmlContent,
         attachments: [
           {
@@ -350,7 +438,7 @@ export class EmailTicketService {
         success: true,
         message: emailConfig.testMode
           ? `Test email sent successfully to ${emailConfig.testEmail}`
-          : `Ticket sent successfully to ${customerEmail}`,
+          : `Ticket sent successfully to ${customerEmail}${isGuest ? ' (Guest)' : ''}`,
       };
     } catch (error) {
       console.error('Error sending ticket email:', error);
@@ -367,17 +455,34 @@ export class EmailTicketService {
   ): Promise<{
     success: boolean;
     message: string;
-    results: { success: boolean; email: string; message: string }[];
+    results: {
+      success: boolean;
+      email: string;
+      message: string;
+      isGuest: boolean;
+    }[];
   }> {
     const results = [];
     let successCount = 0;
+    let guestCount = 0;
 
     for (const ticketData of tickets) {
-      const result = await this.sendTicketEmail(ticketData);
+      const guestInfo = extractGuestInfo(ticketData.ticket.order);
+      const isGuest = !ticketData.ticket.userId || !!guestInfo;
+
+      if (isGuest) guestCount++;
+
+      const result = await this.sendTicketEmail({
+        ...ticketData,
+        isGuest,
+        guestPhone: guestInfo?.phone,
+      });
+
       results.push({
         success: result.success,
         email: ticketData.customerEmail,
         message: result.message,
+        isGuest,
       });
 
       if (result.success) {
@@ -392,7 +497,7 @@ export class EmailTicketService {
 
     return {
       success: successCount > 0,
-      message: `${successCount}/${tickets.length} emails sent successfully`,
+      message: `${successCount}/${tickets.length} emails sent successfully (${guestCount} guest tickets)`,
       results,
     };
   }

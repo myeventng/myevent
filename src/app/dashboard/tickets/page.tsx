@@ -1,4 +1,4 @@
-//
+// src/app/dashboard/tickets/page.tsx
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { UserTicketsPage } from '@/components/tickets/user-ticket-page';
 import { getServerSideAuth } from '@/lib/auth-server';

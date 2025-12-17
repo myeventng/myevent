@@ -1,3 +1,4 @@
+// src/actions/ticket.actions.ts
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -22,6 +23,47 @@ interface ActionResponse<T> {
   data?: T;
   error?: string;
   alreadyUsed?: boolean;
+}
+
+// Enhanced ticket type with guest information
+interface TicketWithGuestInfo {
+  id: string;
+  ticketId: string;
+  status: string;
+  purchasedAt: Date;
+  userId: string | null;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+  ticketType: any;
+  order: any;
+  validations?: any[];
+  guestInfo?: {
+    name: string;
+    email: string;
+    phone?: string;
+  };
+}
+
+function extractGuestInfo(order: any) {
+  if (!order?.purchaseNotes) return null;
+
+  try {
+    const notes = JSON.parse(order.purchaseNotes);
+    if (notes.isGuestPurchase) {
+      return {
+        name: notes.guestName,
+        email: notes.guestEmail,
+        phone: notes.guestPhone,
+      };
+    }
+  } catch (error) {
+    console.error('Failed to parse guest info:', error);
+  }
+
+  return null;
 }
 
 // Helper function to get platform fee percentage
@@ -1100,6 +1142,7 @@ export async function getAdminTickets(): Promise<ActionResponse<any[]>> {
             paymentStatus: true,
             refundStatus: true,
             totalAmount: true,
+            purchaseNotes: true, // IMPORTANT: Include purchase notes for guest info
           },
         },
       },
@@ -1108,9 +1151,23 @@ export async function getAdminTickets(): Promise<ActionResponse<any[]>> {
       },
     });
 
+    // Enhance tickets with guest information
+    const ticketsWithGuestInfo = tickets.map((ticket) => {
+      if (!ticket.userId && ticket.order) {
+        const guestInfo = extractGuestInfo(ticket.order);
+        if (guestInfo) {
+          return {
+            ...ticket,
+            guestInfo,
+          };
+        }
+      }
+      return ticket;
+    });
+
     return {
       success: true,
-      data: tickets,
+      data: ticketsWithGuestInfo,
     };
   } catch (error) {
     console.error('Error fetching admin tickets:', error);
@@ -1132,6 +1189,7 @@ export async function getFilteredAdminTickets(
     search?: string;
     dateFrom?: string;
     dateTo?: string;
+    isGuest?: boolean; // NEW: Filter for guest purchases
   }
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
@@ -1175,6 +1233,17 @@ export async function getFilteredAdminTickets(
       whereClause.userId = filters.userId;
     }
 
+    // NEW: Filter by guest purchases
+    if (filters?.isGuest !== undefined) {
+      if (filters.isGuest) {
+        // Show only guest tickets (no userId)
+        whereClause.userId = null;
+      } else {
+        // Show only authenticated tickets (has userId)
+        whereClause.userId = { not: null };
+      }
+    }
+
     if (filters?.dateFrom || filters?.dateTo) {
       whereClause.purchasedAt = {};
       if (filters.dateFrom) {
@@ -1185,53 +1254,134 @@ export async function getFilteredAdminTickets(
       }
     }
 
-    // Handle search across multiple fields
+    // Handle search across multiple fields INCLUDING GUEST INFO
     if (filters?.search) {
       const searchTerm = filters.search.toLowerCase();
-      whereClause.OR = [
-        {
-          ticketId: {
-            contains: searchTerm,
-            mode: 'insensitive',
-          },
-        },
-        {
+
+      // First get all tickets to search in purchaseNotes
+      const allTickets = await prisma.ticket.findMany({
+        where: whereClause,
+        include: {
           user: {
-            name: {
-              contains: searchTerm,
-              mode: 'insensitive',
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              image: true,
             },
           },
-        },
-        {
-          user: {
-            email: {
-              contains: searchTerm,
-              mode: 'insensitive',
-            },
-          },
-        },
-        {
           ticketType: {
-            name: {
-              contains: searchTerm,
-              mode: 'insensitive',
-            },
-          },
-        },
-        {
-          ticketType: {
-            event: {
-              title: {
-                contains: searchTerm,
-                mode: 'insensitive',
+            include: {
+              event: {
+                select: {
+                  id: true,
+                  title: true,
+                  startDateTime: true,
+                  endDateTime: true,
+                  publishedStatus: true,
+                  venue: {
+                    select: {
+                      name: true,
+                      address: true,
+                      city: {
+                        select: {
+                          name: true,
+                          state: true,
+                        },
+                      },
+                    },
+                  },
+                },
               },
             },
           },
+          order: {
+            select: {
+              id: true,
+              paystackId: true,
+              paymentStatus: true,
+              refundStatus: true,
+              totalAmount: true,
+              purchaseNotes: true,
+            },
+          },
         },
-      ];
+      });
+
+      // Filter tickets based on search term
+      const filteredTickets = allTickets.filter((ticket) => {
+        // Search in ticket ID
+        if (ticket.ticketId.toLowerCase().includes(searchTerm)) return true;
+
+        // Search in authenticated user info
+        if (ticket.user) {
+          if (ticket.user.name?.toLowerCase().includes(searchTerm)) return true;
+          if (ticket.user.email?.toLowerCase().includes(searchTerm))
+            return true;
+        }
+
+        // Search in guest info
+        if (!ticket.userId && ticket.order) {
+          const guestInfo = extractGuestInfo(ticket.order);
+          if (guestInfo) {
+            if (guestInfo.name?.toLowerCase().includes(searchTerm)) return true;
+            if (guestInfo.email?.toLowerCase().includes(searchTerm))
+              return true;
+          }
+        }
+
+        // Search in ticket type and event
+        if (ticket.ticketType.name.toLowerCase().includes(searchTerm))
+          return true;
+        if (ticket.ticketType.event.title.toLowerCase().includes(searchTerm))
+          return true;
+
+        return false;
+      });
+
+      // Apply pagination to filtered results
+      const paginatedTickets = filteredTickets.slice(skip, skip + limit);
+
+      // Enhance with guest info
+      const ticketsWithGuestInfo = paginatedTickets.map((ticket) => {
+        if (!ticket.userId && ticket.order) {
+          const guestInfo = extractGuestInfo(ticket.order);
+          if (guestInfo) {
+            return { ...ticket, guestInfo };
+          }
+        }
+        return ticket;
+      });
+
+      const totalCount = filteredTickets.length;
+      const totalPages = Math.ceil(totalCount / limit);
+
+      return {
+        success: true,
+        data: {
+          tickets: ticketsWithGuestInfo,
+          pagination: {
+            currentPage: page,
+            totalPages,
+            totalCount,
+            limit,
+            hasMore: page < totalPages,
+          },
+          stats: {
+            total: totalCount,
+            // Calculate stats from filtered results
+            unused: filteredTickets.filter((t) => t.status === 'UNUSED').length,
+            used: filteredTickets.filter((t) => t.status === 'USED').length,
+            refunded: filteredTickets.filter((t) => t.status === 'REFUNDED')
+              .length,
+            cancelled: filteredTickets.filter((t) => t.status === 'CANCELLED')
+              .length,
+          },
+        },
+      };
     }
 
+    // Normal query without search
     const [tickets, totalCount] = await Promise.all([
       prisma.ticket.findMany({
         where: whereClause,
@@ -1276,6 +1426,7 @@ export async function getFilteredAdminTickets(
               paymentStatus: true,
               refundStatus: true,
               totalAmount: true,
+              purchaseNotes: true,
             },
           },
         },
@@ -1289,6 +1440,17 @@ export async function getFilteredAdminTickets(
         where: whereClause,
       }),
     ]);
+
+    // Enhance tickets with guest information
+    const ticketsWithGuestInfo = tickets.map((ticket) => {
+      if (!ticket.userId && ticket.order) {
+        const guestInfo = extractGuestInfo(ticket.order);
+        if (guestInfo) {
+          return { ...ticket, guestInfo };
+        }
+      }
+      return ticket;
+    });
 
     const totalPages = Math.ceil(totalCount / limit);
 
@@ -1310,7 +1472,7 @@ export async function getFilteredAdminTickets(
     return {
       success: true,
       data: {
-        tickets,
+        tickets: ticketsWithGuestInfo,
         pagination: {
           currentPage: page,
           totalPages,
@@ -1326,6 +1488,113 @@ export async function getFilteredAdminTickets(
     return {
       success: false,
       message: 'Failed to fetch tickets',
+    };
+  }
+}
+
+// Get ticket details with guest info
+export async function getTicketDetails(
+  ticketId: string
+): Promise<ActionResponse<any>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session) {
+    return {
+      success: false,
+      message: 'Not authenticated',
+    };
+  }
+
+  try {
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        ticketType: {
+          include: {
+            event: {
+              include: {
+                venue: {
+                  include: {
+                    city: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        order: {
+          select: {
+            id: true,
+            totalAmount: true,
+            quantity: true,
+            paymentStatus: true,
+            purchaseNotes: true,
+          },
+        },
+        validations: {
+          include: {
+            validator: {
+              select: {
+                name: true,
+              },
+            },
+          },
+          orderBy: {
+            validatedAt: 'desc',
+          },
+        },
+      },
+    });
+
+    if (!ticket) {
+      return {
+        success: false,
+        message: 'Ticket not found',
+      };
+    }
+
+    // Check permissions
+    const isAdmin =
+      session.user.role === 'ADMIN' &&
+      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole);
+    const isEventOwner = ticket.ticketType.event.userId === session.user.id;
+    const isTicketOwner = ticket.userId === session.user.id;
+
+    if (!isAdmin && !isEventOwner && !isTicketOwner) {
+      return {
+        success: false,
+        message: 'You do not have permission to view this ticket',
+      };
+    }
+
+    // Add guest info if applicable
+    let ticketWithGuestInfo: any = ticket;
+    if (!ticket.userId && ticket.order) {
+      const guestInfo = extractGuestInfo(ticket.order);
+      if (guestInfo) {
+        ticketWithGuestInfo = { ...ticket, guestInfo };
+      }
+    }
+
+    return {
+      success: true,
+      data: ticketWithGuestInfo,
+    };
+  } catch (error) {
+    console.error('Error fetching ticket details:', error);
+    return {
+      success: false,
+      message: 'Failed to fetch ticket details',
     };
   }
 }
@@ -1666,103 +1935,6 @@ export async function deleteTicket(
     return {
       success: false,
       message: 'Failed to delete ticket due to an unexpected error',
-    };
-  }
-}
-
-// Get ticket details
-export async function getTicketDetails(
-  ticketId: string
-): Promise<ActionResponse<any>> {
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
-
-  if (!session) {
-    return {
-      success: false,
-      message: 'Not authenticated',
-    };
-  }
-
-  try {
-    const ticket = await prisma.ticket.findUnique({
-      where: { id: ticketId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        ticketType: {
-          include: {
-            event: {
-              include: {
-                venue: {
-                  include: {
-                    city: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-        order: {
-          select: {
-            id: true,
-            totalAmount: true,
-            quantity: true,
-            paymentStatus: true,
-          },
-        },
-        validations: {
-          include: {
-            validator: {
-              select: {
-                name: true,
-              },
-            },
-          },
-          orderBy: {
-            validatedAt: 'desc',
-          },
-        },
-      },
-    });
-
-    if (!ticket) {
-      return {
-        success: false,
-        message: 'Ticket not found',
-      };
-    }
-
-    // Check permissions
-    const isAdmin =
-      session.user.role === 'ADMIN' &&
-      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole);
-    const isEventOwner = ticket.ticketType.event.userId === session.user.id;
-    const isTicketOwner = ticket.userId === session.user.id;
-
-    if (!isAdmin && !isEventOwner && !isTicketOwner) {
-      return {
-        success: false,
-        message: 'You do not have permission to view this ticket',
-      };
-    }
-
-    return {
-      success: true,
-      data: ticket,
-    };
-  } catch (error) {
-    console.error('Error fetching ticket details:', error);
-    return {
-      success: false,
-      message: 'Failed to fetch ticket details',
     };
   }
 }

@@ -1,4 +1,4 @@
-// utils/pdf-ticket-generator.ts -
+// utils/pdf-ticket-generator.ts - Updated with guest support
 import jsPDF from 'jspdf';
 import { format } from 'date-fns';
 import QRCode from 'qrcode';
@@ -47,6 +47,7 @@ interface TicketData {
   quantity?: number;
   instructions?: string[];
   eventId?: string;
+  isGuest?: boolean;
 }
 
 /* ===== Helpers ===== */
@@ -75,10 +76,9 @@ const normalizeText = (s: string) =>
     return map[c] ?? '';
   });
 
-// Server-side compatible image loading (fallback for email generation)
+// Server-side compatible image loading
 const loadImageAsBase64 = async (src: string): Promise<string> => {
   try {
-    // In server environment, we'll skip logo loading and use fallback
     if (typeof window === 'undefined') {
       return Promise.reject('Server environment - no image loading');
     }
@@ -106,6 +106,26 @@ const loadImageAsBase64 = async (src: string): Promise<string> => {
   }
 };
 
+// Helper to extract guest info
+function extractGuestInfo(order: any) {
+  if (!order?.purchaseNotes) return null;
+
+  try {
+    const notes = JSON.parse(order.purchaseNotes);
+    if (notes.isGuestPurchase) {
+      return {
+        name: notes.guestName,
+        email: notes.guestEmail,
+        phone: notes.guestPhone,
+      };
+    }
+  } catch (error) {
+    console.error('Failed to parse guest info:', error);
+  }
+
+  return null;
+}
+
 /* ===== PDF Ticket Generator ===== */
 export class PDFTicketGenerator {
   private doc: jsPDF;
@@ -114,8 +134,8 @@ export class PDFTicketGenerator {
   private margin: number = 3;
 
   constructor() {
-    this.ticketWidth = 2.125 * 25.4; // ~54mm
-    this.ticketHeight = 7.0 * 25.4; // ~178mm
+    this.ticketWidth = 2.125 * 25.4;
+    this.ticketHeight = 7.0 * 25.4;
     this.doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
@@ -135,7 +155,6 @@ export class PDFTicketGenerator {
     this.drawWatermark(ticketData.eventTitle);
   }
 
-  /** Background: smooth vertical gradient */
   private async drawTicketBackground(): Promise<void> {
     const steps = 48;
     const h = this.ticketHeight / steps;
@@ -156,7 +175,6 @@ export class PDFTicketGenerator {
     }
   }
 
-  /** Top header with fallback for logo */
   private async drawTopHeader(): Promise<void> {
     const logoHeight = 10;
     const logoY = 3;
@@ -173,7 +191,6 @@ export class PDFTicketGenerator {
         logoHeight
       );
     } catch {
-      // Fallback - simple logo placeholder
       this.doc.setFillColor(245, 245, 255);
       this.doc.roundedRect(
         (this.ticketWidth - logoWidth) / 2,
@@ -207,7 +224,6 @@ export class PDFTicketGenerator {
     });
   }
 
-  /** Stub band */
   private async drawStubBand(ticket: TicketData): Promise<void> {
     const y = 18;
     const height = 8;
@@ -244,7 +260,6 @@ export class PDFTicketGenerator {
     );
   }
 
-  /** Ticket ID */
   private async drawTicketId(ticketId: string, yPos: number): Promise<void> {
     const { r, g, b } = hexToRgb(COMPANY_CONFIG.colors.secondary);
     this.doc.setFillColor(r, g, b);
@@ -266,7 +281,6 @@ export class PDFTicketGenerator {
     });
   }
 
-  /** Content card */
   private async drawContentCard(
     ticket: TicketData,
     yStart: number
@@ -314,7 +328,11 @@ export class PDFTicketGenerator {
 
     row('DATE & TIME', ticket.eventDate);
     row('VENUE', ticket.venue);
-    row('ADMIT', `${ticket.customerName}  (${ticket.customerEmail})`);
+
+    // Enhanced customer display with guest indicator
+    const customerLabel = ticket.isGuest ? 'GUEST' : 'ADMIT';
+    const customerInfo = `${ticket.customerName}  (${ticket.customerEmail})`;
+    row(customerLabel, customerInfo);
 
     // Status pill
     const pillY = y - 0.5;
@@ -344,7 +362,6 @@ export class PDFTicketGenerator {
     return y + 2;
   }
 
-  /** QR Code - larger size for better scanning */
   private async drawQRCode(ticket: TicketData, yPos: number): Promise<number> {
     const qrSize = 38;
     const qrX = (this.ticketWidth - qrSize) / 2;
@@ -356,12 +373,13 @@ export class PDFTicketGenerator {
           ticketId: ticket.ticketId,
           eventId: ticket.eventId,
           customerName: ticket.customerName,
+          customerEmail: ticket.customerEmail,
           eventTitle: ticket.eventTitle,
+          isGuest: ticket.isGuest || false,
           type: 'EVENT_TICKET',
           timestamp: new Date().toISOString(),
         });
 
-      // Generate QR code as data URL
       const qrCodeDataURL = await QRCode.toDataURL(qrData, {
         width: 400,
         margin: 1,
@@ -369,7 +387,6 @@ export class PDFTicketGenerator {
         errorCorrectionLevel: 'H',
       });
 
-      // White background card
       this.doc.setFillColor(255, 255, 255);
       this.doc.roundedRect(
         qrX - 4,
@@ -383,7 +400,6 @@ export class PDFTicketGenerator {
 
       this.doc.addImage(qrCodeDataURL, 'PNG', qrX, yPos, qrSize, qrSize);
 
-      // QR instruction text
       this.doc.setTextColor(55, 65, 81);
       this.doc.setFont('helvetica', 'bold');
       this.doc.setFontSize(6.5);
@@ -406,7 +422,6 @@ export class PDFTicketGenerator {
       return yPos + qrSize + 16;
     } catch (error) {
       console.error('QR Code generation failed:', error);
-      // Fallback block
       this.doc.setFillColor(255, 255, 255);
       this.doc.rect(qrX, yPos, qrSize, qrSize, 'F');
       this.doc.setTextColor(55, 65, 81);
@@ -419,7 +434,6 @@ export class PDFTicketGenerator {
     }
   }
 
-  /** Footer */
   private drawFooter(): void {
     const y = this.ticketHeight - 14;
     this.doc.setFillColor(26, 26, 46);
@@ -445,7 +459,6 @@ export class PDFTicketGenerator {
     );
   }
 
-  /** Border and perforations */
   private drawPerimeterAndPerforations(): void {
     this.doc.setDrawColor(209, 213, 219);
     this.doc.setLineWidth(0.5);
@@ -470,7 +483,6 @@ export class PDFTicketGenerator {
     this.doc.text('ADMIT ONE', 3.8, 18, { angle: -90 });
   }
 
-  /** Watermark */
   private drawWatermark(title: string): void {
     const txt = normalizeText(title.toUpperCase().slice(0, 24));
     this.doc.setTextColor(255, 255, 255);
@@ -486,7 +498,6 @@ export class PDFTicketGenerator {
     this.doc.save(filename);
   }
 
-  // Updated to return ArrayBuffer for server-side email generation
   getBlob(): Blob {
     return this.doc.output('blob');
   }
@@ -520,6 +531,10 @@ export const generateTicketPDF = async (
   ticket: any,
   filename?: string
 ): Promise<void> => {
+  // Extract guest info if applicable
+  const guestInfo = extractGuestInfo(ticket.order);
+  const isGuest = !ticket.userId || !!guestInfo;
+
   const ticketData: TicketData = {
     ticketId: ticket.ticketId,
     eventTitle: ticket.ticketType.event.title,
@@ -527,14 +542,15 @@ export const generateTicketPDF = async (
     venue: `${ticket.ticketType.event.venue.name}${ticket.ticketType.event.venue.city?.name ? `, ${ticket.ticketType.event.venue.city.name}` : ''}`,
     ticketType: ticket.ticketType.name,
     price: formatPrice(ticket.ticketType.price),
-    customerName: ticket.user?.name || 'Unknown',
-    customerEmail: ticket.user?.email || 'Unknown',
+    customerName: ticket.user?.name || guestInfo?.name || 'Guest User',
+    customerEmail: ticket.user?.email || guestInfo?.email || 'No email',
     purchaseDate: formatDateTime(ticket.purchasedAt),
     status: ticket.status,
     qrCode: ticket.qrCodeData || 'available',
     orderId: ticket.order?.id,
     quantity: ticket.order?.quantity,
     eventId: ticket.ticketType.event.id,
+    isGuest,
   };
 
   const generator = new PDFTicketGenerator();

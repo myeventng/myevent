@@ -24,6 +24,9 @@ import {
   Download,
   Mail,
   FileText,
+  UserX,
+  UserCheck,
+  Phone,
 } from 'lucide-react';
 import { TicketStatus } from '@/generated/prisma';
 import { toast } from 'sonner';
@@ -35,11 +38,41 @@ interface TicketPreviewModalProps {
   trigger?: React.ReactNode;
 }
 
+interface GuestInfo {
+  name: string;
+  email: string;
+  phone?: string;
+}
+
 export function TicketPreviewModal({
   ticket,
   trigger,
 }: TicketPreviewModalProps) {
   const [isOpen, setIsOpen] = useState(false);
+
+  // Extract guest info from ticket
+  const extractGuestInfo = (ticket: any): GuestInfo | null => {
+    if (ticket.guestInfo) return ticket.guestInfo;
+
+    if (!ticket.userId && ticket.order?.purchaseNotes) {
+      try {
+        const notes = JSON.parse(ticket.order.purchaseNotes);
+        if (notes.isGuestPurchase) {
+          return {
+            name: notes.guestName,
+            email: notes.guestEmail,
+            phone: notes.guestPhone,
+          };
+        }
+      } catch (error) {
+        console.error('Failed to parse guest info:', error);
+      }
+    }
+    return null;
+  };
+
+  const guestInfo = extractGuestInfo(ticket);
+  const isGuest = !ticket.userId || !!guestInfo;
 
   // Format date and time
   const formatDateTime = (dateString: string) => {
@@ -102,7 +135,7 @@ export function TicketPreviewModal({
     }
   };
 
-  // Download ticket as text file
+  // Download ticket as PDF
   const handleDownloadTicket = () => {
     try {
       generateTicketPDF(ticket);
@@ -135,17 +168,23 @@ export function TicketPreviewModal({
           name: ticket.ticketType.name,
           price: ticket.ticketType.price,
         },
-        customer: {
+        customer: isGuest && guestInfo ? {
+          type: 'guest',
+          name: guestInfo.name,
+          email: guestInfo.email,
+          phone: guestInfo.phone,
+        } : {
+          type: 'authenticated',
           name: ticket.user?.name,
           email: ticket.user?.email,
         },
         order: ticket.order
           ? {
-              id: ticket.order.id,
-              paymentStatus: ticket.order.paymentStatus,
-              totalAmount: ticket.order.totalAmount,
-              quantity: ticket.order.quantity,
-            }
+            id: ticket.order.id,
+            paymentStatus: ticket.order.paymentStatus,
+            totalAmount: ticket.order.totalAmount,
+            quantity: ticket.order.quantity,
+          }
           : null,
         downloadedAt: new Date().toISOString(),
       };
@@ -171,7 +210,8 @@ export function TicketPreviewModal({
   };
 
   const handleEmailTicket = async () => {
-    if (!ticket.user?.email) {
+    const email = ticket.user?.email || guestInfo?.email;
+    if (!email) {
       toast.error('No email address found for this customer');
       return;
     }
@@ -218,7 +258,15 @@ export function TicketPreviewModal({
                 Ticket ID: {ticket.ticketId}
               </p>
             </div>
-            {getStatusBadge(ticket.status)}
+            <div className="flex flex-col gap-2 items-end">
+              {getStatusBadge(ticket.status)}
+              {isGuest && (
+                <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
+                  <UserX className="h-3 w-3 mr-1" />
+                  Guest Purchase
+                </Badge>
+              )}
+            </div>
           </div>
 
           <Separator />
@@ -299,28 +347,61 @@ export function TicketPreviewModal({
               <User className="h-4 w-4" />
               Customer Information
             </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-6">
+            <div className="pl-6">
               {ticket.user ? (
-                <>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Name
-                    </p>
-                    <p className="text-sm">{ticket.user.name}</p>
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <UserCheck className="h-4 w-4 text-green-600" />
+                    <span className="font-medium text-green-900">Authenticated User</span>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Email
-                    </p>
-                    <p className="text-sm">{ticket.user.email}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Name</p>
+                      <p className="text-sm">{ticket.user.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Email</p>
+                      <p className="text-sm">{ticket.user.email}</p>
+                    </div>
                   </div>
-                </>
+                </div>
+              ) : guestInfo ? (
+                <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <UserX className="h-4 w-4 text-orange-600" />
+                    <span className="font-medium text-orange-900">Guest User</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Name</p>
+                      <p className="text-sm">{guestInfo.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Email</p>
+                      <p className="text-sm">{guestInfo.email}</p>
+                    </div>
+                    {guestInfo.phone && (
+                      <div className="col-span-2">
+                        <p className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                          <Phone className="h-3 w-3" />
+                          Phone
+                        </p>
+                        <p className="text-sm">{guestInfo.phone}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-orange-300">
+                    <p className="text-xs text-orange-700">
+                      This ticket was purchased without creating an account. Guest information is stored from the purchase details.
+                    </p>
+                  </div>
+                </div>
               ) : (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Customer
-                  </p>
-                  <p className="text-sm text-red-600">Unknown User</p>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <UserX className="h-4 w-4 text-gray-600" />
+                    <span className="font-medium text-gray-900">Guest User (No Information Available)</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -473,10 +554,10 @@ export function TicketPreviewModal({
               <FileText className="h-4 w-4 mr-2" />
               Download JSON
             </Button>
-            {ticket.user?.email && (
+            {(ticket.user?.email || guestInfo?.email) && (
               <Button variant="outline" size="sm" onClick={handleEmailTicket}>
                 <Mail className="h-4 w-4 mr-2" />
-                Resend Email
+                {isGuest ? 'Send to Guest Email' : 'Resend Email'}
               </Button>
             )}
             <Button variant="outline" size="sm" asChild>
@@ -485,14 +566,6 @@ export function TicketPreviewModal({
                 View Event
               </a>
             </Button>
-            {/* {ticket.user && (
-              <Button variant="outline" size="sm" asChild>
-                <a href={`/admin/users/${ticket.user.id}`}>
-                  <User className="h-4 w-4 mr-2" />
-                  View Customer
-                </a>
-              </Button>
-            )} */}
           </div>
         </div>
       </DialogContent>
