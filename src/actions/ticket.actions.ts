@@ -1495,8 +1495,6 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
   }
 }
 
-// Add this function to your ticket.actions.ts file
-
 // Get ticket types with sold count for editing
 export async function getTicketTypesWithSalesData(
   eventId: string
@@ -1555,6 +1553,216 @@ export async function getTicketTypesWithSalesData(
     return {
       success: false,
       message: 'Failed to fetch ticket types with sales data',
+    };
+  }
+}
+
+// Delete ticket - SUPER_ADMIN only
+export async function deleteTicket(
+  ticketId: string
+): Promise<ActionResponse<null>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session) {
+    return {
+      success: false,
+      message: 'Not authenticated',
+    };
+  }
+
+  // Only SUPER_ADMIN can delete tickets
+  const isSuperAdmin =
+    session.user.role === 'ADMIN' && session.user.subRole === 'SUPER_ADMIN';
+
+  if (!isSuperAdmin) {
+    return {
+      success: false,
+      message: 'Only Super Admins can delete tickets',
+    };
+  }
+
+  try {
+    // Fetch ticket details before deletion for audit log
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        ticketType: {
+          include: {
+            event: {
+              select: {
+                id: true,
+                title: true,
+              },
+            },
+          },
+        },
+        order: {
+          select: {
+            id: true,
+            totalAmount: true,
+          },
+        },
+      },
+    });
+
+    if (!ticket) {
+      return {
+        success: false,
+        message: 'Ticket not found',
+      };
+    }
+
+    // Check if ticket has been used
+    if (ticket.status === 'USED') {
+      return {
+        success: false,
+        message: 'Cannot delete a ticket that has been used',
+      };
+    }
+
+    // Delete ticket validations first
+    await prisma.ticketValidation.deleteMany({
+      where: { ticketId },
+    });
+
+    // Delete the ticket
+    await prisma.ticket.delete({
+      where: { id: ticketId },
+    });
+
+    // Create audit log
+    await prisma.auditLog.create({
+      data: {
+        userId: session.user.id,
+        action: 'DELETE_TICKET',
+        entity: 'TICKET',
+        entityId: ticketId,
+        oldValues: {
+          ticketId: ticket.ticketId,
+          status: ticket.status,
+          eventTitle: ticket.ticketType.event.title,
+          customerName: ticket.user?.name || 'Guest User',
+          customerEmail: ticket.user?.email || null,
+        },
+      },
+    });
+
+    return {
+      success: true,
+      message: `Ticket ${ticket.ticketId} deleted successfully`,
+    };
+  } catch (error) {
+    console.error('Error deleting ticket:', error);
+    return {
+      success: false,
+      message: 'Failed to delete ticket due to an unexpected error',
+    };
+  }
+}
+
+// Get ticket details
+export async function getTicketDetails(
+  ticketId: string
+): Promise<ActionResponse<any>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({
+    headers: headersList,
+  });
+
+  if (!session) {
+    return {
+      success: false,
+      message: 'Not authenticated',
+    };
+  }
+
+  try {
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        ticketType: {
+          include: {
+            event: {
+              include: {
+                venue: {
+                  include: {
+                    city: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        order: {
+          select: {
+            id: true,
+            totalAmount: true,
+            quantity: true,
+            paymentStatus: true,
+          },
+        },
+        validations: {
+          include: {
+            validator: {
+              select: {
+                name: true,
+              },
+            },
+          },
+          orderBy: {
+            validatedAt: 'desc',
+          },
+        },
+      },
+    });
+
+    if (!ticket) {
+      return {
+        success: false,
+        message: 'Ticket not found',
+      };
+    }
+
+    // Check permissions
+    const isAdmin =
+      session.user.role === 'ADMIN' &&
+      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole);
+    const isEventOwner = ticket.ticketType.event.userId === session.user.id;
+    const isTicketOwner = ticket.userId === session.user.id;
+
+    if (!isAdmin && !isEventOwner && !isTicketOwner) {
+      return {
+        success: false,
+        message: 'You do not have permission to view this ticket',
+      };
+    }
+
+    return {
+      success: true,
+      data: ticket,
+    };
+  } catch (error) {
+    console.error('Error fetching ticket details:', error);
+    return {
+      success: false,
+      message: 'Failed to fetch ticket details',
     };
   }
 }

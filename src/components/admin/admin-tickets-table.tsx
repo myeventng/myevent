@@ -11,7 +11,6 @@ import {
   Mail,
   ChevronLeft,
   Search,
-  Filter,
   RefreshCw,
   Ticket,
   DollarSign,
@@ -23,6 +22,8 @@ import {
   Users,
   Calendar,
   MapPin,
+  Trash2,
+  UserX,
 } from 'lucide-react';
 import {
   useReactTable,
@@ -61,6 +62,17 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { TicketStatus } from '@/generated/prisma';
 import { generateTicketPDF } from '@/utils/pdf-ticket-generator';
 import { toast } from 'sonner';
@@ -69,6 +81,7 @@ import {
   resendTicketEmail,
   resendBulkTicketEmails,
 } from '@/actions/email-ticket-actions';
+import { deleteTicket } from '@/actions/ticket.actions';
 
 interface AdminTicketsTableProps {
   initialData: any[];
@@ -89,6 +102,9 @@ export function AdminTicketsTable({
   const [globalFilter, setGlobalFilter] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('cards');
+  const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null);
+
+  const isSuperAdmin = userRole === 'ADMIN' && userSubRole === 'SUPER_ADMIN';
 
   // Calculate statistics
   const stats = {
@@ -97,6 +113,7 @@ export function AdminTicketsTable({
     usedTickets: data.filter((t) => t.status === 'USED').length,
     refundedTickets: data.filter((t) => t.status === 'REFUNDED').length,
     cancelledTickets: data.filter((t) => t.status === 'CANCELLED').length,
+    guestTickets: data.filter((t) => !t.userId).length,
     totalRevenue: data
       .filter((t) => t.status !== 'REFUNDED' && t.status !== 'CANCELLED')
       .reduce((total, ticket) => total + ticket.ticketType.price, 0),
@@ -198,7 +215,6 @@ export function AdminTicketsTable({
     }
   };
 
-  // Add this function for individual email resending from table
   const resendSingleTicketEmail = async (ticket: any) => {
     if (!ticket.user?.email) {
       toast.error('No email address found for this customer');
@@ -219,17 +235,35 @@ export function AdminTicketsTable({
     }
   };
 
+  // Delete ticket function
+  const handleDeleteTicket = async (ticketId: string) => {
+    setDeletingTicketId(ticketId);
+    try {
+      const result = await deleteTicket(ticketId);
+
+      if (result.success) {
+        setData(data.filter((t) => t.id !== ticketId));
+        toast.success(result.message || 'Ticket deleted successfully');
+      } else {
+        toast.error(result.message || 'Failed to delete ticket');
+      }
+    } catch (error) {
+      console.error('Error deleting ticket:', error);
+      toast.error('Failed to delete ticket');
+    } finally {
+      setDeletingTicketId(null);
+    }
+  };
+
   // Refresh tickets data
   const refreshTickets = async () => {
     setIsLoading(true);
     try {
-      // You'll need to import or create a function to fetch tickets
-      // For now, I'll show the structure - replace with your actual API call
       const response = await fetch('/api/admin/tickets');
 
       if (response.ok) {
         const freshData = await response.json();
-        setData(freshData.tickets || freshData); // Adjust based on your API response structure
+        setData(freshData.tickets || freshData);
         toast.success('Tickets refreshed successfully');
       } else {
         throw new Error('Failed to fetch tickets');
@@ -250,14 +284,13 @@ export function AdminTicketsTable({
         return;
       }
 
-      // Generate PDFs for multiple tickets (you can modify this to create a single PDF with all tickets)
       data.forEach((ticket, index) => {
         setTimeout(() => {
           generateTicketPDF(
             ticket,
             `ticket_${index + 1}_${ticket.ticketId}.pdf`
           );
-        }, index * 100); // Small delay to prevent browser overload
+        }, index * 100);
       });
 
       toast.success(`Started download of ${data.length} ticket PDFs`);
@@ -325,7 +358,7 @@ export function AdminTicketsTable({
     {
       id: 'user',
       header: 'Customer',
-      accessorFn: (row) => row.user?.name || 'Unknown',
+      accessorFn: (row) => row.user?.name || 'Guest User',
       cell: ({ row }) => {
         const user = row.original.user;
         return (
@@ -338,7 +371,10 @@ export function AdminTicketsTable({
                 </div>
               </>
             ) : (
-              <div className="text-muted-foreground">Unknown User</div>
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <UserX className="h-4 w-4" />
+                <span>Guest User</span>
+              </div>
             )}
           </div>
         );
@@ -355,6 +391,7 @@ export function AdminTicketsTable({
       header: 'Actions',
       cell: ({ row }) => {
         const ticket = row.original;
+        const isDeleting = deletingTicketId === ticket.id;
 
         return (
           <div className="flex items-center gap-2">
@@ -386,6 +423,88 @@ export function AdminTicketsTable({
                 <Mail className="h-4 w-4" />
               </Button>
             )}
+
+            {isSuperAdmin && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={isDeleting || ticket.status === 'USED'}
+                    title={
+                      ticket.status === 'USED'
+                        ? 'Cannot delete used tickets'
+                        : 'Delete Ticket'
+                    }
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5 text-red-600" />
+                      Delete Ticket - Permanent Action
+                    </AlertDialogTitle>
+                    <AlertDialogDescription className="space-y-4">
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <p className="font-semibold text-red-900 mb-2">
+                          ⚠️ Warning: This action cannot be undone!
+                        </p>
+                        <p className="text-red-800 text-sm">
+                          You are about to permanently delete this ticket from
+                          the system. This will:
+                        </p>
+                        <ul className="list-disc list-inside text-red-800 text-sm mt-2 space-y-1">
+                          <li>Remove all ticket data permanently</li>
+                          <li>Delete validation history</li>
+                          <li>Cannot be recovered after deletion</li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                        <p className="font-medium text-gray-900">
+                          Ticket Details:
+                        </p>
+                        <div className="text-sm space-y-1">
+                          <p>
+                            <span className="font-medium">Ticket ID:</span>{' '}
+                            {ticket.ticketId}
+                          </p>
+                          <p>
+                            <span className="font-medium">Event:</span>{' '}
+                            {ticket.ticketType.event.title}
+                          </p>
+                          <p>
+                            <span className="font-medium">Customer:</span>{' '}
+                            {ticket.user?.name || 'Guest User'}
+                          </p>
+                          <p>
+                            <span className="font-medium">Status:</span>{' '}
+                            {ticket.status}
+                          </p>
+                        </div>
+                      </div>
+
+                      <p className="text-sm text-gray-600">
+                        Are you absolutely sure you want to delete this ticket?
+                      </p>
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => handleDeleteTicket(ticket.id)}
+                      className="bg-red-600 hover:bg-red-700"
+                      disabled={isDeleting}
+                    >
+                      {isDeleting ? 'Deleting...' : 'Yes, Delete Ticket'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
         );
       },
@@ -413,10 +532,6 @@ export function AdminTicketsTable({
       },
     },
   });
-
-  const filteredData = table
-    .getFilteredRowModel()
-    .rows.map((row) => row.original);
 
   // Card component for individual tickets
   const TicketCard = ({ ticket }: { ticket: any }) => (
@@ -459,11 +574,50 @@ export function AdminTicketsTable({
                 <Mail className="h-4 w-4" />
               </Button>
             )}
+            {isSuperAdmin && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={ticket.status === 'USED'}
+                    title={
+                      ticket.status === 'USED'
+                        ? 'Cannot delete used tickets'
+                        : 'Delete Ticket'
+                    }
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5 text-red-600" />
+                      Delete Ticket
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete ticket {ticket.ticketId}.
+                      This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => handleDeleteTicket(ticket.id)}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
         </div>
 
         <div className="space-y-3">
-          {/* Event Info */}
           <div>
             <h4 className="font-medium text-lg mb-1">
               {ticket.ticketType.event.title}
@@ -479,7 +633,6 @@ export function AdminTicketsTable({
             </div>
           </div>
 
-          {/* Ticket Type & Price */}
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium">{ticket.ticketType.name}</p>
@@ -492,7 +645,6 @@ export function AdminTicketsTable({
             </div>
           </div>
 
-          {/* Customer Info */}
           {ticket.user ? (
             <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
               <Users className="w-4 h-4 text-gray-600" />
@@ -504,13 +656,12 @@ export function AdminTicketsTable({
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg">
-              <Users className="w-4 h-4 text-gray-600" />
-              <p className="text-sm text-muted-foreground">Unknown User</p>
+            <div className="flex items-center gap-2 p-3 bg-amber-50 rounded-lg border border-amber-200">
+              <UserX className="w-4 h-4 text-amber-600" />
+              <p className="text-sm font-medium text-amber-800">Guest User</p>
             </div>
           )}
 
-          {/* Purchase Date */}
           <div className="text-xs text-muted-foreground border-t pt-3">
             Purchased on {formatDateTime(ticket.purchasedAt)}
           </div>
@@ -521,7 +672,6 @@ export function AdminTicketsTable({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Ticket Management</h1>
@@ -530,7 +680,7 @@ export function AdminTicketsTable({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" disabled={isLoading}>
+          <Button variant="outline" onClick={refreshTickets} disabled={isLoading}>
             <RefreshCw
               className={`w-4 h-4 mr-1 ${isLoading ? 'animate-spin' : ''}`}
             />
@@ -547,8 +697,7 @@ export function AdminTicketsTable({
         </div>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
@@ -560,10 +709,6 @@ export function AdminTicketsTable({
                   Total Tickets
                 </p>
                 <p className="text-2xl font-bold">{stats.totalTickets}</p>
-                <div className="flex items-center text-xs text-blue-600">
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                  {stats.unusedTickets} unused
-                </div>
               </div>
             </div>
           </CardContent>
@@ -577,13 +722,9 @@ export function AdminTicketsTable({
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">
-                  Used Tickets
+                  Used
                 </p>
                 <p className="text-2xl font-bold">{stats.usedTickets}</p>
-                <div className="flex items-center text-xs text-green-600">
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                  Successfully used
-                </div>
               </div>
             </div>
           </CardContent>
@@ -593,17 +734,29 @@ export function AdminTicketsTable({
           <CardContent className="p-6">
             <div className="flex items-center">
               <div className="p-2 bg-amber-100 rounded-full">
-                <AlertCircle className="w-4 h-4 text-amber-600" />
+                <Clock className="w-4 h-4 text-amber-600" />
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">
-                  Refunded
+                  Unused
                 </p>
-                <p className="text-2xl font-bold">{stats.refundedTickets}</p>
-                <div className="flex items-center text-xs text-amber-600">
-                  <XCircle className="w-3 h-3 mr-1" />
-                  {stats.cancelledTickets} cancelled
-                </div>
+                <p className="text-2xl font-bold">{stats.unusedTickets}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center">
+              <div className="p-2 bg-orange-100 rounded-full">
+                <UserX className="w-4 h-4 text-orange-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-muted-foreground">
+                  Guests
+                </p>
+                <p className="text-2xl font-bold">{stats.guestTickets}</p>
               </div>
             </div>
           </CardContent>
@@ -617,22 +770,17 @@ export function AdminTicketsTable({
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">
-                  Total Revenue
+                  Revenue
                 </p>
-                <p className="text-2xl font-bold">
+                <p className="text-xl font-bold">
                   {formatPrice(stats.totalRevenue)}
                 </p>
-                <div className="flex items-center text-xs text-purple-600">
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                  Active tickets only
-                </div>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters and Search */}
       <Card>
         <CardContent className="p-6">
           <div className="flex flex-col md:flex-row gap-4">
@@ -688,7 +836,6 @@ export function AdminTicketsTable({
         </CardContent>
       </Card>
 
-      {/* View Mode Toggle */}
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
           Showing {table.getFilteredRowModel().rows.length} of {data.length}{' '}
@@ -705,36 +852,31 @@ export function AdminTicketsTable({
         </Tabs>
       </div>
 
-      {/* Content based on view mode */}
       {viewMode === 'cards' ? (
-        <>
-          {/* Cards Grid */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {table.getRowModel().rows?.length ? (
-              table
-                .getRowModel()
-                .rows.map((row) => (
-                  <TicketCard key={row.id} ticket={row.original} />
-                ))
-            ) : (
-              <div className="col-span-full">
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <Ticket className="w-12 h-12 text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-medium mb-2">
-                      No tickets found
-                    </h3>
-                    <p className="text-muted-foreground text-center">
-                      Tickets will appear here as customers make purchases
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </div>
-        </>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {table.getRowModel().rows?.length ? (
+            table
+              .getRowModel()
+              .rows.map((row) => (
+                <TicketCard key={row.id} ticket={row.original} />
+              ))
+          ) : (
+            <div className="col-span-full">
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <Ticket className="w-12 h-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">
+                    No tickets found
+                  </h3>
+                  <p className="text-muted-foreground text-center">
+                    Tickets will appear here as customers make purchases
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
       ) : (
-        /* Table View */
         <Card>
           <CardHeader>
             <CardTitle>
@@ -755,9 +897,9 @@ export function AdminTicketsTable({
                           {header.isPlaceholder
                             ? null
                             : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
                         </TableHead>
                       ))}
                     </TableRow>
@@ -797,7 +939,6 @@ export function AdminTicketsTable({
         </Card>
       )}
 
-      {/* Pagination */}
       <div className="flex items-center justify-between">
         <div className="flex-1 text-sm text-muted-foreground">
           Showing {table.getFilteredRowModel().rows.length} of {data.length}{' '}
