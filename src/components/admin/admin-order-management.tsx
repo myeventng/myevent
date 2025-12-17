@@ -156,6 +156,19 @@ export function AdminOrderManagement({
     }).format(amount);
   };
 
+  // Format currency in short form
+  const formatCurrencyShort = (amount: number) => {
+    if (amount >= 1_000_000) {
+      return `₦${(amount / 1_000_000).toFixed(1)}M`;
+    }
+
+    if (amount >= 1_000) {
+      return `₦${(amount / 1_000).toFixed(1)}K`;
+    }
+
+    return formatCurrency(amount);
+  };
+
   // Export filtered orders to CSV
   const exportToCSV = () => {
     setIsExporting(true);
@@ -505,7 +518,7 @@ export function AdminOrderManagement({
                   Total Revenue
                 </p>
                 <p className="text-2xl font-bold">
-                  {formatCurrency(stats.totalRevenue)}
+                  {formatCurrencyShort(stats.totalRevenue)}
                 </p>
                 <div className="flex items-center text-xs text-green-600">
                   <TrendingUp className="w-3 h-3 mr-1" />

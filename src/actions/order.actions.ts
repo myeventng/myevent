@@ -1,4 +1,4 @@
-// src/actions/order.actions.ts - Fixed version
+// src/actions/order.actions.ts - FIXED VERSION
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -17,7 +17,6 @@ import {
   getSetting,
   getPlatformFeePercentage,
 } from '@/actions/platform-settings.actions';
-import crypto from 'crypto';
 
 interface ActionResponse<T> {
   success: boolean;
@@ -61,7 +60,7 @@ const generateTicketId = (): string => {
   return `TKT-${timestamp}-${random}`;
 };
 
-// Get Paystack configuration from platform settings
+// Get Paystack configuration
 const getPaystackConfig = async () => {
   const [secretKey, publicKey] = await Promise.all([
     getSetting('financial.paystackSecretKey'),
@@ -93,7 +92,6 @@ const validateGuestData = (
     };
   }
 
-  // Validate email format
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(guestEmail)) {
     return {
@@ -102,7 +100,6 @@ const validateGuestData = (
     };
   }
 
-  // Validate name (at least 2 characters)
   if (guestName.trim().length < 2) {
     return {
       valid: false,
@@ -126,7 +123,6 @@ export async function initiateOrder(
   let buyerName: string;
 
   if (data.isGuestPurchase) {
-    // Guest purchase - validate guest data
     const validation = validateGuestData(data.guestEmail, data.guestName);
     if (!validation.valid) {
       return { success: false, message: validation.message };
@@ -136,7 +132,6 @@ export async function initiateOrder(
     buyerEmail = data.guestEmail!;
     buyerName = data.guestName!;
   } else {
-    // Authenticated purchase
     if (!session) {
       return { success: false, message: 'Not authenticated' };
     }
@@ -147,7 +142,6 @@ export async function initiateOrder(
   }
 
   try {
-    // Check if registrations are allowed
     const allowRegistrations = await getSetting('general.allowRegistrations');
     if (allowRegistrations === false) {
       return {
@@ -156,7 +150,7 @@ export async function initiateOrder(
       };
     }
 
-    // Validate event and get ticket types
+    // Validate event
     const event = await prisma.event.findUnique({
       where: { id: data.eventId },
       include: { ticketTypes: true, venue: true },
@@ -170,7 +164,7 @@ export async function initiateOrder(
       return { success: false, message: 'Cannot book tickets for past events' };
     }
 
-    // Validate ticket selections and calculate totals
+    // Validate ticket selections
     let totalAmount = 0;
     let totalQuantity = 0;
     const validatedSelections = [];
@@ -229,7 +223,6 @@ export async function initiateOrder(
       purchaseNotes: JSON.stringify({
         note: data.purchaseNotes || '',
         selections: validatedSelections,
-        // Store guest info if guest purchase
         isGuestPurchase: data.isGuestPurchase || false,
         guestEmail: data.guestEmail,
         guestName: data.guestName,
@@ -271,7 +264,7 @@ export async function initiateOrder(
         },
         body: JSON.stringify({
           email: buyerEmail,
-          amount: totalAmount * 100, // Convert to kobo
+          amount: totalAmount * 100,
           reference: paystackReference,
           callback_url: `${process.env.NEXT_PUBLIC_APP_URL}/api/payment/callback`,
           metadata: {
@@ -345,7 +338,7 @@ export async function completeOrder(
       return { success: true, message: 'Order already completed', data: order };
     }
 
-    // Parse purchase notes to get guest info if available
+    // Parse purchase notes
     let purchaseData: any = {};
     try {
       purchaseData = JSON.parse(order.purchaseNotes || '{}');
@@ -364,7 +357,6 @@ export async function completeOrder(
         return { success: false, message: 'Payment system not configured' };
       }
 
-      console.log(`Verifying payment for reference: ${paystackReference}`);
       const verifyResponse = await fetch(
         `${paystackConfig.baseUrl}/transaction/verify/${paystackReference}`,
         {
@@ -378,7 +370,6 @@ export async function completeOrder(
         return { success: false, message: 'Payment verification failed' };
       }
 
-      // Verify amount
       const paidKobo = Number(verifyData.data.amount);
       const orderKobo = Math.round(Number(order.totalAmount) * 100);
       if (paidKobo !== orderKobo) {
@@ -386,7 +377,6 @@ export async function completeOrder(
       }
     }
 
-    // Parse ticket selections from order
     let ticketSelections = [];
     try {
       ticketSelections = purchaseData.selections || [];
@@ -399,7 +389,7 @@ export async function completeOrder(
       return { success: false, message: 'No ticket selections found' };
     }
 
-    // Validate ticket availability before creating tickets
+    // Validate ticket availability
     for (const selection of ticketSelections) {
       const ticketType = order.event.ticketTypes.find(
         (tt) => tt.id === selection.ticketTypeId
@@ -412,9 +402,19 @@ export async function completeOrder(
       }
     }
 
-    // Execute order completion in transaction
+    // Execute order completion in transaction (SINGLE TRANSACTION TO PREVENT DUPLICATES)
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Create tickets (with null userId for guest purchases)
+      // 1. Update order status FIRST to prevent race conditions
+      const updatedOrder = await tx.order.update({
+        where: { id: order.id },
+        data: { paymentStatus: 'COMPLETED' },
+        include: {
+          buyer: true,
+          event: { include: { venue: { include: { city: true } } } },
+        },
+      });
+
+      // 2. Create tickets
       const ticketsToCreate = [];
       for (const selection of ticketSelections) {
         for (let i = 0; i < selection.quantity; i++) {
@@ -433,7 +433,7 @@ export async function completeOrder(
 
           ticketsToCreate.push({
             ticketId,
-            userId: order.buyerId || null, // null for guest purchases
+            userId: order.buyerId || null,
             ticketTypeId: selection.ticketTypeId,
             orderId: order.id,
             status: TicketStatus.UNUSED,
@@ -453,13 +453,15 @@ export async function completeOrder(
                   event: { include: { venue: { include: { city: true } } } },
                 },
               },
-              user: true,
+              user: {
+                select: { id: true, name: true, email: true },
+              },
             },
           })
         )
       );
 
-      // 2. Update ticket type quantities
+      // 3. Update ticket type quantities
       for (const selection of ticketSelections) {
         await tx.ticketType.update({
           where: { id: selection.ticketTypeId },
@@ -467,36 +469,30 @@ export async function completeOrder(
         });
       }
 
-      // 3. Update order status
-      const updatedOrder = await tx.order.update({
-        where: { id: order.id },
-        data: { paymentStatus: 'COMPLETED' },
-        include: {
-          buyer: true,
-          event: { include: { venue: { include: { city: true } } } },
-        },
-      });
-
       return { tickets: createdTickets, order: updatedOrder };
     });
 
     console.log(
-      `Order ${orderId} completed successfully with ${result.tickets.length} tickets`
+      `Order ${orderId} completed with ${result.tickets.length} tickets`
     );
 
-    // Post-transaction operations (don't fail the order if these fail)
+    // Post-transaction operations
     try {
       // Create notification only for authenticated users
       if (order.buyerId) {
         await createTicketNotification(result.order.id, 'TICKET_PURCHASED');
       }
 
-      // Send ticket email to guest or user
+      // Determine recipient
       const recipientEmail = isGuestPurchase ? guestEmail : order.buyer?.email;
       const recipientName = isGuestPurchase ? guestName : order.buyer?.name;
 
-      if (recipientEmail) {
-        // Enhance tickets with guest info for email
+      console.log(
+        `Sending tickets to: ${recipientEmail} (Guest: ${isGuestPurchase})`
+      );
+
+      if (recipientEmail && recipientName) {
+        // Enhance tickets with guest info
         const ticketsWithGuestInfo = result.tickets.map((ticket) => ({
           ...ticket,
           user: isGuestPurchase
@@ -508,16 +504,27 @@ export async function completeOrder(
             : ticket.user,
         }));
 
+        // Send email
         await ticketEmailService.sendTicketEmail(
-          result.order,
+          {
+            ...result.order,
+            buyer: isGuestPurchase
+              ? {
+                  id: null,
+                  name: recipientName,
+                  email: recipientEmail,
+                }
+              : result.order.buyer,
+          },
           ticketsWithGuestInfo
         );
+
+        console.log(`✅ Ticket email sent to ${recipientEmail}`);
       }
     } catch (error) {
       console.error('Post-completion operations failed:', error);
     }
 
-    // Revalidate paths
     revalidatePath('/dashboard/tickets');
     revalidatePath('/dashboard/orders');
     revalidatePath(`/events/${order.event.slug}`);
@@ -530,7 +537,6 @@ export async function completeOrder(
   } catch (error) {
     console.error('Error completing order:', error);
 
-    // Mark order as failed
     try {
       await prisma.order.update({
         where: { id: orderId },
@@ -548,29 +554,19 @@ export async function completeOrder(
   }
 }
 
-// Process waiting list when tickets become available
+// Process waiting list
 export async function processWaitingList(eventId: string): Promise<void> {
   try {
     const availableTickets = await prisma.ticketType.findMany({
-      where: {
-        eventId,
-        quantity: { gt: 0 },
-      },
+      where: { eventId, quantity: { gt: 0 } },
     });
 
     if (availableTickets.length === 0) return;
 
     const waitingEntries = await prisma.waitingList.findMany({
-      where: {
-        eventId,
-        status: 'WAITING',
-      },
-      include: {
-        user: true,
-      },
-      orderBy: {
-        id: 'asc',
-      },
+      where: { eventId, status: 'WAITING' },
+      include: { user: true },
+      orderBy: { id: 'asc' },
     });
 
     const totalAvailable = availableTickets.reduce(
@@ -585,10 +581,7 @@ export async function processWaitingList(eventId: string): Promise<void> {
 
       await prisma.waitingList.update({
         where: { id: entry.id },
-        data: {
-          status: 'OFFERED',
-          offerExpiresAt,
-        },
+        data: { status: 'OFFERED', offerExpiresAt },
       });
 
       await prisma.notification.create({
@@ -608,6 +601,158 @@ export async function processWaitingList(eventId: string): Promise<void> {
   }
 }
 
+// Get user orders (including guest orders by email)
+export async function getUserOrders(): Promise<ActionResponse<any[]>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({ headers: headersList });
+
+  if (!session) {
+    return { success: false, message: 'Not authenticated' };
+  }
+
+  try {
+    const orders = await prisma.order.findMany({
+      where: { buyerId: session.user.id },
+      include: {
+        event: {
+          include: {
+            venue: { include: { city: true } },
+          },
+        },
+        tickets: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return { success: true, data: orders };
+  } catch (error) {
+    console.error('Error fetching user orders:', error);
+    return { success: false, message: 'Failed to fetch orders' };
+  }
+}
+
+// Get organizer's event orders
+export async function getOrganizerOrders(
+  eventId?: string
+): Promise<ActionResponse<any[]>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({ headers: headersList });
+
+  if (!session) {
+    return { success: false, message: 'Not authenticated' };
+  }
+
+  try {
+    const whereClause: any = {
+      event: { userId: session.user.id },
+    };
+
+    if (eventId) {
+      whereClause.eventId = eventId;
+    }
+
+    const orders = await prisma.order.findMany({
+      where: whereClause,
+      include: {
+        event: {
+          include: {
+            venue: { include: { city: true } },
+          },
+        },
+        buyer: {
+          select: { id: true, name: true, email: true },
+        },
+        tickets: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Parse guest info from orders without buyers
+    const ordersWithGuestInfo = orders.map((order) => {
+      if (!order.buyer && order.purchaseNotes) {
+        try {
+          const notes = JSON.parse(order.purchaseNotes);
+          if (notes.isGuestPurchase) {
+            return {
+              ...order,
+              guestInfo: {
+                name: notes.guestName,
+                email: notes.guestEmail,
+                phone: notes.guestPhone,
+              },
+            };
+          }
+        } catch (e) {
+          console.error('Failed to parse purchase notes:', e);
+        }
+      }
+      return order;
+    });
+
+    return { success: true, data: ordersWithGuestInfo };
+  } catch (error) {
+    console.error('Error fetching organizer orders:', error);
+    return { success: false, message: 'Failed to fetch orders' };
+  }
+}
+
+// Get all orders (admin only)
+export async function getAllOrders(): Promise<ActionResponse<any[]>> {
+  const headersList = await headers();
+  const session = await auth.api.getSession({ headers: headersList });
+
+  if (!session || session.user.role !== 'ADMIN') {
+    return { success: false, message: 'Admin access required' };
+  }
+
+  try {
+    const orders = await prisma.order.findMany({
+      include: {
+        event: {
+          include: {
+            venue: { include: { city: true } },
+            user: { select: { id: true, name: true, email: true } },
+          },
+        },
+        buyer: { select: { id: true, name: true, email: true } },
+        tickets: {
+          include: {
+            ticketType: { select: { name: true, price: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Parse guest info
+    const ordersWithGuestInfo = orders.map((order) => {
+      if (!order.buyer && order.purchaseNotes) {
+        try {
+          const notes = JSON.parse(order.purchaseNotes);
+          if (notes.isGuestPurchase) {
+            return {
+              ...order,
+              guestInfo: {
+                name: notes.guestName,
+                email: notes.guestEmail,
+                phone: notes.guestPhone,
+              },
+            };
+          }
+        } catch (e) {
+          console.error('Failed to parse purchase notes:', e);
+        }
+      }
+      return order;
+    });
+
+    return { success: true, data: ordersWithGuestInfo };
+  } catch (error) {
+    console.error('Error fetching all orders:', error);
+    return { success: false, message: 'Failed to fetch orders' };
+  }
+}
+
 // Resend tickets email (admin only)
 export async function resendOrderTickets(orderId: string) {
   const headersList = await headers();
@@ -617,7 +762,6 @@ export async function resendOrderTickets(orderId: string) {
     return { success: false, message: 'Not authenticated' };
   }
 
-  // only ADMIN with STAFF or SUPER_ADMIN can manually email tickets
   const isAdmin =
     session.user.role === 'ADMIN' &&
     ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole);
@@ -625,6 +769,7 @@ export async function resendOrderTickets(orderId: string) {
   if (!isAdmin) {
     return { success: false, message: 'Not authorized' };
   }
+
   try {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
@@ -643,6 +788,9 @@ export async function resendOrderTickets(orderId: string) {
                 event: { include: { venue: { include: { city: true } } } },
               },
             },
+            user: {
+              select: { id: true, name: true, email: true },
+            },
           },
         },
       },
@@ -655,13 +803,43 @@ export async function resendOrderTickets(orderId: string) {
     if (!order.tickets || order.tickets.length === 0) {
       return {
         success: false,
-        message:
-          'No tickets found for this order. Please generate tickets first.',
+        message: 'No tickets found for this order',
       };
     }
 
-    const { ticketEmailService } = await import('@/lib/email-service');
-    await ticketEmailService.sendTicketEmail(order, order.tickets);
+    // Parse guest info
+    let guestInfo = null;
+    if (!order.buyer && order.purchaseNotes) {
+      try {
+        const notes = JSON.parse(order.purchaseNotes);
+        if (notes.isGuestPurchase) {
+          guestInfo = {
+            name: notes.guestName,
+            email: notes.guestEmail,
+          };
+        }
+      } catch (e) {
+        console.error('Failed to parse guest info:', e);
+      }
+    }
+
+    // Send email
+    const ticketsWithGuestInfo = order.tickets.map((ticket) => ({
+      ...ticket,
+      user: guestInfo
+        ? { id: null, name: guestInfo.name, email: guestInfo.email }
+        : ticket.user,
+    }));
+
+    await ticketEmailService.sendTicketEmail(
+      {
+        ...order,
+        buyer: guestInfo
+          ? { id: null, name: guestInfo.name, email: guestInfo.email }
+          : order.buyer,
+      },
+      ticketsWithGuestInfo
+    );
 
     return { success: true, message: 'Tickets email sent successfully' };
   } catch (error) {
@@ -1001,181 +1179,6 @@ export async function processRefund(
     return {
       success: false,
       message: 'Failed to process refund',
-    };
-  }
-}
-
-// Get user orders
-export async function getUserOrders(): Promise<ActionResponse<any[]>> {
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
-
-  if (!session) {
-    return {
-      success: false,
-      message: 'Not authenticated',
-    };
-  }
-
-  try {
-    const orders = await prisma.order.findMany({
-      where: { buyerId: session.user.id },
-      include: {
-        event: {
-          include: {
-            venue: {
-              include: {
-                city: true,
-              },
-            },
-          },
-        },
-        tickets: true, // Include tickets for better order details
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return {
-      success: true,
-      data: orders,
-    };
-  } catch (error) {
-    console.error('Error fetching user orders:', error);
-    return {
-      success: false,
-      message: 'Failed to fetch orders',
-    };
-  }
-}
-
-// Get organizer's event orders
-export async function getOrganizerOrders(
-  eventId?: string
-): Promise<ActionResponse<any[]>> {
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
-
-  if (!session) {
-    return {
-      success: false,
-      message: 'Not authenticated',
-    };
-  }
-
-  try {
-    const whereClause: any = {
-      event: {
-        userId: session.user.id,
-      },
-    };
-
-    if (eventId) {
-      whereClause.eventId = eventId;
-    }
-
-    const orders = await prisma.order.findMany({
-      where: whereClause,
-      include: {
-        event: {
-          include: {
-            venue: {
-              include: {
-                city: true,
-              },
-            },
-          },
-        },
-        buyer: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return {
-      success: true,
-      data: orders,
-    };
-  } catch (error) {
-    console.error('Error fetching organizer orders:', error);
-    return {
-      success: false,
-      message: 'Failed to fetch orders',
-    };
-  }
-}
-
-// Get all orders (admin only)
-export async function getAllOrders(): Promise<ActionResponse<any[]>> {
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
-
-  if (!session || session.user.role !== 'ADMIN') {
-    return {
-      success: false,
-      message: 'Admin access required',
-    };
-  }
-
-  try {
-    const orders = await prisma.order.findMany({
-      include: {
-        event: {
-          include: {
-            venue: {
-              include: {
-                city: true,
-              },
-            },
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-        },
-        buyer: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-        tickets: {
-          include: {
-            ticketType: {
-              select: {
-                name: true,
-                price: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return {
-      success: true,
-      data: orders,
-    };
-  } catch (error) {
-    console.error('Error fetching all orders:', error);
-    return {
-      success: false,
-      message: 'Failed to fetch orders',
     };
   }
 }

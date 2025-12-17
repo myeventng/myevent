@@ -1,4 +1,4 @@
-// lib/email-service.ts - Fixed version
+// lib/email-service.ts - FIXED VERSION WITH GUEST SUPPORT
 import nodemailer from 'nodemailer';
 import QRCode from 'qrcode';
 import { TicketEmailTemplate } from '@/components/email/ticket-template';
@@ -64,15 +64,41 @@ class NodemailerEmailService implements EmailService {
         throw new Error('Missing event or venue information for ticket email');
       }
 
-      // Generate QR codes and prepare inline attachments
+      // Determine buyer information (handle guest vs authenticated)
+      let buyerName: string;
+      let buyerEmail: string;
+
+      if (order.buyer) {
+        // Authenticated purchase
+        buyerName = order.buyer.name;
+        buyerEmail = order.buyer.email;
+      } else {
+        // Guest purchase - extract from purchaseNotes
+        try {
+          const notes = JSON.parse(order.purchaseNotes || '{}');
+          if (notes.isGuestPurchase && notes.guestEmail && notes.guestName) {
+            buyerName = notes.guestName;
+            buyerEmail = notes.guestEmail;
+          } else {
+            throw new Error('Guest purchase info missing');
+          }
+        } catch (e) {
+          console.error('Failed to parse guest info:', e);
+          throw new Error('Unable to determine recipient for ticket email');
+        }
+      }
+
+      console.log(
+        `📧 Preparing ticket email for: ${buyerEmail} (${buyerName})`
+      );
+
+      // Generate QR codes and prepare attachments
       const ticketsWithQR = [];
       const attachments = [];
-      let cid = 1;
 
       for (const ticket of tickets) {
         let qrCodeData;
 
-        // Use stored QR data if available, otherwise generate
         if (ticket.qrCodeData) {
           qrCodeData = ticket.qrCodeData;
         } else {
@@ -86,7 +112,7 @@ class NodemailerEmailService implements EmailService {
           });
         }
 
-        // Generate QR code as buffer for inline attachment
+        // Generate QR code as buffer
         const qrCodeBuffer = await QRCode.toBuffer(qrCodeData, {
           width: 200,
           margin: 2,
@@ -94,7 +120,7 @@ class NodemailerEmailService implements EmailService {
             dark: '#000000',
             light: '#FFFFFF',
           },
-          errorCorrectionLevel: 'H', // High error correction for better scanning
+          errorCorrectionLevel: 'H',
         });
 
         const qrCodeCid = `qr-code-${ticket.ticketId}`;
@@ -127,8 +153,8 @@ class NodemailerEmailService implements EmailService {
             style: 'currency',
             currency: 'NGN',
           }).format(ticket.ticketType.price),
-          customerName: order.buyer.name,
-          customerEmail: order.buyer.email,
+          customerName: buyerName, // Use extracted buyer name
+          customerEmail: buyerEmail, // Use extracted buyer email
           purchaseDate: new Date(ticket.purchasedAt).toLocaleDateString(
             'en-NG'
           ),
@@ -141,12 +167,10 @@ class NodemailerEmailService implements EmailService {
 
         await pdfGenerator.generateTicket(ticketData);
 
-        // Handle PDF buffer generation for server environment
         let pdfBuffer: Buffer;
         try {
           pdfBuffer = pdfGenerator.getBuffer();
         } catch {
-          // Fallback for environments where Buffer might not be available
           const arrayBuffer = pdfGenerator.getArrayBuffer();
           pdfBuffer = Buffer.from(arrayBuffer);
         }
@@ -160,17 +184,28 @@ class NodemailerEmailService implements EmailService {
 
         ticketsWithQR.push({
           ...ticket,
-          qrCodeCid, // Use CID for inline image reference
+          qrCodeCid,
           qrCodeData: qrCodeData,
+          // Override user info for display
+          user: {
+            id: ticket.userId,
+            name: buyerName,
+            email: buyerEmail,
+          },
         });
-
-        cid++;
       }
 
       // Render the email template
       const emailHtml = await render(
         TicketEmailTemplate({
-          order,
+          order: {
+            ...order,
+            buyer: {
+              id: order.buyer?.id || null,
+              name: buyerName,
+              email: buyerEmail,
+            },
+          },
           event,
           venue,
           tickets: ticketsWithQR,
@@ -180,10 +215,10 @@ class NodemailerEmailService implements EmailService {
         })
       );
 
-      // Send email with attachments
+      // Send email
       const mailOptions: any = {
-        from: `"${process.env.PLATFORM_NAME}" <${process.env.NODEMAILER_USER}>`,
-        to: order.buyer.email,
+        from: `"${process.env.PLATFORM_NAME || 'MyEvent.com.ng'}" <${process.env.NODEMAILER_USER}>`,
+        to: buyerEmail,
         subject: `Your tickets for ${event.title}`,
         html: emailHtml,
         attachments,
@@ -195,10 +230,10 @@ class NodemailerEmailService implements EmailService {
       await this.transporter.sendMail(mailOptions);
 
       console.log(
-        `Ticket email sent to ${order.buyer.email} for order ${order.id} with ${tickets.length} PDF tickets and ${attachments.filter((a) => a.cid).length} QR codes`
+        `✅ Ticket email sent to ${buyerEmail} for order ${order.id} with ${tickets.length} PDF tickets`
       );
     } catch (error) {
-      console.error('Error sending ticket email:', error);
+      console.error('❌ Error sending ticket email:', error);
       throw new Error(
         `Failed to send ticket email: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
@@ -472,7 +507,7 @@ class NotificationEmailService {
   async sendWaitingListNotification(email: string, event: any) {
     const html = render(
       WaitingListEmail({
-        userName: 'Valued Customer', // You might want to pass the actual name
+        userName: 'Valued Customer',
         eventTitle: event.title,
         eventDate: event.startDateTime,
         eventUrl: `${process.env.NEXT_PUBLIC_APP_URL}/events/${event.slug}`,
@@ -508,9 +543,6 @@ class NotificationEmailService {
   }
 }
 
-// Export both services with different names
 export const ticketEmailService = new NodemailerEmailService();
 export const notificationEmailService = new NotificationEmailService();
-
-// Optional: Export transporter for direct use elsewhere
 export { transporter };
