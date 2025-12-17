@@ -1,4 +1,4 @@
-// src/app/api/orders/[orderId]/tickets/route.ts -
+// src/app/api/orders/[orderId]/tickets/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
@@ -11,6 +11,51 @@ import {
 import { PaymentStatus } from '@/generated/prisma';
 
 export const runtime = 'nodejs';
+
+// Helper to extract guest information from order
+const extractGuestInfo = (order: any) => {
+  if (order.buyer) {
+    return null; // Not a guest purchase
+  }
+
+  if (!order.purchaseNotes) {
+    return null;
+  }
+
+  try {
+    const purchaseData = JSON.parse(order.purchaseNotes);
+    if (purchaseData.isGuestPurchase) {
+      return {
+        name: purchaseData.guestName || 'Guest User',
+        email: purchaseData.guestEmail || 'No email',
+        phone: purchaseData.guestPhone || null,
+      };
+    }
+  } catch (error) {
+    console.error('Failed to parse guest info:', error);
+  }
+
+  return null;
+};
+
+// Helper to get customer information (guest or registered)
+const getCustomerInfo = (order: any) => {
+  const guestInfo = extractGuestInfo(order);
+
+  if (guestInfo) {
+    return {
+      name: guestInfo.name,
+      email: guestInfo.email,
+      isGuest: true,
+    };
+  }
+
+  return {
+    name: order.buyer?.name || 'Unknown',
+    email: order.buyer?.email || 'Unknown',
+    isGuest: false,
+  };
+};
 
 export async function GET(
   _req: NextRequest,
@@ -88,6 +133,9 @@ export async function GET(
       );
     }
 
+    // Get customer information (guest or registered)
+    const customerInfo = getCustomerInfo(order);
+
     // Use your PDF generator for multiple tickets
     if (order.tickets.length === 1) {
       // Single ticket - use your existing generator
@@ -105,14 +153,15 @@ export async function GET(
         }`,
         ticketType: ticket.ticketType.name,
         price: formatPrice(ticket.ticketType.price),
-        customerName: order.buyer?.name || 'Unknown',
-        customerEmail: order.buyer?.email || 'Unknown',
+        customerName: customerInfo.name,
+        customerEmail: customerInfo.email,
         purchaseDate: formatDateTime(ticket.purchasedAt),
         status: ticket.status,
         qrCode: ticket.qrCodeData || 'available',
         orderId: order.id,
         quantity: order.quantity,
         eventId: order.eventId,
+        isGuest: customerInfo.isGuest,
       };
 
       await generator.generateTicket(ticketData);
@@ -153,14 +202,15 @@ export async function GET(
           }`,
           ticketType: ticket.ticketType.name,
           price: formatPrice(ticket.ticketType.price),
-          customerName: order.buyer?.name || 'Unknown',
-          customerEmail: order.buyer?.email || 'Unknown',
+          customerName: customerInfo.name,
+          customerEmail: customerInfo.email,
           purchaseDate: formatDateTime(ticket.purchasedAt),
           status: ticket.status,
           qrCode: ticket.qrCodeData || 'available',
           orderId: order.id,
           quantity: 1, // Individual ticket quantity
           eventId: order.eventId,
+          isGuest: customerInfo.isGuest,
         };
 
         await generator.generateTicket(ticketData);
@@ -173,10 +223,15 @@ export async function GET(
       const arrayBuffer = await blob.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
+      // Create filename with guest indicator if applicable
+      const filename = customerInfo.isGuest
+        ? `guest-order-${order.id.slice(-8)}-tickets.pdf`
+        : `order-${order.id.slice(-8)}-tickets.pdf`;
+
       return new NextResponse(buffer, {
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="order-${order.id.slice(-8)}-tickets.pdf"`,
+          'Content-Disposition': `attachment; filename="${filename}"`,
           'Cache-Control': 'no-store',
         },
       });

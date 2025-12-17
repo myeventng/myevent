@@ -38,6 +38,7 @@ import {
   AlertCircle,
   Clock,
   DollarSign,
+  Phone,
   Ticket,
   Download,
   Copy,
@@ -59,6 +60,55 @@ interface OrderDetailModalProps {
   isOrganizerView?: boolean;
 }
 
+
+const getGuestInfo = (order: any) => {
+  if (order.buyer) {
+    return null; // Not a guest purchase
+  }
+
+  // Check if order has guestInfo property (from enhanced data)
+  if (order.guestInfo) {
+    return order.guestInfo;
+  }
+
+  // Try to parse from purchaseNotes
+  try {
+    const purchaseData = JSON.parse(order.purchaseNotes || '{}');
+    if (purchaseData.isGuestPurchase) {
+      return {
+        name: purchaseData.guestName || 'Guest User',
+        email: purchaseData.guestEmail || 'No email',
+        phone: purchaseData.guestPhone || null,
+      };
+    }
+  } catch (error) {
+    console.error('Failed to parse guest info:', error);
+  }
+
+  return null;
+};
+
+// Helper to get customer info (guest or registered)
+const getCustomerInfo = (order: any) => {
+  const guestInfo = getGuestInfo(order);
+
+  if (guestInfo) {
+    return {
+      name: guestInfo.name,
+      email: guestInfo.email,
+      phone: guestInfo.phone,
+      isGuest: true,
+    };
+  }
+
+  return {
+    name: order.buyer?.name || 'Unknown',
+    email: order.buyer?.email || 'Unknown',
+    phone: order.buyer?.phone || null,
+    isGuest: false,
+  };
+};
+
 export function OrderDetailModal({
   order,
   isOpen,
@@ -70,6 +120,7 @@ export function OrderDetailModal({
 }: OrderDetailModalProps) {
   const [refundNotes, setRefundNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const customerInfo = getCustomerInfo(order);
 
   // Format currency
   const formatCurrency = (amount: number) => {
@@ -217,6 +268,12 @@ export function OrderDetailModal({
           <DialogTitle className="flex items-center gap-2">
             <Receipt className="w-5 h-5" />
             Order Details
+            {customerInfo.isGuest && (
+              <Badge variant="secondary" className="ml-2">
+                <User className="w-3 h-3 mr-1" />
+                Guest Purchase
+              </Badge>
+            )}
           </DialogTitle>
           <DialogDescription>
             Complete information about order #{order.id.slice(-8)}
@@ -225,24 +282,185 @@ export function OrderDetailModal({
 
         <div className="space-y-6">
           {/* Order Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Basic Order Info */}
-            <div className="space-y-4">
-              <div className="border rounded-lg p-4">
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <Receipt className="w-4 h-4" />
-                  Order Information
-                </h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Date</span>
-                    <span className="text-sm">
-                      {format(
-                        new Date(order.event.startDateTime),
-                        'MMM d, yyyy'
-                      )}
+          <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-indigo-50">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <User className="w-5 h-5 text-blue-600" />
+              Customer Information
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Customer Type Badge */}
+              <div className="col-span-full">
+                {customerInfo.isGuest ? (
+                  <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-blue-200">
+                    <Badge variant="secondary" className="flex items-center gap-1">
+                      <Users className="w-3 h-3" />
+                      Guest Purchase
+                    </Badge>
+                    <span className="text-sm text-muted-foreground">
+                      Customer does not have an account
                     </span>
                   </div>
+                ) : (
+                  <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-green-200">
+                    <Badge variant="default" className="flex items-center gap-1">
+                      <User className="w-3 h-3" />
+                      Registered User
+                    </Badge>
+                    <span className="text-sm text-muted-foreground">
+                      Account holder
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Customer Name */}
+              <div className="p-3 bg-white rounded-lg">
+                <div className="flex items-center gap-2 mb-1">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Full Name
+                  </span>
+                </div>
+                <p className="text-base font-semibold">{customerInfo.name}</p>
+              </div>
+
+              {/* Customer Email */}
+              <div className="p-3 bg-white rounded-lg">
+                <div className="flex items-center gap-2 mb-1">
+                  <Mail className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Email Address
+                  </span>
+                </div>
+                <p className="text-base font-semibold break-all">
+                  {customerInfo.email}
+                </p>
+                <button
+                  onClick={() => window.open(`mailto:${customerInfo.email}`, '_blank')}
+                  className="text-sm text-blue-600 hover:underline mt-1"
+                >
+                  Send Email
+                </button>
+              </div>
+
+              {/* Customer Phone (if available) */}
+              {customerInfo.phone && (
+                <div className="p-3 bg-white rounded-lg">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Phone className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Phone Number
+                    </span>
+                  </div>
+                  <p className="text-base font-semibold">{customerInfo.phone}</p>
+                  <button
+                    onClick={() => window.open(`tel:${customerInfo.phone}`, '_blank')}
+                    className="text-sm text-blue-600 hover:underline mt-1"
+                  >
+                    Call
+                  </button>
+                </div>
+              )}
+
+              {/* Account Link (for registered users only) */}
+              {!customerInfo.isGuest && order.buyer && (
+                <div className="p-3 bg-white rounded-lg">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Hash className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm font-medium text-muted-foreground">
+                      User ID
+                    </span>
+                  </div>
+                  <p className="font-mono font-semibold text-sm">
+                    {order.buyer.id}
+                  </p>
+                  <button
+                    onClick={() => window.open(`/admin/dashboard/users/${order.buyer.id}`, '_blank')}
+                    className="text-sm text-blue-600 hover:underline mt-1 flex items-center gap-1"
+                  >
+                    View Profile
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Guest Purchase Notice */}
+            {customerInfo.isGuest && (
+              <div className="mt-4 p-3 bg-blue-100 border border-blue-300 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-blue-700 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-800">
+                    <p className="font-semibold mb-1">Guest Purchase Information</p>
+                    <ul className="list-disc list-inside space-y-1 text-xs">
+                      <li>This customer does not have an account in the system</li>
+                      <li>Tickets and receipts were sent to the provided email address</li>
+                      <li>Customer cannot access the dashboard or track order history</li>
+                      <li>All communication should be via email: {customerInfo.email}</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Event Information Section */}
+          <div className="border rounded-lg p-4">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <Calendar className="w-5 h-5" />
+              Event Information
+            </h3>
+
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <Ticket className="w-4 h-4 text-purple-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-muted-foreground">Event Title</p>
+                  <p className="text-base font-semibold">{order.event.title}</p>
+                  <button
+                    onClick={() => window.open(`/events/${order.event.slug || order.event.id}`, '_blank')}
+                    className="text-sm text-blue-600 hover:underline mt-1 flex items-center gap-1"
+                  >
+                    View Event
+                    <ExternalLink className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <Calendar className="w-4 h-4 text-green-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-muted-foreground">Event Date & Time</p>
+                  <p className="text-base font-semibold">
+                    {format(new Date(order.event.startDateTime), 'PPP')}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {format(new Date(order.event.startDateTime), 'p')} -
+                    {format(new Date(order.event.endDateTime), 'p')}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-orange-100 rounded-lg">
+                  <MapPin className="w-4 h-4 text-orange-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-muted-foreground">Venue</p>
+                  <p className="text-base font-semibold">{order.event.venue.name}</p>
+                  {order.event.venue.address && (
+                    <p className="text-sm text-muted-foreground">{order.event.venue.address}</p>
+                  )}
+                  {order.event.venue.city && (
+                    <p className="text-sm text-muted-foreground">
+                      {order.event.venue.city.name}, {order.event.venue.city.state}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

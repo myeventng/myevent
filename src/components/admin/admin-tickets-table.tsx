@@ -18,12 +18,12 @@ import {
   Clock,
   XCircle,
   AlertCircle,
-  Users,
   Calendar,
   MapPin,
   Trash2,
   UserX,
   UserCheck,
+  FilterX,
 } from 'lucide-react';
 import {
   useReactTable,
@@ -33,7 +33,6 @@ import {
   getFilteredRowModel,
   ColumnDef,
   SortingState,
-  ColumnFiltersState,
   flexRender,
 } from '@tanstack/react-table';
 import {
@@ -104,11 +103,12 @@ export function AdminTicketsTable({
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'purchasedAt', desc: true },
   ]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('cards');
   const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null);
+
+  // Separate state for filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [userTypeFilter, setUserTypeFilter] = useState<string>('all');
 
@@ -184,7 +184,6 @@ export function AdminTicketsTable({
     return filtered;
   }, [data, statusFilter, userTypeFilter, globalFilter]);
 
-
   // Calculate statistics with guest tracking
   const stats = useMemo(() => {
     return {
@@ -253,7 +252,8 @@ export function AdminTicketsTable({
         icon: XCircle,
         className: 'bg-red-100 text-red-800',
       },
-    }; const config = variants[status] || {
+    };
+    const config = variants[status] || {
       variant: 'outline' as const,
       text: 'Unknown',
       icon: AlertCircle,
@@ -395,6 +395,15 @@ export function AdminTicketsTable({
     }
   };
 
+  // Clear all filters
+  const clearAllFilters = () => {
+    setStatusFilter('all');
+    setUserTypeFilter('all');
+    setGlobalFilter('');
+  };
+
+  // Check if any filter is active
+  const isFilterActive = statusFilter !== 'all' || userTypeFilter !== 'all' || globalFilter !== '';
 
   // Table columns definition
   const columns: ColumnDef<any>[] = [
@@ -573,6 +582,11 @@ export function AdminTicketsTable({
                         <p className="font-semibold text-red-900 mb-2">
                           ⚠️ Warning: This action cannot be undone!
                         </p>
+                        <ul className="list-disc list-inside text-red-800 text-sm mt-2 space-y-1">
+                          <li>Remove all ticket data permanently</li>
+                          <li>Delete validation history</li>
+                          <li>Cannot be recovered after deletion</li>
+                        </ul>
                       </div>
 
                       <div className="bg-gray-50 rounded-lg p-4 space-y-2">
@@ -624,11 +638,9 @@ export function AdminTicketsTable({
     columns,
     state: {
       sorting,
-      columnFilters,
       globalFilter,
     },
     onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
     onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -801,7 +813,6 @@ export function AdminTicketsTable({
     );
   };
 
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -943,15 +954,11 @@ export function AdminTicketsTable({
                 />
               </div>
             </div>
+
+            {/* Status Filter */}
             <Select
-              value={
-                (table.getColumn('status')?.getFilterValue() as string) || 'all'
-              }
-              onValueChange={(value) => {
-                table
-                  .getColumn('status')
-                  ?.setFilterValue(value === 'all' ? undefined : value);
-              }}
+              value={statusFilter}
+              onValueChange={setStatusFilter}
             >
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="Filter by status" />
@@ -964,29 +971,11 @@ export function AdminTicketsTable({
                 <SelectItem value="CANCELLED">Cancelled</SelectItem>
               </SelectContent>
             </Select>
-            <Select
-              value={
-                (columnFilters.find((f) => f.id === 'userType')?.value as string) || 'all'
-              }
-              onValueChange={(value) => {
-                if (value === 'all') {
-                  setColumnFilters(columnFilters.filter((f) => f.id !== 'userType'));
-                } else {
-                  const filtered = data.filter((ticket) => {
-                    const isGuest = !ticket.userId || extractGuestInfo(ticket);
-                    return value === 'guest' ? isGuest : !isGuest;
-                  });
 
-                  // Apply filter through global filter for simplicity
-                  if (value === 'guest') {
-                    setColumnFilters([...columnFilters.filter((f) => f.id !== 'userType'),
-                    { id: 'userType', value: 'guest' }]);
-                  } else {
-                    setColumnFilters([...columnFilters.filter((f) => f.id !== 'userType'),
-                    { id: 'userType', value: 'authenticated' }]);
-                  }
-                }
-              }}
+            {/* User Type Filter */}
+            <Select
+              value={userTypeFilter}
+              onValueChange={setUserTypeFilter}
             >
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="Filter by user type" />
@@ -997,23 +986,39 @@ export function AdminTicketsTable({
                 <SelectItem value="authenticated">Authenticated Users</SelectItem>
               </SelectContent>
             </Select>
-            <Select
-              value={table.getState().pagination.pageSize.toString()}
-              onValueChange={(value) => {
-                table.setPageSize(Number(value));
-              }}
+
+            {/* Clear Filters Button */}
+            <Button
+              variant="outline"
+              onClick={clearAllFilters}
+              disabled={!isFilterActive}
+              className="w-32"
             >
-              <SelectTrigger className="w-24">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="5">5</SelectItem>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="20">20</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-              </SelectContent>
-            </Select>
+              <FilterX className="h-4 w-4 mr-2" />
+              Clear Filters
+            </Button>
           </div>
+
+          {/* Active Filters Display */}
+          {isFilterActive && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {statusFilter !== 'all' && (
+                <Badge variant="secondary" className="px-3 py-1">
+                  Status: {statusFilter}
+                </Badge>
+              )}
+              {userTypeFilter !== 'all' && (
+                <Badge variant="secondary" className="px-3 py-1">
+                  User Type: {userTypeFilter === 'guest' ? 'Guest Users' : 'Authenticated Users'}
+                </Badge>
+              )}
+              {globalFilter && (
+                <Badge variant="secondary" className="px-3 py-1">
+                  Search: "{globalFilter}"
+                </Badge>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1050,8 +1055,19 @@ export function AdminTicketsTable({
                     No tickets found
                   </h3>
                   <p className="text-muted-foreground text-center">
-                    Tickets will appear here as customers make purchases
+                    {isFilterActive
+                      ? 'No tickets match your current filters. Try clearing filters or adjusting your search.'
+                      : 'Tickets will appear here as customers make purchases'}
                   </p>
+                  {isFilterActive && (
+                    <Button
+                      variant="outline"
+                      onClick={clearAllFilters}
+                      className="mt-4"
+                    >
+                      Clear Filters
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -1109,7 +1125,25 @@ export function AdminTicketsTable({
                         colSpan={columns.length}
                         className="h-24 text-center"
                       >
-                        No tickets found.
+                        <div className="flex flex-col items-center justify-center py-6">
+                          <Ticket className="w-12 h-12 text-muted-foreground mb-4" />
+                          <h3 className="text-lg font-medium mb-2">
+                            No tickets found
+                          </h3>
+                          <p className="text-muted-foreground text-center mb-4">
+                            {isFilterActive
+                              ? 'No tickets match your current filters. Try clearing filters or adjusting your search.'
+                              : 'Tickets will appear here as customers make purchases'}
+                          </p>
+                          {isFilterActive && (
+                            <Button
+                              variant="outline"
+                              onClick={clearAllFilters}
+                            >
+                              Clear Filters
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}
