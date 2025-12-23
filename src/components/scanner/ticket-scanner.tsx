@@ -13,14 +13,11 @@ import {
   XCircle,
   Scan,
   User,
-  Ticket,
   Calendar,
-  MapPin,
   Info,
   RefreshCw,
   Bell,
   Clock,
-  Volume2,
   AlertTriangle,
   SwitchCamera,
 } from 'lucide-react';
@@ -30,7 +27,7 @@ import { validateTicket } from '@/actions/ticket.actions';
 interface TicketScannerProps {
   eventId: string;
   eventTitle: string;
-  onScanComplete?: (result: any) => void;
+  onScanComplete?: (result: ScanResult) => void;
 }
 
 interface ScanResult {
@@ -40,6 +37,7 @@ interface ScanResult {
     ticketId: string;
     status: string;
     user: {
+      id: string | null;
       name: string;
       email: string;
     };
@@ -48,12 +46,15 @@ interface ScanResult {
       price: number;
     };
     purchasedAt: string;
+    validatedAt?: string;
+    validatedBy?: string;
+    isGuestPurchase?: boolean;
   };
+  data?: any;
   message: string;
   alreadyUsed?: boolean;
 }
 
-// Interface for detected barcode from the scanner
 interface IDetectedBarcode {
   rawValue: string;
   format: string;
@@ -75,17 +76,14 @@ export function TicketScanner({
   const [showErrorAnimation, setShowErrorAnimation] = useState(false);
   const [lastScannedTicketId, setLastScannedTicketId] = useState<string>('');
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>(
-    'environment'
-  );
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
 
   const audioContextRef = useRef<AudioContext | null>(null);
 
   const playSound = (type: 'success' | 'error') => {
     try {
       if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext ||
-          (window as any).webkitAudioContext)();
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
 
       const audioContext = audioContextRef.current;
@@ -102,19 +100,13 @@ export function TicketScanner({
 
       if (type === 'success') {
         oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-        oscillator.frequency.setValueAtTime(
-          1000,
-          audioContext.currentTime + 0.1
-        );
+        oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.1);
       } else {
         oscillator.frequency.setValueAtTime(400, audioContext.currentTime);
       }
 
       gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(
-        0.01,
-        audioContext.currentTime + 0.3
-      );
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
 
       oscillator.start(audioContext.currentTime);
       oscillator.stop(audioContext.currentTime + 0.3);
@@ -133,25 +125,20 @@ export function TicketScanner({
     setTimeout(() => setShowErrorAnimation(false), 2000);
   };
 
-  // Handle QR code scan results - Updated to handle IDetectedBarcode[] array
   const handleQRScan = async (detectedCodes: IDetectedBarcode[]) => {
     if (!detectedCodes || detectedCodes.length === 0 || isProcessing) return;
 
-    // Get the raw value from the first detected barcode
     const result = detectedCodes[0]?.rawValue;
     if (!result) return;
 
     try {
-      // Try to parse as JSON first
       const qrData = JSON.parse(result);
 
       if (qrData.type === 'EVENT_TICKET' && qrData.ticketId && qrData.eventId) {
-        // Prevent duplicate scans
         if (qrData.ticketId === lastScannedTicketId) {
           return;
         }
 
-        // Validate event ID
         if (qrData.eventId !== eventId) {
           toast.error('This ticket is for a different event!');
           triggerErrorAnimation();
@@ -161,18 +148,13 @@ export function TicketScanner({
 
         setLastScannedTicketId(qrData.ticketId);
         await validateScannedTicket(qrData.ticketId);
-
-        // Clear the last scanned ID after a delay to allow rescanning
         setTimeout(() => setLastScannedTicketId(''), 3000);
       } else {
-        console.log('QR code format not recognized:', qrData);
         setCameraError('Invalid QR code format for event tickets');
       }
     } catch (parseError) {
-      // If not JSON, treat as plain text ticket ID
       const ticketId = result.trim();
       if (ticketId && ticketId !== lastScannedTicketId && ticketId.length > 3) {
-        console.log('Processing text-based ticket ID:', ticketId);
         setLastScannedTicketId(ticketId);
         await validateScannedTicket(ticketId);
         setTimeout(() => setLastScannedTicketId(''), 3000);
@@ -180,19 +162,16 @@ export function TicketScanner({
     }
   };
 
-  // Handle QR scanner errors
   const handleQRError = (error: any) => {
     console.error('QR Scanner Error:', error);
-    setCameraError(
-      'Failed to scan QR code. Please ensure proper lighting and try again.'
-    );
+    setCameraError('Failed to scan QR code. Please ensure proper lighting and try again.');
   };
 
   const validateScannedTicket = async (ticketId: string) => {
     setIsProcessing(true);
 
     try {
-      const result = (await validateTicket(ticketId, eventId)) as ScanResult;
+      const result = await validateTicket(ticketId, eventId);
       const scanResult: ScanResult = {
         ...result,
         message: result.message ?? 'No message provided',
@@ -214,13 +193,18 @@ export function TicketScanner({
       if (scanResult.success) {
         playSound('success');
         triggerSuccessAnimation();
+
+        // Handle both guest and authenticated users
+        const userName = scanResult.data?.user?.name || scanResult.ticket?.user?.name || 'Guest User';
+        const isGuest = scanResult.data?.isGuestPurchase || !scanResult.data?.user?.id;
+
         toast.success(
           <div className="flex items-center gap-2">
             <CheckCircle className="h-4 w-4 text-green-500" />
             <div>
               <div className="font-medium">✓ VALID TICKET</div>
               <div className="text-sm text-muted-foreground">
-                {scanResult.ticket?.user.name} - Entry granted
+                {userName} {isGuest && '(Guest)'} - Entry granted
               </div>
             </div>
           </div>,
@@ -236,9 +220,7 @@ export function TicketScanner({
             <XCircle className="h-4 w-4 text-red-500" />
             <div>
               <div className="font-medium">✗ INVALID TICKET</div>
-              <div className="text-sm text-muted-foreground">
-                {scanResult.message}
-              </div>
+              <div className="text-sm text-muted-foreground">{scanResult.message}</div>
             </div>
           </div>,
           { duration: 4000 }
@@ -246,7 +228,7 @@ export function TicketScanner({
       }
     } catch (error) {
       console.error('Error validating ticket:', error);
-      const errorResult = {
+      const errorResult: ScanResult = {
         success: false,
         message: 'Error validating ticket',
       };
@@ -274,9 +256,7 @@ export function TicketScanner({
   const switchCamera = () => {
     const newFacingMode = facingMode === 'environment' ? 'user' : 'environment';
     setFacingMode(newFacingMode);
-    toast.info(
-      `Switched to ${newFacingMode === 'environment' ? 'back' : 'front'} camera`
-    );
+    toast.info(`Switched to ${newFacingMode === 'environment' ? 'back' : 'front'} camera`);
   };
 
   const handleManualValidation = async () => {
@@ -286,14 +266,6 @@ export function TicketScanner({
     }
     await validateScannedTicket(manualTicketId.trim());
   };
-
-  useEffect(() => {
-    return () => {
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
-    };
-  }, []);
 
   const resetScanner = () => {
     setScanResult(null);
@@ -310,6 +282,14 @@ export function TicketScanner({
       second: '2-digit',
     });
   };
+
+  useEffect(() => {
+    return () => {
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -332,12 +312,8 @@ export function TicketScanner({
             <div className="flex items-center gap-2">
               <Bell className="h-5 w-5 text-green-500" />
               <div>
-                <div className="text-2xl font-bold">
-                  {isScanning ? 'ACTIVE' : 'READY'}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  Scanner Status
-                </div>
+                <div className="text-2xl font-bold">{isScanning ? 'ACTIVE' : 'READY'}</div>
+                <div className="text-sm text-muted-foreground">Scanner Status</div>
               </div>
             </div>
           </CardContent>
@@ -384,7 +360,6 @@ export function TicketScanner({
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Camera Error Alert */}
           {cameraError && (
             <Alert className="border-red-200 bg-red-50">
               <AlertTriangle className="h-4 w-4 text-red-600" />
@@ -394,7 +369,6 @@ export function TicketScanner({
             </Alert>
           )}
 
-          {/* Camera Controls */}
           <div className="flex gap-2">
             {!isScanning ? (
               <Button onClick={startScanning} className="flex-1">
@@ -403,11 +377,7 @@ export function TicketScanner({
               </Button>
             ) : (
               <>
-                <Button
-                  onClick={stopScanning}
-                  variant="outline"
-                  className="flex-1"
-                >
+                <Button onClick={stopScanning} variant="outline" className="flex-1">
                   <X className="mr-2 h-4 w-4" />
                   Stop Scanner
                 </Button>
@@ -421,13 +391,9 @@ export function TicketScanner({
             </Button>
           </div>
 
-          {/* QR Scanner View */}
           {isScanning && (
             <div className="relative">
-              <div
-                className="rounded-lg overflow-hidden bg-black"
-                style={{ height: '300px' }}
-              >
+              <div className="rounded-lg overflow-hidden bg-black" style={{ height: '300px' }}>
                 <Scanner
                   onScan={handleQRScan}
                   onError={handleQRError}
@@ -438,17 +404,13 @@ export function TicketScanner({
                 />
               </div>
 
-              {/* Scanning overlay with QR code target */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="relative">
                   <div
                     className={`w-48 h-48 border-2 border-dashed rounded-lg relative transition-all duration-300 ${
-                      isProcessing
-                        ? 'border-blue-500 bg-blue-500/20'
-                        : 'border-white bg-black/20'
+                      isProcessing ? 'border-blue-500 bg-blue-500/20' : 'border-white bg-black/20'
                     }`}
                   >
-                    {/* Corner brackets */}
                     <div className="absolute top-0 left-0 w-8 h-8 border-l-4 border-t-4 border-white"></div>
                     <div className="absolute top-0 right-0 w-8 h-8 border-r-4 border-t-4 border-white"></div>
                     <div className="absolute bottom-0 left-0 w-8 h-8 border-l-4 border-b-4 border-white"></div>
@@ -456,26 +418,21 @@ export function TicketScanner({
 
                     <div className="absolute inset-0 flex items-center justify-center">
                       <span className="text-white text-sm font-medium text-center px-2 bg-black/50 rounded">
-                        {isProcessing
-                          ? 'Validating...'
-                          : 'Position QR code here'}
+                        {isProcessing ? 'Validating...' : 'Position QR code here'}
                       </span>
                     </div>
                   </div>
 
-                  {/* Scanning animation line */}
                   {!isProcessing && (
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white to-transparent animate-pulse"></div>
                   )}
                 </div>
               </div>
 
-              {/* Camera info */}
               <div className="absolute top-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-xs">
                 {facingMode === 'environment' ? 'Back Camera' : 'Front Camera'}
               </div>
 
-              {/* Processing overlay */}
               {isProcessing && (
                 <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
                   <div className="bg-white p-4 rounded-lg animate-pulse">
@@ -487,7 +444,6 @@ export function TicketScanner({
                 </div>
               )}
 
-              {/* Success animation overlay */}
               {showSuccessAnimation && (
                 <div className="absolute inset-0 bg-green-500 bg-opacity-20 flex items-center justify-center animate-pulse">
                   <div className="bg-green-500 text-white p-6 rounded-full animate-bounce">
@@ -496,7 +452,6 @@ export function TicketScanner({
                 </div>
               )}
 
-              {/* Error animation overlay */}
               {showErrorAnimation && (
                 <div className="absolute inset-0 bg-red-500 bg-opacity-20 flex items-center justify-center animate-pulse">
                   <div className="bg-red-500 text-white p-6 rounded-full animate-bounce">
@@ -507,7 +462,6 @@ export function TicketScanner({
             </div>
           )}
 
-          {/* Manual Entry */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Manual Ticket Entry</label>
             <div className="flex gap-2">
@@ -517,9 +471,7 @@ export function TicketScanner({
                 onChange={(e) => setManualTicketId(e.target.value)}
                 placeholder="Enter ticket ID (e.g., TKT-ABC123)"
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                onKeyPress={(e) =>
-                  e.key === 'Enter' && handleManualValidation()
-                }
+                onKeyPress={(e) => e.key === 'Enter' && handleManualValidation()}
                 disabled={isProcessing}
               />
               <Button
@@ -527,11 +479,7 @@ export function TicketScanner({
                 disabled={isProcessing || !manualTicketId.trim()}
                 className="min-w-24"
               >
-                {isProcessing ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  'Validate'
-                )}
+                {isProcessing ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Validate'}
               </Button>
             </div>
           </div>
@@ -542,9 +490,7 @@ export function TicketScanner({
       {scanResult && (
         <Card
           className={`transition-all duration-300 ${
-            scanResult.success
-              ? 'border-green-200 bg-green-50'
-              : 'border-red-200 bg-red-50'
+            scanResult.success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
           }`}
         >
           <CardHeader>
@@ -555,10 +501,7 @@ export function TicketScanner({
                 <XCircle className="h-5 w-5 text-red-500" />
               )}
               Validation Result
-              <Badge
-                variant={scanResult.success ? 'default' : 'destructive'}
-                className="ml-auto"
-              >
+              <Badge variant={scanResult.success ? 'default' : 'destructive'} className="ml-auto">
                 {scanResult.success ? 'APPROVED' : 'DENIED'}
               </Badge>
             </CardTitle>
@@ -578,27 +521,19 @@ export function TicketScanner({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-3">
                     <div>
-                      <label className="text-sm font-medium text-gray-500">
-                        Ticket ID
-                      </label>
+                      <label className="text-sm font-medium text-gray-500">Ticket ID</label>
                       <p className="font-mono text-sm bg-white p-2 rounded border">
                         {scanResult.ticket.ticketId}
                       </p>
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium text-gray-500">
-                        Ticket Type
-                      </label>
-                      <p className="font-medium">
-                        {scanResult.ticket.ticketType.name}
-                      </p>
+                      <label className="text-sm font-medium text-gray-500">Ticket Type</label>
+                      <p className="font-medium">{scanResult.ticket.ticketType.name}</p>
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium text-gray-500">
-                        Price
-                      </label>
+                      <label className="text-sm font-medium text-gray-500">Price</label>
                       <p className="font-bold text-lg">
                         ₦{scanResult.ticket.ticketType.price.toLocaleString()}
                       </p>
@@ -607,50 +542,41 @@ export function TicketScanner({
 
                   <div className="space-y-3">
                     <div>
-                      <label className="text-sm font-medium text-gray-500">
-                        Attendee
-                      </label>
+                      <label className="text-sm font-medium text-gray-500">Attendee</label>
                       <p className="flex items-center gap-2 font-medium">
                         <User className="h-4 w-4" />
-                        {scanResult.ticket.user.name}
+                        {scanResult.ticket.user.name || 'Guest User'}
                       </p>
                       <p className="text-sm text-gray-500">
-                        {scanResult.ticket.user.email}
+                        {scanResult.ticket.user.email || 'N/A'}
                       </p>
+                      {scanResult.data?.isGuestPurchase && (
+                        <Badge variant="outline" className="mt-1">
+                          Guest Purchase
+                        </Badge>
+                      )}
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium text-gray-500">
-                        Status
-                      </label>
+                      <label className="text-sm font-medium text-gray-500">Status</label>
                       <div>
                         <Badge
-                          variant={
-                            scanResult.ticket.status === 'USED'
-                              ? 'secondary'
-                              : 'default'
-                          }
+                          variant={scanResult.ticket.status === 'USED' ? 'secondary' : 'default'}
                           className={
                             scanResult.ticket.status === 'USED'
                               ? 'bg-orange-100 text-orange-800'
                               : 'bg-green-100 text-green-800'
                           }
                         >
-                          {scanResult.ticket.status === 'USED'
-                            ? 'Previously Used'
-                            : 'Valid Entry'}
+                          {scanResult.ticket.status === 'USED' ? 'Previously Used' : 'Valid Entry'}
                         </Badge>
                       </div>
                     </div>
 
                     <div>
-                      <label className="text-sm font-medium text-gray-500">
-                        Purchased
-                      </label>
+                      <label className="text-sm font-medium text-gray-500">Purchased</label>
                       <p className="text-sm">
-                        {new Date(
-                          scanResult.ticket.purchasedAt
-                        ).toLocaleDateString()}
+                        {new Date(scanResult.ticket.purchasedAt).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
@@ -679,32 +605,31 @@ export function TicketScanner({
         <CardContent>
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>
-              • <strong>QR Code Scanning:</strong> Click &quot;Start QR
-              Scanner&quot; and position QR codes in the target area
+              • <strong>QR Code Scanning:</strong> Click "Start QR Scanner" and position QR codes
+              in the target area
             </p>
             <p>
-              • <strong>Automatic Detection:</strong> The scanner will
-              automatically detect and validate QR codes
+              • <strong>Automatic Detection:</strong> The scanner will automatically detect and
+              validate QR codes
             </p>
             <p>
-              • <strong>Camera Switching:</strong> Use the camera switch button
-              to toggle between front and back cameras
+              • <strong>Camera Switching:</strong> Use the camera switch button to toggle between
+              front and back cameras
             </p>
             <p>
-              • <strong>Manual Entry:</strong> Type ticket ID and press Enter or
-              click &quot;Validate&quot;
+              • <strong>Manual Entry:</strong> Type ticket ID and press Enter or click "Validate"
             </p>
             <p>
-              • <strong>Audio Feedback:</strong> Listen for success (two beeps)
-              or error (single beep) sounds
+              • <strong>Audio Feedback:</strong> Listen for success (two beeps) or error (single
+              beep) sounds
             </p>
             <p>
-              • <strong>Visual Feedback:</strong> Watch for green (success) or
-              red (error) animations
+              • <strong>Visual Feedback:</strong> Watch for green (success) or red (error)
+              animations
             </p>
             <p>
-              • <strong>Event Validation:</strong> QR codes are automatically
-              validated for the correct event
+              • <strong>Guest Support:</strong> Scanner recognizes both authenticated and guest
+              purchases
             </p>
           </div>
         </CardContent>

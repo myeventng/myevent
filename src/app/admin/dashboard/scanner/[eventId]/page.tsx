@@ -54,8 +54,7 @@ export default async function ScannerPage({ params }: ScannerPageProps) {
   }
 
   const eventDate = new Date(event.startDateTime);
-  const isEventDay =
-    Math.abs(eventDate.getTime() - Date.now()) < 24 * 60 * 60 * 1000;
+  const isEventDay = Math.abs(eventDate.getTime() - Date.now()) < 24 * 60 * 60 * 1000;
 
   return (
     <DashboardLayout session={session}>
@@ -71,15 +70,11 @@ export default async function ScannerPage({ params }: ScannerPageProps) {
           <Alert className="border-amber-200 bg-amber-50">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
             <AlertDescription className="text-amber-800">
-              This event is not scheduled for today. Scanner is available for
-              testing purposes.
+              This event is not scheduled for today. Scanner is available for testing purposes.
             </AlertDescription>
           </Alert>
         )}
-        <TicketScannerPage
-          eventId={eventId}
-          eventTitle={event.title as string}
-        />
+        <TicketScannerPage eventId={eventId} eventTitle={event.title as string} />
       </div>
     </DashboardLayout>
   );

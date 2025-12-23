@@ -1,4 +1,3 @@
-// admin/dashboard/scanner/page.tsx
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { getServerSideAuth } from '@/lib/auth-server';
 import { getUserEvents } from '@/actions/event.actions';
@@ -23,18 +22,17 @@ export default async function ScannerIndexPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold">Ticket Scanner</h1>
-          <p className="text-muted-foreground">
-            Select an event to start scanning tickets
-          </p>
+          <p className="text-muted-foreground">Select an event to start scanning tickets</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {events.map((event) => {
-            // ✅ Calculate total tickets from ticketTypes
-            const totalTickets = event.ticketTypes?.reduce(
-              (total, ticketType) => total + (ticketType.tickets?.length || 0),
-              0
-            ) || 0;
+            // Calculate total tickets from ticketTypes
+            const totalTickets =
+              event.ticketTypes?.reduce(
+                (total, ticketType) => total + (ticketType.tickets?.length || 0),
+                0
+              ) || 0;
 
             return (
               <Card key={event.id}>
@@ -56,9 +54,7 @@ export default async function ScannerIndexPage() {
                     </p>
                   </div>
                   <Button asChild className="w-full">
-                    <Link href={`/admin/dashboard/scanner/${event.id}`}>
-                      Open Scanner
-                    </Link>
+                    <Link href={`/admin/dashboard/scanner/${event.id}`}>Open Scanner</Link>
                   </Button>
                 </CardContent>
               </Card>
