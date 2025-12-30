@@ -372,12 +372,18 @@ model Order {
   paymentMethod String? // card, bank_transfer, etc.
   currency      String  @default("NGN")
 
+  // Processing lock to prevent concurrent completions
+  processingLockAt DateTime?
+  processedAt      DateTime?
+
   Notification Notification[]
   tickets      Ticket[] // Direct relation to tickets
 
   @@index([buyerId])
   @@index([eventId])
   @@index([paymentStatus])
+   @@index([paystackId])
+  @@index([processingLockAt])
 }
 
 model UserNote {

@@ -309,15 +309,55 @@ export async function initiateOrder(
 }
 
 // Complete order after payment verification
-// Complete order after payment verification - FIXED VERSION
+// Complete order after payment verification - FINAL FIX WITH DB LOCK
 export async function completeOrder(
   orderId: string,
   paystackReference?: string,
   guestInfo?: { guestEmail?: string; guestName?: string }
 ): Promise<ActionResponse<any>> {
-  console.log(`Starting order completion for: ${orderId}`);
+  console.log(`🔄 Starting order completion for: ${orderId}`);
 
   try {
+    // STEP 1: Try to acquire processing lock
+    const lockAcquired = await prisma.order.updateMany({
+      where: {
+        id: orderId,
+        processingLockAt: null, // Only update if not already locked
+      },
+      data: {
+        processingLockAt: new Date(),
+      },
+    });
+
+    if (lockAcquired.count === 0) {
+      console.log(`⚠️ Order ${orderId} is already being processed by another request`);
+      
+      // Wait a bit and check if order is completed
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { tickets: true },
+      });
+
+      if (order?.paymentStatus === 'COMPLETED' && order.tickets.length > 0) {
+        console.log(`✅ Order ${orderId} was completed by another process`);
+        return {
+          success: true,
+          message: 'Order already completed',
+          data: order,
+        };
+      }
+
+      return {
+        success: false,
+        message: 'Order is being processed, please wait',
+      };
+    }
+
+    console.log(`🔒 Lock acquired for order ${orderId}`);
+
+    // STEP 2: Fetch order with lock acquired
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -334,25 +374,35 @@ export async function completeOrder(
               select: { id: true, name: true, email: true },
             },
           },
-        }, // IMPORTANT: Include existing tickets to check
+        },
       },
     });
 
     if (!order) {
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { processingLockAt: null }, // Release lock
+      });
       return { success: false, message: 'Order not found' };
     }
 
-    // CRITICAL FIX: Check if order already has tickets generated
+    // STEP 3: Check if already completed with tickets
     if (
       order.paymentStatus === 'COMPLETED' &&
       order.tickets &&
       order.tickets.length > 0
     ) {
       console.log(
-        `⚠️ Order ${orderId} already completed with ${order.tickets.length} tickets. Skipping duplicate generation.`
+        `✅ Order ${orderId} already completed with ${order.tickets.length} tickets`
       );
 
-      // Still send email if requested (in case previous email failed)
+      // Release lock
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { processingLockAt: null },
+      });
+
+      // Try to resend email if needed
       try {
         const purchaseData = JSON.parse(order.purchaseNotes || '{}');
         const isGuestPurchase = purchaseData.isGuestPurchase || false;
@@ -419,6 +469,10 @@ export async function completeOrder(
     if (!order.event.isFree && order.totalAmount > 0 && paystackReference) {
       const paystackConfig = await getPaystackConfig();
       if (!paystackConfig.secretKey) {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { processingLockAt: null },
+        });
         return { success: false, message: 'Payment system not configured' };
       }
 
@@ -432,12 +486,20 @@ export async function completeOrder(
 
       const verifyData = await verifyResponse.json();
       if (!verifyData?.status || verifyData?.data?.status !== 'success') {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { processingLockAt: null },
+        });
         return { success: false, message: 'Payment verification failed' };
       }
 
       const paidKobo = Number(verifyData.data.amount);
       const orderKobo = Math.round(Number(order.totalAmount) * 100);
       if (paidKobo !== orderKobo) {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { processingLockAt: null },
+        });
         return { success: false, message: 'Payment amount mismatch' };
       }
     }
@@ -447,17 +509,24 @@ export async function completeOrder(
       ticketSelections = purchaseData.selections || [];
     } catch (error) {
       console.error('Failed to parse ticket selections:', error);
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { processingLockAt: null },
+      });
       return { success: false, message: 'Invalid order data' };
     }
 
     if (!ticketSelections.length) {
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { processingLockAt: null },
+      });
       return { success: false, message: 'No ticket selections found' };
     }
 
     console.log(
       `📊 Processing ${ticketSelections.length} ticket type(s) for order ${orderId}`
     );
-    console.log('Selections:', JSON.stringify(ticketSelections, null, 2));
 
     // Validate ticket availability
     for (const selection of ticketSelections) {
@@ -465,6 +534,10 @@ export async function completeOrder(
         (tt) => tt.id === selection.ticketTypeId
       );
       if (!ticketType || ticketType.quantity < selection.quantity) {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { processingLockAt: null },
+        });
         return {
           success: false,
           message: `Insufficient tickets available for ${selection.name || 'selected type'}`,
@@ -472,40 +545,39 @@ export async function completeOrder(
       }
     }
 
-    // Execute order completion in transaction (SINGLE TRANSACTION TO PREVENT DUPLICATES)
+    // Execute order completion in transaction
     const result = await prisma.$transaction(
       async (tx) => {
-        // 1. FIRST: Check again if tickets already exist within transaction (race condition protection)
+        // Double-check no tickets exist
         const existingTicketsCount = await tx.ticket.count({
           where: { orderId: order.id },
         });
 
         if (existingTicketsCount > 0) {
           console.log(
-            `⚠️ Found ${existingTicketsCount} existing tickets in transaction. Aborting to prevent duplicates.`
+            `⚠️ Found ${existingTicketsCount} existing tickets in transaction`
           );
           throw new Error(
             'DUPLICATE_PREVENTION: Tickets already exist for this order'
           );
         }
 
-        // 2. Update order status FIRST to prevent race conditions
+        // Update order status
         const updatedOrder = await tx.order.update({
           where: { id: order.id },
-          data: { paymentStatus: 'COMPLETED' },
+          data: {
+            paymentStatus: 'COMPLETED',
+            processedAt: new Date(),
+          },
           include: {
             buyer: true,
             event: { include: { venue: { include: { city: true } } } },
           },
         });
 
-        // 3. Create tickets - FIXED: Ensure we respect the exact quantities
+        // Create tickets
         const ticketsToCreate = [];
         for (const selection of ticketSelections) {
-          console.log(
-            `Creating ${selection.quantity} ticket(s) for type ${selection.ticketTypeId}`
-          );
-
           for (let i = 0; i < selection.quantity; i++) {
             const ticketId = generateTicketId();
             const qrCodeData = JSON.stringify({
@@ -554,24 +626,27 @@ export async function completeOrder(
 
         console.log(`✅ Successfully created ${createdTickets.length} tickets`);
 
-        // 4. Update ticket type quantities
+        // Update ticket type quantities
         for (const selection of ticketSelections) {
           await tx.ticketType.update({
             where: { id: selection.ticketTypeId },
             data: { quantity: { decrement: selection.quantity } },
           });
-          console.log(
-            `📉 Decremented ${selection.quantity} from ticket type ${selection.ticketTypeId}`
-          );
         }
 
         return { tickets: createdTickets, order: updatedOrder };
       },
       {
-        maxWait: 5000, // Maximum time to wait for transaction to start
-        timeout: 10000, // Maximum time for transaction to complete
+        maxWait: 10000,
+        timeout: 15000,
       }
     );
+
+    // Release lock after successful completion
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { processingLockAt: null },
+    });
 
     console.log(
       `✅ Order ${orderId} completed with ${result.tickets.length} tickets`
@@ -579,21 +654,14 @@ export async function completeOrder(
 
     // Post-transaction operations
     try {
-      // Create notification only for authenticated users
       if (order.buyerId) {
         await createTicketNotification(result.order.id, 'TICKET_PURCHASED');
       }
 
-      // Determine recipient
       const recipientEmail = isGuestPurchase ? guestEmail : order.buyer?.email;
       const recipientName = isGuestPurchase ? guestName : order.buyer?.name;
 
-      console.log(
-        `Sending tickets to: ${recipientEmail} (Guest: ${isGuestPurchase})`
-      );
-
       if (recipientEmail && recipientName) {
-        // Enhance tickets with guest info
         const ticketsWithGuestInfo = result.tickets.map((ticket) => ({
           ...ticket,
           user: isGuestPurchase
@@ -605,7 +673,6 @@ export async function completeOrder(
             : ticket.user,
         }));
 
-        // Send email
         await ticketEmailService.sendTicketEmail(
           {
             ...result.order,
@@ -638,12 +705,21 @@ export async function completeOrder(
   } catch (error) {
     console.error('Error completing order:', error);
 
-    // Check if error is our duplicate prevention error
+    // Release lock on error
+    try {
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { processingLockAt: null },
+      });
+    } catch (unlockError) {
+      console.error('Failed to release lock:', unlockError);
+    }
+
+    // Handle duplicate prevention error
     if (
       error instanceof Error &&
       error.message.includes('DUPLICATE_PREVENTION')
     ) {
-      // Fetch the completed order to return
       const completedOrder = await prisma.order.findUnique({
         where: { id: orderId },
         include: {
@@ -663,7 +739,10 @@ export async function completeOrder(
     try {
       await prisma.order.update({
         where: { id: orderId },
-        data: { paymentStatus: 'FAILED' },
+        data: {
+          paymentStatus: 'FAILED',
+          processingLockAt: null,
+        },
       });
     } catch (updateError) {
       console.error('Failed to mark order as failed:', updateError);

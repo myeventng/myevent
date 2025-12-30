@@ -1,15 +1,45 @@
-// app/api/payment/callback/route.ts
+// app/api/payment/callback/route.ts - COMPLETELY FIXED
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { completeOrder } from '@/actions/order.actions';
 import { verifyVotePayment } from '@/actions/voting-contest.actions';
 import crypto from 'crypto';
 
+// CRITICAL: Process references to prevent duplicate processing
+const processingReferences = new Map<string, Promise<any>>();
+
+async function processOrderWithLock(
+  reference: string,
+  processor: () => Promise<any>
+): Promise<any> {
+  // Check if already processing
+  const existing = processingReferences.get(reference);
+  if (existing) {
+    console.log(`⚠️ Reference ${reference} already being processed, waiting...`);
+    return existing;
+  }
+
+  // Create processing promise
+  const processingPromise = (async () => {
+    try {
+      return await processor();
+    } finally {
+      // Clean up after 30 seconds
+      setTimeout(() => {
+        processingReferences.delete(reference);
+      }, 30000);
+    }
+  })();
+
+  processingReferences.set(reference, processingPromise);
+  return processingPromise;
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const reference = searchParams.get('reference');
 
-  console.log(`Payment callback received for reference: ${reference}`);
+  console.log(`💳 Payment callback (GET) received for reference: ${reference}`);
 
   if (!reference) {
     return NextResponse.redirect(
@@ -18,29 +48,37 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // First, check if it's a vote order
-    const voteOrder = await prisma.voteOrder.findUnique({
-      where: { paystackId: reference },
-      select: {
-        id: true,
-        paymentStatus: true,
-        contest: {
-          select: {
-            event: {
-              select: {
-                id: true,
-                slug: true,
+    // Use lock to prevent duplicate processing
+    const result = await processOrderWithLock(reference, async () => {
+      // First, check if it's a vote order
+      const voteOrder = await prisma.voteOrder.findUnique({
+        where: { paystackId: reference },
+        include: {
+          contest: {
+            select: {
+              event: {
+                select: {
+                  id: true,
+                  slug: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      });
 
-    if (voteOrder) {
-      // Handle vote order callback
-      if (voteOrder.paymentStatus !== 'COMPLETED') {
-        console.log(`Completing vote order ${voteOrder.id} via callback`);
+      if (voteOrder) {
+        // CRITICAL CHECK: Only process if not already completed
+        if (voteOrder.paymentStatus === 'COMPLETED') {
+          console.log(`✅ Vote order ${voteOrder.id} already completed, skipping`);
+          return {
+            type: 'vote',
+            orderId: voteOrder.id,
+            alreadyCompleted: true,
+          };
+        }
+
+        console.log(`🗳️ Processing vote order ${voteOrder.id}`);
         const result = await verifyVotePayment({
           voteOrderId: voteOrder.id,
           paystackReference: reference,
@@ -48,57 +86,57 @@ export async function GET(request: NextRequest) {
         });
 
         if (!result.success) {
-          console.error(
-            `Failed to complete vote order ${voteOrder.id}:`,
-            result.message
-          );
-          return NextResponse.redirect(
-            `${process.env.NEXT_PUBLIC_APP_URL}/payment/error?error=completion_failed&message=${encodeURIComponent(result.message || 'Unknown error')}&type=vote&eventId=${voteOrder.contest.event.id}`
-          );
+          console.error(`❌ Failed to complete vote order:`, result.message);
+          throw new Error(result.message || 'Vote completion failed');
         }
+
+        return {
+          type: 'vote',
+          orderId: voteOrder.id,
+          eventId: voteOrder.contest.event.id,
+        };
       }
 
-      // Redirect to unified success page with vote order parameters
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/payment/success?voteOrderId=${voteOrder.id}&type=vote`
-      );
-    }
+      // Handle regular ticket order
+      const order = await prisma.order.findUnique({
+        where: { paystackId: reference },
+        include: {
+          tickets: { select: { id: true } },
+        },
+      });
 
-    // Handle regular ticket order callback
-    const order = await prisma.order.findUnique({
-      where: { paystackId: reference },
-      select: {
-        id: true,
-        paymentStatus: true,
-        buyerId: true,
-        purchaseNotes: true,
-      },
-    });
+      if (!order) {
+        console.error(`❌ Order not found for reference: ${reference}`);
+        throw new Error('Order not found');
+      }
 
-    if (!order) {
-      console.error(`Order not found for reference: ${reference}`);
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/payment/error?error=order_not_found`
-      );
-    }
+      // CRITICAL CHECK: If order is completed AND has tickets, skip processing
+      if (order.paymentStatus === 'COMPLETED' && order.tickets.length > 0) {
+        console.log(
+          `✅ Order ${order.id} already completed with ${order.tickets.length} tickets, skipping duplicate processing`
+        );
+        return {
+          type: 'order',
+          orderId: order.id,
+          alreadyCompleted: true,
+        };
+      }
 
-    // Check if this is a guest purchase
-    let isGuestPurchase = false;
-    let guestEmail: string | undefined;
-    let guestName: string | undefined;
+      // Parse guest info
+      let isGuestPurchase = false;
+      let guestEmail: string | undefined;
+      let guestName: string | undefined;
 
-    try {
-      const purchaseData = JSON.parse(order.purchaseNotes || '{}');
-      isGuestPurchase = purchaseData.isGuestPurchase || false;
-      guestEmail = purchaseData.guestEmail;
-      guestName = purchaseData.guestName;
-    } catch (error) {
-      console.error('Failed to parse purchase notes:', error);
-    }
+      try {
+        const purchaseData = JSON.parse(order.purchaseNotes || '{}');
+        isGuestPurchase = purchaseData.isGuestPurchase || false;
+        guestEmail = purchaseData.guestEmail;
+        guestName = purchaseData.guestName;
+      } catch (error) {
+        console.error('Failed to parse purchase notes:', error);
+      }
 
-    // Complete the order if not already completed
-    if (order.paymentStatus !== 'COMPLETED') {
-      console.log(`Completing order ${order.id} via callback`);
+      console.log(`🎫 Processing order ${order.id} (Guest: ${isGuestPurchase})`);
 
       const result = await completeOrder(
         order.id,
@@ -107,34 +145,47 @@ export async function GET(request: NextRequest) {
       );
 
       if (!result.success) {
-        console.error(`Failed to complete order ${order.id}:`, result.message);
-        return NextResponse.redirect(
-          `${process.env.NEXT_PUBLIC_APP_URL}/payment/error?error=completion_failed&message=${encodeURIComponent(result.message || 'Unknown error')}`
-        );
+        console.error(`❌ Failed to complete order:`, result.message);
+        throw new Error(result.message || 'Order completion failed');
       }
-    }
 
-    // Redirect to unified success page with appropriate parameters
+      return {
+        type: 'order',
+        orderId: order.id,
+        isGuest: isGuestPurchase,
+        guestEmail,
+      };
+    });
+
+    // Build success redirect URL
     const successUrl = new URL(
       `${process.env.NEXT_PUBLIC_APP_URL}/payment/success`
     );
-    successUrl.searchParams.set('orderId', order.id);
 
-    if (isGuestPurchase && guestEmail) {
-      successUrl.searchParams.set('guest', 'true');
-      successUrl.searchParams.set('email', guestEmail);
+    if (result.type === 'vote') {
+      successUrl.searchParams.set('voteOrderId', result.orderId);
+      successUrl.searchParams.set('type', 'vote');
+    } else {
+      successUrl.searchParams.set('orderId', result.orderId);
+      if (result.isGuest && result.guestEmail) {
+        successUrl.searchParams.set('guest', 'true');
+        successUrl.searchParams.set('email', result.guestEmail);
+      }
     }
 
+    console.log(`✅ Redirecting to success page`);
     return NextResponse.redirect(successUrl.toString());
   } catch (error) {
-    console.error('Payment callback error:', error);
+    console.error('❌ Payment callback error:', error);
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/payment/error?error=system_error`
+      `${process.env.NEXT_PUBLIC_APP_URL}/payment/error?error=system_error&message=${encodeURIComponent(
+        error instanceof Error ? error.message : 'Unknown error'
+      )}`
     );
   }
 }
 
-// Handle POST requests (Paystack webhook)
+// Handle POST requests (Paystack webhook) - IDEMPOTENT VERSION
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -144,66 +195,92 @@ export async function POST(request: NextRequest) {
     const secretKey = process.env.PAYSTACK_SECRET_KEY;
 
     if (!signature || !secretKey) {
+      console.error('❌ Missing Paystack signature or secret key');
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
-    // Remove the require() and use the imported crypto
     const hash = crypto
       .createHmac('sha512', secretKey)
       .update(JSON.stringify(body))
       .digest('hex');
 
     if (hash !== signature) {
+      console.error('❌ Invalid Paystack signature');
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
-    // Process webhook event
+    console.log(`🔔 Webhook received: ${body.event}`);
+
+    // Process webhook event with idempotency
     if (body.event === 'charge.success') {
       const reference = body.data.reference;
 
-      // Check for vote order
-      const voteOrder = await prisma.voteOrder.findUnique({
-        where: { paystackId: reference },
-        select: { id: true },
-      });
-
-      if (voteOrder) {
-        await verifyVotePayment({
-          voteOrderId: voteOrder.id,
-          paystackReference: reference,
-          paystackData: body.data,
+      // Use lock to prevent duplicate processing from webhook
+      await processOrderWithLock(reference, async () => {
+        // Check for vote order
+        const voteOrder = await prisma.voteOrder.findUnique({
+          where: { paystackId: reference },
+          select: { id: true, paymentStatus: true },
         });
-        return NextResponse.json({ received: true });
-      }
 
-      // Check for regular order
-      const order = await prisma.order.findUnique({
-        where: { paystackId: reference },
-        select: { id: true, purchaseNotes: true },
-      });
-
-      if (order) {
-        // Parse guest info
-        let guestInfo: { guestEmail?: string; guestName?: string } | undefined;
-        try {
-          const purchaseData = JSON.parse(order.purchaseNotes || '{}');
-          if (purchaseData.isGuestPurchase) {
-            guestInfo = {
-              guestEmail: purchaseData.guestEmail,
-              guestName: purchaseData.guestName,
-            };
+        if (voteOrder) {
+          // Skip if already completed
+          if (voteOrder.paymentStatus === 'COMPLETED') {
+            console.log(
+              `✅ Webhook: Vote order ${voteOrder.id} already completed, skipping`
+            );
+            return;
           }
-        } catch (error) {
-          console.error('Error parsing purchase notes:', error);
+
+          console.log(`🔔 Webhook: Processing vote order ${voteOrder.id}`);
+          await verifyVotePayment({
+            voteOrderId: voteOrder.id,
+            paystackReference: reference,
+            paystackData: body.data,
+          });
+          return;
         }
 
-        await completeOrder(order.id, reference, guestInfo);
-      }
+        // Check for regular order
+        const order = await prisma.order.findUnique({
+          where: { paystackId: reference },
+          include: {
+            tickets: { select: { id: true } },
+          },
+        });
+
+        if (order) {
+          // Skip if already completed with tickets
+          if (order.paymentStatus === 'COMPLETED' && order.tickets.length > 0) {
+            console.log(
+              `✅ Webhook: Order ${order.id} already completed with ${order.tickets.length} tickets, skipping`
+            );
+            return;
+          }
+
+          // Parse guest info
+          let guestInfo: { guestEmail?: string; guestName?: string } | undefined;
+          try {
+            const purchaseData = JSON.parse(order.purchaseNotes || '{}');
+            if (purchaseData.isGuestPurchase) {
+              guestInfo = {
+                guestEmail: purchaseData.guestEmail,
+                guestName: purchaseData.guestName,
+              };
+            }
+          } catch (error) {
+            console.error('Webhook: Error parsing purchase notes:', error);
+          }
+
+          console.log(`🔔 Webhook: Processing order ${order.id}`);
+          await completeOrder(order.id, reference, guestInfo);
+        }
+      });
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error('Webhook error:', error);
+    console.error('❌ Webhook error:', error);
     return NextResponse.json(
       { error: 'Webhook processing failed' },
       { status: 500 }
