@@ -426,24 +426,31 @@ export function AdminTicketsTable({
       },
     },
     {
-      id: 'event',
-      header: 'Event',
-      accessorFn: (row) => row.ticketType.event.title,
-      cell: ({ row }) => {
-        const event = row.original.ticketType.event;
-        return (
-          <div className="max-w-[200px]">
-            <div className="font-medium truncate">{event.title}</div>
-            <div className="text-sm text-muted-foreground">
-              {formatDateTime(event.startDateTime)}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {event.venue.name}, {event.venue.city?.name}
-            </div>
-          </div>
-        );
-      },
-    },
+  id: 'event',
+  header: 'Event',
+  accessorFn: (row) => row.ticketType.event.title,
+  cell: ({ row }) => {
+    const event = row.original.ticketType.event;
+    const venueName = event.venue.name;
+    const cityName = event.venue.city?.name || '';
+    const fullVenue = cityName ? `${venueName}, ${cityName}` : venueName;
+    const truncatedVenue = fullVenue.length > 25 
+      ? `${fullVenue.substring(0, 25)}...` 
+      : fullVenue;
+    
+    return (
+      <div className="max-w-[200px]">
+        <div className="font-medium truncate">{event.title}</div>
+        <div className="text-sm text-muted-foreground">
+          {formatDateTime(event.startDateTime)}
+        </div>
+        <div className="text-sm text-muted-foreground" title={fullVenue}>
+          {truncatedVenue}
+        </div>
+      </div>
+    );
+  },
+},
     {
       id: 'ticketType',
       header: 'Ticket Type',

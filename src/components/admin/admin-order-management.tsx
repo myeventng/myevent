@@ -1,4 +1,4 @@
-// src/components/admin/admin-order-management.tsx - Complete Rewrite with Guest Support
+// src/components/admin/admin-order-management.tsx 
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -59,6 +59,8 @@ import {
   Clock,
   Receipt,
   Users,
+  UserCheck,
+  UserX,
 } from 'lucide-react';
 import { PaymentStatus, RefundStatus } from '@/generated/prisma';
 import { getAllOrders, processRefund } from '@/actions/order.actions';
@@ -716,17 +718,18 @@ export function AdminOrderManagement({
                             {customerInfo.isGuest ? (
                               <>
                                 <div className="flex items-center gap-1 mb-1">
+                                  <UserX className="h-3 w-3 text-orange-600" />
+                                  <p className="font-medium text-orange-700">
+                                    {customerInfo.name}
+                                  </p>
                                   <Badge
                                     variant="secondary"
-                                    className="text-xs"
+                                    className="text-xs ml-1 bg-orange-100 text-orange-800 border-orange-200"
                                   >
                                     Guest
                                   </Badge>
-                                  <p className="font-medium">
-                                    {customerInfo.name}
-                                  </p>
                                 </div>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-sm text-orange-600">
                                   {customerInfo.email}
                                 </p>
                                 {customerInfo.phone && (
@@ -737,9 +740,12 @@ export function AdminOrderManagement({
                               </>
                             ) : (
                               <>
-                                <p className="font-medium">
-                                  {customerInfo.name}
-                                </p>
+                                <div className="flex items-center gap-1 mb-1">
+                                  <UserCheck className="h-3 w-3 text-green-600" />
+                                  <p className="font-medium">
+                                    {customerInfo.name}
+                                  </p>
+                                </div>
                                 <p className="text-sm text-muted-foreground">
                                   {customerInfo.email}
                                 </p>
