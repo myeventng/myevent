@@ -1,15 +1,15 @@
-'use server';
+"use server";
 
-import { revalidatePath } from 'next/cache';
-import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
-import crypto from 'crypto';
-import { getPlatformFee } from '@/lib/platform-settings';
-import { sendInvitationEmail } from '@/lib/email/send-invitation-email';
-import { sendRSVPConfirmationEmail } from '@/lib/email/send-rsvp-confirmation';
-import { sendDonationReceiptEmail } from '@/lib/email/send-donation-receipt';
-import { bulkSendInvitations } from '@/lib/email/bulk-send-invitations';
+import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import crypto from "crypto";
+import { getPlatformFee } from "@/lib/platform-settings";
+import { sendInvitationEmail } from "@/lib/email/send-invitation-email";
+import { sendRSVPConfirmationEmail } from "@/lib/email/send-rsvp-confirmation";
+import { sendDonationReceiptEmail } from "@/lib/email/send-donation-receipt";
+import { bulkSendInvitations } from "@/lib/email/bulk-send-invitations";
 
 interface ActionResponse<T> {
   success: boolean;
@@ -19,7 +19,7 @@ interface ActionResponse<T> {
 
 // Generate unique invitation code
 function generateInvitationCode(): string {
-  return crypto.randomBytes(16).toString('hex');
+  return crypto.randomBytes(16).toString("hex");
 }
 
 // CREATE INVITE-ONLY EVENT CONFIGURATION
@@ -37,6 +37,7 @@ export async function createInviteOnlyEvent(data: {
   minimumDonation?: number;
   donationDescription?: string;
   showDonorNames: boolean;
+  enableSeatingArrangement?: boolean;
   isPrivate: boolean;
   requireApproval: boolean;
 }): Promise<ActionResponse<any>> {
@@ -56,6 +57,7 @@ export async function createInviteOnlyEvent(data: {
         minimumDonation: data.minimumDonation,
         donationDescription: data.donationDescription,
         showDonorNames: data.showDonorNames,
+        enableSeatingArrangement: data.enableSeatingArrangement ?? false, // ✅ ADD THIS
         isPrivate: data.isPrivate,
         requireApproval: data.requireApproval,
       },
@@ -63,14 +65,14 @@ export async function createInviteOnlyEvent(data: {
 
     return {
       success: true,
-      message: 'Invite-only event configuration created successfully',
+      message: "Invite-only event configuration created successfully",
       data: inviteOnlyEvent,
     };
   } catch (error) {
-    console.error('Error creating invite-only event:', error);
+    console.error("Error creating invite-only event:", error);
     return {
       success: false,
-      message: 'Failed to create invite-only event configuration',
+      message: "Failed to create invite-only event configuration",
     };
   }
 }
@@ -90,6 +92,7 @@ export async function updateInviteOnlyEvent(data: {
   minimumDonation?: number;
   donationDescription?: string;
   showDonorNames: boolean;
+  enableSeatingArrangement?: boolean;
   isPrivate: boolean;
   requireApproval: boolean;
 }): Promise<ActionResponse<any>> {
@@ -109,6 +112,7 @@ export async function updateInviteOnlyEvent(data: {
         minimumDonation: data.minimumDonation,
         donationDescription: data.donationDescription,
         showDonorNames: data.showDonorNames,
+        enableSeatingArrangement: data.enableSeatingArrangement, // ✅ ADD THIS
         isPrivate: data.isPrivate,
         requireApproval: data.requireApproval,
       },
@@ -116,14 +120,14 @@ export async function updateInviteOnlyEvent(data: {
 
     return {
       success: true,
-      message: 'Invite-only event configuration updated successfully',
+      message: "Invite-only event configuration updated successfully",
       data: inviteOnlyEvent,
     };
   } catch (error) {
-    console.error('Error updating invite-only event:', error);
+    console.error("Error updating invite-only event:", error);
     return {
       success: false,
-      message: 'Failed to update invite-only event configuration',
+      message: "Failed to update invite-only event configuration",
     };
   }
 }
@@ -153,7 +157,7 @@ export async function createInvitation(data: {
     if (existingInvitation) {
       return {
         success: false,
-        message: 'An invitation already exists for this email address',
+        message: "An invitation already exists for this email address",
       };
     }
 
@@ -198,7 +202,7 @@ export async function createInvitation(data: {
           });
           console.log(`Invitation email sent to ${data.guestEmail}`);
         } catch (emailError) {
-          console.error('Error sending invitation email:', emailError);
+          console.error("Error sending invitation email:", emailError);
           // Don't fail the invitation creation if email fails
         }
       }
@@ -206,14 +210,14 @@ export async function createInvitation(data: {
 
     return {
       success: true,
-      message: 'Invitation created successfully',
+      message: "Invitation created successfully",
       data: invitation,
     };
   } catch (error) {
-    console.error('Error creating invitation:', error);
+    console.error("Error creating invitation:", error);
     return {
       success: false,
-      message: 'Failed to create invitation',
+      message: "Failed to create invitation",
     };
   }
 }
@@ -247,14 +251,14 @@ export async function bulkCreateInvitations(data: {
       failed++;
       console.error(
         `Failed to create invitation for ${guest.guestEmail}:`,
-        result.message
+        result.message,
       );
     }
   }
 
   return {
     success: true,
-    message: `Created ${successful} invitations${failed > 0 ? `, ${failed} failed` : ''}`,
+    message: `Created ${successful} invitations${failed > 0 ? `, ${failed} failed` : ""}`,
     data: { successful, failed },
   };
 }
@@ -284,21 +288,21 @@ export async function updateInvitation(data: {
 
     return {
       success: true,
-      message: 'Invitation updated successfully',
+      message: "Invitation updated successfully",
       data: invitation,
     };
   } catch (error) {
-    console.error('Error updating invitation:', error);
+    console.error("Error updating invitation:", error);
     return {
       success: false,
-      message: 'Failed to update invitation',
+      message: "Failed to update invitation",
     };
   }
 }
 
 // DELETE INVITATION
 export async function deleteInvitation(
-  id: string
+  id: string,
 ): Promise<ActionResponse<null>> {
   try {
     await prisma.invitation.delete({
@@ -307,13 +311,13 @@ export async function deleteInvitation(
 
     return {
       success: true,
-      message: 'Invitation deleted successfully',
+      message: "Invitation deleted successfully",
     };
   } catch (error) {
-    console.error('Error deleting invitation:', error);
+    console.error("Error deleting invitation:", error);
     return {
       success: false,
-      message: 'Failed to delete invitation',
+      message: "Failed to delete invitation",
     };
   }
 }
@@ -321,7 +325,7 @@ export async function deleteInvitation(
 // RSVP TO INVITATION (Guest action - no authentication required)
 export async function rsvpToInvitation(data: {
   invitationCode: string;
-  rsvpResponse: 'ATTENDING' | 'NOT_ATTENDING' | 'MAYBE';
+  rsvpResponse: "ATTENDING" | "NOT_ATTENDING" | "MAYBE";
   plusOnesConfirmed?: number;
   plusOneNames?: string[];
 }): Promise<ActionResponse<any>> {
@@ -344,7 +348,7 @@ export async function rsvpToInvitation(data: {
     if (!invitation) {
       return {
         success: false,
-        message: 'Invalid invitation code',
+        message: "Invalid invitation code",
       };
     }
 
@@ -353,7 +357,7 @@ export async function rsvpToInvitation(data: {
       if (new Date() > invitation.inviteOnlyEvent.rsvpDeadline) {
         return {
           success: false,
-          message: 'RSVP deadline has passed',
+          message: "RSVP deadline has passed",
         };
       }
     }
@@ -376,7 +380,7 @@ export async function rsvpToInvitation(data: {
         rsvpDate: new Date(),
         plusOnesConfirmed: data.plusOnesConfirmed || 0,
         plusOneNames: data.plusOneNames || [],
-        status: data.rsvpResponse === 'ATTENDING' ? 'ACCEPTED' : 'DECLINED',
+        status: data.rsvpResponse === "ATTENDING" ? "ACCEPTED" : "DECLINED",
       },
       include: {
         inviteOnlyEvent: {
@@ -399,35 +403,35 @@ export async function rsvpToInvitation(data: {
           invitation: {
             ...updatedInvitation,
             rsvpResponse: updatedInvitation.rsvpResponse as
-              | 'ATTENDING'
-              | 'NOT_ATTENDING'
-              | 'MAYBE',
+              | "ATTENDING"
+              | "NOT_ATTENDING"
+              | "MAYBE",
           },
         });
         console.log(`RSVP confirmation email sent to ${invitation.guestEmail}`);
       }
     } catch (emailError) {
-      console.error('Error sending RSVP confirmation email:', emailError);
+      console.error("Error sending RSVP confirmation email:", emailError);
       // Don't fail the RSVP if email fails
     }
 
     return {
       success: true,
-      message: 'RSVP recorded successfully',
+      message: "RSVP recorded successfully",
       data: updatedInvitation,
     };
   } catch (error) {
-    console.error('Error recording RSVP:', error);
+    console.error("Error recording RSVP:", error);
     return {
       success: false,
-      message: 'Failed to record RSVP',
+      message: "Failed to record RSVP",
     };
   }
 }
 
 // GET INVITATION BY CODE (for guest RSVP page)
 export async function getInvitationByCode(
-  code: string
+  code: string,
 ): Promise<ActionResponse<any>> {
   try {
     const invitation = await prisma.invitation.findUnique({
@@ -455,7 +459,7 @@ export async function getInvitationByCode(
     if (!invitation) {
       return {
         success: false,
-        message: 'Invitation not found',
+        message: "Invitation not found",
       };
     }
 
@@ -464,10 +468,10 @@ export async function getInvitationByCode(
       data: invitation,
     };
   } catch (error) {
-    console.error('Error fetching invitation:', error);
+    console.error("Error fetching invitation:", error);
     return {
       success: false,
-      message: 'Failed to fetch invitation',
+      message: "Failed to fetch invitation",
     };
   }
 }
@@ -495,14 +499,14 @@ export async function createDonationOrder(data: {
     if (!event || !event.inviteOnlyEvent) {
       return {
         success: false,
-        message: 'Event not found or is not an invite-only event',
+        message: "Event not found or is not an invite-only event",
       };
     }
 
     if (!event.inviteOnlyEvent.acceptDonations) {
       return {
         success: false,
-        message: 'This event is not accepting donations',
+        message: "This event is not accepting donations",
       };
     }
 
@@ -522,7 +526,7 @@ export async function createDonationOrder(data: {
     const netAmount = data.amount - platformFee;
 
     // Generate Paystack reference
-    const paystackId = `donation-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    const paystackId = `donation-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
 
     // Find invitation if code provided
     let invitationId: string | undefined;
@@ -545,7 +549,7 @@ export async function createDonationOrder(data: {
         donorPhone: data.donorPhone,
         isAnonymous: data.isAnonymous,
         donationMessage: data.donationMessage,
-        paymentStatus: 'PENDING',
+        paymentStatus: "PENDING",
       },
     });
 
@@ -563,24 +567,24 @@ export async function createDonationOrder(data: {
 
     return {
       success: true,
-      message: 'Donation order created successfully',
+      message: "Donation order created successfully",
       data: {
         ...donationOrder,
         paystackPublicKey: process.env.PAYSTACK_PUBLIC_KEY,
       },
     };
   } catch (error) {
-    console.error('Error creating donation order:', error);
+    console.error("Error creating donation order:", error);
     return {
       success: false,
-      message: 'Failed to create donation order',
+      message: "Failed to create donation order",
     };
   }
 }
 
 // VERIFY DONATION PAYMENT
 export async function verifyDonationPayment(
-  reference: string
+  reference: string,
 ): Promise<ActionResponse<any>> {
   try {
     const donationOrder = await prisma.donationOrder.findUnique({
@@ -598,7 +602,7 @@ export async function verifyDonationPayment(
     if (!donationOrder) {
       return {
         success: false,
-        message: 'Donation order not found',
+        message: "Donation order not found",
       };
     }
 
@@ -609,16 +613,16 @@ export async function verifyDonationPayment(
         headers: {
           Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
         },
-      }
+      },
     );
 
     const paystackData = await paystackResponse.json();
 
-    if (paystackData.data.status === 'success') {
+    if (paystackData.data.status === "success") {
       const updatedOrder = await prisma.donationOrder.update({
         where: { id: donationOrder.id },
         data: {
-          paymentStatus: 'COMPLETED',
+          paymentStatus: "COMPLETED",
           paymentMethod: paystackData.data.channel,
         },
         include: {
@@ -632,17 +636,17 @@ export async function verifyDonationPayment(
           await sendDonationReceiptEmail({ donationOrder: updatedOrder });
           console.log(`Donation receipt sent to ${updatedOrder.donorEmail}`);
         } catch (emailError) {
-          console.error('Error sending donation receipt:', emailError);
+          console.error("Error sending donation receipt:", emailError);
         }
       }
 
       // Create notification for organizer
       await prisma.notification.create({
         data: {
-          type: 'PAYMENT_RECEIVED',
-          status: 'UNREAD',
-          title: 'Donation Received',
-          message: `Received ${updatedOrder.isAnonymous ? 'anonymous' : ''} donation of ₦${updatedOrder.amount.toLocaleString()} for ${updatedOrder.event.title}`,
+          type: "PAYMENT_RECEIVED",
+          status: "UNREAD",
+          title: "Donation Received",
+          message: `Received ${updatedOrder.isAnonymous ? "anonymous" : ""} donation of ₦${updatedOrder.amount.toLocaleString()} for ${updatedOrder.event.title}`,
           userId: updatedOrder.event.userId,
           eventId: updatedOrder.eventId,
         },
@@ -650,27 +654,27 @@ export async function verifyDonationPayment(
 
       return {
         success: true,
-        message: 'Donation verified successfully',
+        message: "Donation verified successfully",
         data: updatedOrder,
       };
     } else {
       await prisma.donationOrder.update({
         where: { id: donationOrder.id },
         data: {
-          paymentStatus: 'FAILED',
+          paymentStatus: "FAILED",
         },
       });
 
       return {
         success: false,
-        message: 'Payment verification failed',
+        message: "Payment verification failed",
       };
     }
   } catch (error) {
-    console.error('Error verifying donation payment:', error);
+    console.error("Error verifying donation payment:", error);
     return {
       success: false,
-      message: 'Failed to verify payment',
+      message: "Failed to verify payment",
     };
   }
 }
@@ -681,30 +685,30 @@ export async function getEventDonations(eventId: string) {
     const donations = await prisma.donationOrder.findMany({
       where: {
         eventId,
-        paymentStatus: 'COMPLETED', // Changed from 'SUCCESS' to 'COMPLETED'
+        paymentStatus: "COMPLETED", // Changed from 'SUCCESS' to 'COMPLETED'
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
     });
 
     // Calculate statistics
     const totalDonations = donations.reduce(
       (sum, donation) => sum + donation.amount,
-      0
+      0,
     );
     const totalFees = donations.reduce(
       (sum, donation) => sum + donation.platformFee,
-      0
+      0,
     );
     const netTotal = donations.reduce(
       (sum, donation) => sum + donation.netAmount,
-      0
+      0,
     );
     const donorCount = new Set(
       donations
         .filter((d) => !d.isAnonymous && d.donorName)
-        .map((d) => d.donorEmail || d.donorName)
+        .map((d) => d.donorEmail || d.donorName),
     ).size;
 
     return {
@@ -718,10 +722,10 @@ export async function getEventDonations(eventId: string) {
       },
     };
   } catch (error) {
-    console.error('Error getting event donations:', error);
+    console.error("Error getting event donations:", error);
     return {
       success: false,
-      message: 'Failed to load donations',
+      message: "Failed to load donations",
     };
   }
 }
@@ -734,7 +738,7 @@ export async function getEventInvitations(inviteOnlyEventId: string) {
       include: {
         invitations: {
           orderBy: {
-            createdAt: 'desc',
+            createdAt: "desc",
           },
         },
         event: {
@@ -750,7 +754,7 @@ export async function getEventInvitations(inviteOnlyEventId: string) {
     if (!inviteOnlyEvent) {
       return {
         success: false,
-        message: 'Invite-only event not found',
+        message: "Invite-only event not found",
       };
     }
 
@@ -758,19 +762,19 @@ export async function getEventInvitations(inviteOnlyEventId: string) {
     const stats = {
       total: inviteOnlyEvent.invitations.length,
       accepted: inviteOnlyEvent.invitations.filter(
-        (inv) => inv.status === 'ACCEPTED'
+        (inv) => inv.status === "ACCEPTED",
       ).length,
       declined: inviteOnlyEvent.invitations.filter(
-        (inv) => inv.status === 'DECLINED'
+        (inv) => inv.status === "DECLINED",
       ).length,
       pending: inviteOnlyEvent.invitations.filter(
-        (inv) => inv.status === 'PENDING'
+        (inv) => inv.status === "PENDING",
       ).length,
       attended: inviteOnlyEvent.invitations.filter((inv) => inv.checkedInAt)
         .length,
       totalPlusOnes: inviteOnlyEvent.invitations.reduce(
         (sum, inv) => sum + inv.plusOnesConfirmed,
-        0
+        0,
       ),
     };
 
@@ -783,10 +787,10 @@ export async function getEventInvitations(inviteOnlyEventId: string) {
       },
     };
   } catch (error) {
-    console.error('Error getting event invitations:', error);
+    console.error("Error getting event invitations:", error);
     return {
       success: false,
-      message: 'Failed to load invitations',
+      message: "Failed to load invitations",
     };
   }
 }
@@ -805,7 +809,7 @@ export async function checkInGuest(data: {
     if (!session) {
       return {
         success: false,
-        message: 'Not authenticated',
+        message: "Not authenticated",
       };
     }
 
@@ -816,28 +820,28 @@ export async function checkInGuest(data: {
     if (!invitation) {
       return {
         success: false,
-        message: 'Invalid invitation code',
+        message: "Invalid invitation code",
       };
     }
 
-    if (invitation.status !== 'ACCEPTED') {
+    if (invitation.status !== "ACCEPTED") {
       return {
         success: false,
-        message: 'Guest has not confirmed attendance',
+        message: "Guest has not confirmed attendance",
       };
     }
 
     if (invitation.checkedInAt) {
       return {
         success: false,
-        message: 'Guest already checked in',
+        message: "Guest already checked in",
       };
     }
 
     const updatedInvitation = await prisma.invitation.update({
       where: { id: invitation.id },
       data: {
-        status: 'ATTENDED',
+        status: "ATTENDED",
         checkedInAt: new Date(),
         checkedInBy: session.user.id,
       },
@@ -845,14 +849,14 @@ export async function checkInGuest(data: {
 
     return {
       success: true,
-      message: 'Guest checked in successfully',
+      message: "Guest checked in successfully",
       data: updatedInvitation,
     };
   } catch (error) {
-    console.error('Error checking in guest:', error);
+    console.error("Error checking in guest:", error);
     return {
       success: false,
-      message: 'Failed to check in guest',
+      message: "Failed to check in guest",
     };
   }
 }
@@ -894,7 +898,7 @@ export async function sendInvitationEmails(data: {
     if (results.sent > 0) {
       const successfulEmails = invitations
         .filter(
-          (inv) => !results.errors.some((e: any) => e.email === inv.guestEmail)
+          (inv) => !results.errors.some((e: any) => e.email === inv.guestEmail),
         )
         .map((inv) => inv.id);
 
@@ -911,21 +915,21 @@ export async function sendInvitationEmails(data: {
 
     return {
       success: true,
-      message: `Sent ${results.sent} invitations${results.failed > 0 ? `, ${results.failed} failed` : ''}`,
+      message: `Sent ${results.sent} invitations${results.failed > 0 ? `, ${results.failed} failed` : ""}`,
       data: { sent: results.sent, failed: results.failed },
     };
   } catch (error) {
-    console.error('Error sending invitation emails:', error);
+    console.error("Error sending invitation emails:", error);
     return {
       success: false,
-      message: 'Failed to send invitation emails',
+      message: "Failed to send invitation emails",
     };
   }
 }
 
 // RESEND SINGLE INVITATION
 export async function resendInvitation(
-  invitationId: string
+  invitationId: string,
 ): Promise<ActionResponse<any>> {
   try {
     const invitation = await prisma.invitation.findUnique({
@@ -947,7 +951,7 @@ export async function resendInvitation(
     if (!invitation) {
       return {
         success: false,
-        message: 'Invitation not found',
+        message: "Invitation not found",
       };
     }
 
@@ -971,20 +975,20 @@ export async function resendInvitation(
 
       return {
         success: true,
-        message: 'Invitation email resent successfully',
+        message: "Invitation email resent successfully",
       };
     } catch (emailError) {
-      console.error('Error sending email:', emailError);
+      console.error("Error sending email:", emailError);
       return {
         success: false,
-        message: 'Failed to send invitation email',
+        message: "Failed to send invitation email",
       };
     }
   } catch (error) {
-    console.error('Error resending invitation:', error);
+    console.error("Error resending invitation:", error);
     return {
       success: false,
-      message: 'Failed to resend invitation',
+      message: "Failed to resend invitation",
     };
   }
 }

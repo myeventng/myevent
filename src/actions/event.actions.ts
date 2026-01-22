@@ -1,18 +1,18 @@
-'use server';
+"use server";
 
-import { revalidatePath } from 'next/cache';
-import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 import {
   AgeRestriction,
   DressCode,
   PublishedStatus,
   EventType,
   VotingType,
-} from '@/generated/prisma';
-import { createEventNotification } from '@/actions/notification.actions';
-import crypto from 'crypto';
+} from "@/generated/prisma";
+import { createEventNotification } from "@/actions/notification.actions";
+import crypto from "crypto";
 
 interface PermissionValidationResult {
   success: boolean;
@@ -61,16 +61,16 @@ interface ActionResponse<T> {
 // Generate a unique slug from title
 const generateSlug = async (
   title: string,
-  eventId?: string
+  eventId?: string,
 ): Promise<string> => {
   // Create base slug from title
   const baseSlug = title
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9\s-]/g, '') // Remove special characters except spaces and hyphens
-    .replace(/\s+/g, '-') // Replace spaces with hyphens
-    .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
-    .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+    .replace(/[^a-z0-9\s-]/g, "") // Remove special characters except spaces and hyphens
+    .replace(/\s+/g, "-") // Replace spaces with hyphens
+    .replace(/-+/g, "-") // Replace multiple hyphens with single hyphen
+    .replace(/^-+|-+$/g, ""); // Remove leading/trailing hyphens
 
   // Ensure we have a valid slug
   if (!baseSlug) {
@@ -113,14 +113,14 @@ const validateUserPermission =
     if (!session) {
       return {
         success: false,
-        message: 'Not authenticated',
+        message: "Not authenticated",
       };
     }
 
     const { role, subRole } = session.user;
 
     // Admin with STAFF or SUPER_ADMIN subRole can always manage events
-    if (role === 'ADMIN' && ['STAFF', 'SUPER_ADMIN'].includes(subRole)) {
+    if (role === "ADMIN" && ["STAFF", "SUPER_ADMIN"].includes(subRole)) {
       return {
         success: true,
         userData: {
@@ -132,7 +132,7 @@ const validateUserPermission =
     }
 
     // Check if user is an organizer
-    if (subRole === 'ORGANIZER') {
+    if (subRole === "ORGANIZER") {
       // Check if organizer profile exists
       const organizerProfile = await prisma.organizerProfile.findUnique({
         where: { userId: session.user.id },
@@ -142,7 +142,7 @@ const validateUserPermission =
         return {
           success: false,
           message:
-            'You must complete your organizer profile before creating events',
+            "You must complete your organizer profile before creating events",
         };
       }
 
@@ -158,7 +158,7 @@ const validateUserPermission =
 
     return {
       success: false,
-      message: 'You do not have permission to perform this action',
+      message: "You do not have permission to perform this action",
     };
   };
 
@@ -184,7 +184,7 @@ export async function createEvent(data: any): Promise<ActionResponse<any>> {
     if (!venue) {
       return {
         success: false,
-        message: 'Venue not found',
+        message: "Venue not found",
       };
     }
 
@@ -197,7 +197,7 @@ export async function createEvent(data: any): Promise<ActionResponse<any>> {
       if (!category) {
         return {
           success: false,
-          message: 'Category not found',
+          message: "Category not found",
         };
       }
     }
@@ -208,17 +208,17 @@ export async function createEvent(data: any): Promise<ActionResponse<any>> {
     if (!slug) {
       return {
         success: false,
-        message: 'Failed to generate unique slug for event',
+        message: "Failed to generate unique slug for event",
       };
     }
 
     // Determine publish status
     let publishedStatus: PublishedStatus;
     if (isAdmin) {
-      publishedStatus = data.publishedStatus || 'PUBLISHED';
+      publishedStatus = data.publishedStatus || "PUBLISHED";
     } else {
       publishedStatus =
-        data.publishedStatus === 'DRAFT' ? 'DRAFT' : 'PENDING_REVIEW';
+        data.publishedStatus === "DRAFT" ? "DRAFT" : "PENDING_REVIEW";
     }
 
     // Create base event only - no type-specific nested data
@@ -273,20 +273,20 @@ export async function createEvent(data: any): Promise<ActionResponse<any>> {
     // These are called from the form AFTER this function returns
 
     // Create notification if pending review
-    if (publishedStatus === 'PENDING_REVIEW') {
-      await createEventNotification(newEvent.id, 'EVENT_SUBMITTED');
+    if (publishedStatus === "PENDING_REVIEW") {
+      await createEventNotification(newEvent.id, "EVENT_SUBMITTED");
     }
 
-    revalidatePath('/admin/events');
-    revalidatePath('/dashboard/events');
-    revalidatePath('/events');
+    revalidatePath("/admin/events");
+    revalidatePath("/dashboard/events");
+    revalidatePath("/events");
 
     const message =
-      publishedStatus === 'PUBLISHED'
-        ? 'Event created and published successfully'
-        : publishedStatus === 'PENDING_REVIEW'
-          ? 'Event created and submitted for review'
-          : 'Event saved as draft';
+      publishedStatus === "PUBLISHED"
+        ? "Event created and published successfully"
+        : publishedStatus === "PENDING_REVIEW"
+          ? "Event created and submitted for review"
+          : "Event saved as draft";
 
     return {
       success: true,
@@ -294,10 +294,10 @@ export async function createEvent(data: any): Promise<ActionResponse<any>> {
       data: newEvent,
     };
   } catch (error) {
-    console.error('Error creating event:', error);
+    console.error("Error creating event:", error);
     return {
       success: false,
-      message: 'Failed to create event',
+      message: "Failed to create event",
     };
   }
 }
@@ -328,14 +328,14 @@ export async function updateEvent(data: any): Promise<ActionResponse<any>> {
     if (!existingEvent) {
       return {
         success: false,
-        message: 'Event not found',
+        message: "Event not found",
       };
     }
 
     if (!isAdmin && existingEvent.userId !== userId) {
       return {
         success: false,
-        message: 'You can only update events that you created',
+        message: "You can only update events that you created",
       };
     }
 
@@ -348,19 +348,19 @@ export async function updateEvent(data: any): Promise<ActionResponse<any>> {
     // Handle tag updates
     const existingTagIds = existingEvent.tags.map((tag: any) => tag.id);
     const disconnectTags = existingTagIds.filter(
-      (id: any) => !data.tagIds.includes(id)
+      (id: any) => !data.tagIds.includes(id),
     );
     const connectTags = data.tagIds.filter(
-      (id: any) => !existingTagIds.includes(id)
+      (id: any) => !existingTagIds.includes(id),
     );
 
     // Determine publish status
     let publishedStatus: PublishedStatus;
     if (isAdmin) {
-      publishedStatus = data.publishedStatus || 'PUBLISHED';
+      publishedStatus = data.publishedStatus || "PUBLISHED";
     } else {
       publishedStatus =
-        data.publishedStatus === 'DRAFT' ? 'DRAFT' : 'PENDING_REVIEW';
+        data.publishedStatus === "DRAFT" ? "DRAFT" : "PENDING_REVIEW";
     }
 
     // Update base event only - no type-specific nested data
@@ -419,34 +419,34 @@ export async function updateEvent(data: any): Promise<ActionResponse<any>> {
     // Create notifications based on status change
     if (
       isAdmin &&
-      publishedStatus === 'PUBLISHED' &&
-      existingEvent.publishedStatus !== 'PUBLISHED'
+      publishedStatus === "PUBLISHED" &&
+      existingEvent.publishedStatus !== "PUBLISHED"
     ) {
       await createEventNotification(
         data.id,
-        'EVENT_APPROVED',
-        existingEvent.userId ?? undefined
+        "EVENT_APPROVED",
+        existingEvent.userId ?? undefined,
       );
     } else if (
       !isAdmin &&
-      publishedStatus === 'PENDING_REVIEW' &&
-      existingEvent.publishedStatus !== 'PENDING_REVIEW'
+      publishedStatus === "PENDING_REVIEW" &&
+      existingEvent.publishedStatus !== "PENDING_REVIEW"
     ) {
-      await createEventNotification(data.id, 'EVENT_SUBMITTED');
+      await createEventNotification(data.id, "EVENT_SUBMITTED");
     }
 
-    revalidatePath('/admin/events');
-    revalidatePath('/dashboard/events');
+    revalidatePath("/admin/events");
+    revalidatePath("/dashboard/events");
     revalidatePath(`/events/${updatedEvent.slug}`);
     revalidatePath(`/events/${data.id}`);
-    revalidatePath('/events');
+    revalidatePath("/events");
 
     const message =
-      publishedStatus === 'PUBLISHED'
-        ? 'Event updated and published successfully'
-        : publishedStatus === 'PENDING_REVIEW'
-          ? 'Event updated and submitted for review'
-          : 'Event updated and saved as draft';
+      publishedStatus === "PUBLISHED"
+        ? "Event updated and published successfully"
+        : publishedStatus === "PENDING_REVIEW"
+          ? "Event updated and submitted for review"
+          : "Event updated and saved as draft";
 
     return {
       success: true,
@@ -454,10 +454,10 @@ export async function updateEvent(data: any): Promise<ActionResponse<any>> {
       data: updatedEvent,
     };
   } catch (error) {
-    console.error('Error updating event:', error);
+    console.error("Error updating event:", error);
     return {
       success: false,
-      message: 'Failed to update event',
+      message: "Failed to update event",
     };
   }
 }
@@ -465,8 +465,8 @@ export async function updateEvent(data: any): Promise<ActionResponse<any>> {
 // Admin function to update event status (approve/reject)
 export async function updateEventStatus(
   id: string,
-  status: 'PUBLISHED' | 'REJECTED',
-  rejectionReason?: string
+  status: "PUBLISHED" | "REJECTED",
+  rejectionReason?: string,
 ): Promise<ActionResponse<any>> {
   // Validate user permission - only admins can do this
   const headersList = await headers();
@@ -474,10 +474,10 @@ export async function updateEventStatus(
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Only administrators can approve or reject events',
+      message: "Only administrators can approve or reject events",
     };
   }
 
@@ -490,7 +490,7 @@ export async function updateEventStatus(
     if (!event) {
       return {
         success: false,
-        message: 'Event not found',
+        message: "Event not found",
       };
     }
 
@@ -503,22 +503,22 @@ export async function updateEventStatus(
 
     // Create notification for the event organizer
     const notificationType =
-      status === 'PUBLISHED' ? 'EVENT_APPROVED' : 'EVENT_REJECTED';
+      status === "PUBLISHED" ? "EVENT_APPROVED" : "EVENT_REJECTED";
     await createEventNotification(
       id,
       notificationType,
-      event.userId ?? undefined
+      event.userId ?? undefined,
     );
 
-    revalidatePath('/admin/dashboard/events');
-    revalidatePath('/dashboard/events');
+    revalidatePath("/admin/dashboard/events");
+    revalidatePath("/dashboard/events");
     revalidatePath(`/events/${event.slug}`);
-    revalidatePath('/events');
+    revalidatePath("/events");
 
     const message =
-      status === 'PUBLISHED'
-        ? 'Event approved and published successfully'
-        : 'Event rejected successfully';
+      status === "PUBLISHED"
+        ? "Event approved and published successfully"
+        : "Event rejected successfully";
 
     return {
       success: true,
@@ -526,10 +526,10 @@ export async function updateEventStatus(
       data: updatedEvent,
     };
   } catch (error) {
-    console.error('Error updating event status:', error);
+    console.error("Error updating event status:", error);
     return {
       success: false,
-      message: 'Failed to update event status',
+      message: "Failed to update event status",
     };
   }
 }
@@ -539,7 +539,7 @@ export async function getFeaturedEvents(): Promise<ActionResponse<any[]>> {
     const events = await prisma.event.findMany({
       where: {
         featured: true,
-        publishedStatus: 'PUBLISHED',
+        publishedStatus: "PUBLISHED",
         isCancelled: false,
         endDateTime: {
           gte: new Date(),
@@ -561,7 +561,7 @@ export async function getFeaturedEvents(): Promise<ActionResponse<any[]>> {
           },
         },
       },
-      orderBy: { startDateTime: 'asc' },
+      orderBy: { startDateTime: "asc" },
       take: 6,
     });
 
@@ -570,10 +570,10 @@ export async function getFeaturedEvents(): Promise<ActionResponse<any[]>> {
       data: events,
     };
   } catch (error) {
-    console.error('Error fetching featured events:', error);
+    console.error("Error fetching featured events:", error);
     return {
       success: false,
-      message: 'Failed to fetch featured events',
+      message: "Failed to fetch featured events",
     };
   }
 }
@@ -586,7 +586,7 @@ export async function fixEventsWithNullSlugs(): Promise<
     // Find events with null or empty slugs
     const eventsWithoutSlugs = await prisma.event.findMany({
       where: {
-        OR: [{ slug: null }, { slug: '' }],
+        OR: [{ slug: null }, { slug: "" }],
       },
       select: {
         id: true,
@@ -614,9 +614,9 @@ export async function fixEventsWithNullSlugs(): Promise<
     }
 
     // Revalidate paths
-    revalidatePath('/admin/events');
-    revalidatePath('/dashboard/events');
-    revalidatePath('/events');
+    revalidatePath("/admin/events");
+    revalidatePath("/dashboard/events");
+    revalidatePath("/events");
 
     return {
       success: true,
@@ -624,16 +624,16 @@ export async function fixEventsWithNullSlugs(): Promise<
       data: fixedCount,
     };
   } catch (error) {
-    console.error('Error fixing events with null slugs:', error);
+    console.error("Error fixing events with null slugs:", error);
     return {
       success: false,
-      message: 'Failed to fix events with null slugs',
+      message: "Failed to fix events with null slugs",
     };
   }
 }
 
 export async function toggleEventFeatured(
-  id: string
+  id: string,
 ): Promise<ActionResponse<any>> {
   // Only admins can feature events
   const headersList = await headers();
@@ -641,10 +641,10 @@ export async function toggleEventFeatured(
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Only administrators can feature events',
+      message: "Only administrators can feature events",
     };
   }
 
@@ -656,7 +656,7 @@ export async function toggleEventFeatured(
     if (!event) {
       return {
         success: false,
-        message: 'Event not found',
+        message: "Event not found",
       };
     }
 
@@ -667,21 +667,21 @@ export async function toggleEventFeatured(
       },
     });
 
-    revalidatePath('/admin/events');
-    revalidatePath('/events');
+    revalidatePath("/admin/events");
+    revalidatePath("/events");
 
     return {
       success: true,
       message: updatedEvent.featured
-        ? 'Event featured successfully'
-        : 'Event unfeatured successfully',
+        ? "Event featured successfully"
+        : "Event unfeatured successfully",
       data: updatedEvent,
     };
   } catch (error) {
-    console.error('Error toggling event featured status:', error);
+    console.error("Error toggling event featured status:", error);
     return {
       success: false,
-      message: 'Failed to update event featured status',
+      message: "Failed to update event featured status",
     };
   }
 }
@@ -690,7 +690,7 @@ export async function getEvents(publishedOnly: boolean = true) {
   try {
     // ✅ FIXED: Add 'as const' to make it a literal type
     const whereClause = publishedOnly
-      ? { publishedStatus: 'PUBLISHED' as const }
+      ? { publishedStatus: "PUBLISHED" as const }
       : {};
 
     const events = await prisma.event.findMany({
@@ -748,7 +748,7 @@ export async function getEvents(publishedOnly: boolean = true) {
         },
       },
       orderBy: {
-        startDateTime: 'asc',
+        startDateTime: "asc",
       },
     });
 
@@ -757,10 +757,10 @@ export async function getEvents(publishedOnly: boolean = true) {
       data: events,
     };
   } catch (error) {
-    console.error('Error fetching events:', error);
+    console.error("Error fetching events:", error);
     return {
       success: false,
-      message: 'Failed to fetch events',
+      message: "Failed to fetch events",
     };
   }
 }
@@ -769,19 +769,19 @@ export async function getEvents(publishedOnly: boolean = true) {
 export async function getEventsWithFilters({
   page = 1,
   limit = 12,
-  search = '',
-  categoryId = '',
-  cityId = '',
+  search = "",
+  categoryId = "",
+  cityId = "",
   tagIds = [],
-  dateRange = '',
-  priceRange = '',
-  sortBy = 'startDateTime',
-  sortOrder = 'asc',
+  dateRange = "",
+  priceRange = "",
+  sortBy = "startDateTime",
+  sortOrder = "asc",
   featured = false,
   // New voting contest filters
   eventTypes = [],
-  votingStatus = '',
-  votingType = '',
+  votingStatus = "",
+  votingType = "",
 }: {
   page?: number;
   limit?: number;
@@ -792,7 +792,7 @@ export async function getEventsWithFilters({
   dateRange?: string;
   priceRange?: string;
   sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
+  sortOrder?: "asc" | "desc";
   featured?: boolean;
   eventTypes?: string[];
   votingStatus?: string;
@@ -811,7 +811,7 @@ export async function getEventsWithFilters({
 
     // Build where clause
     const where: any = {
-      publishedStatus: 'PUBLISHED',
+      publishedStatus: "PUBLISHED",
       isCancelled: false,
       endDateTime: {
         gte: new Date(), // Only future or ongoing events
@@ -836,26 +836,26 @@ export async function getEventsWithFilters({
         {
           title: {
             contains: search,
-            mode: 'insensitive',
+            mode: "insensitive",
           },
         },
         {
           description: {
             contains: search,
-            mode: 'insensitive',
+            mode: "insensitive",
           },
         },
         {
           location: {
             contains: search,
-            mode: 'insensitive',
+            mode: "insensitive",
           },
         },
         {
           venue: {
             name: {
               contains: search,
-              mode: 'insensitive',
+              mode: "insensitive",
             },
           },
         },
@@ -863,7 +863,7 @@ export async function getEventsWithFilters({
           venue: {
             address: {
               contains: search,
-              mode: 'insensitive',
+              mode: "insensitive",
             },
           },
         },
@@ -874,7 +874,7 @@ export async function getEventsWithFilters({
               some: {
                 name: {
                   contains: search,
-                  mode: 'insensitive',
+                  mode: "insensitive",
                 },
               },
             },
@@ -905,12 +905,12 @@ export async function getEventsWithFilters({
     }
 
     // Add voting contest specific filters
-    if (eventTypes.includes('VOTING_CONTEST') || votingStatus || votingType) {
+    if (eventTypes.includes("VOTING_CONTEST") || votingStatus || votingType) {
       // If filtering by voting status
       if (votingStatus) {
         const now = new Date();
         switch (votingStatus) {
-          case 'upcoming':
+          case "upcoming":
             where.votingContest = {
               ...where.votingContest,
               votingStartDate: {
@@ -918,7 +918,7 @@ export async function getEventsWithFilters({
               },
             };
             break;
-          case 'active':
+          case "active":
             where.votingContest = {
               ...where.votingContest,
               OR: [
@@ -946,7 +946,7 @@ export async function getEventsWithFilters({
               ],
             };
             break;
-          case 'ended':
+          case "ended":
             where.votingContest = {
               ...where.votingContest,
               votingEndDate: {
@@ -978,55 +978,55 @@ export async function getEventsWithFilters({
     if (dateRange) {
       const now = new Date();
       switch (dateRange) {
-        case 'today':
+        case "today":
           const startOfToday = new Date(
             now.getFullYear(),
             now.getMonth(),
-            now.getDate()
+            now.getDate(),
           );
           const endOfToday = new Date(
             now.getFullYear(),
             now.getMonth(),
-            now.getDate() + 1
+            now.getDate() + 1,
           );
           where.startDateTime = {
             gte: startOfToday,
             lt: endOfToday,
           };
           break;
-        case 'tomorrow':
+        case "tomorrow":
           const startOfTomorrow = new Date(
             now.getFullYear(),
             now.getMonth(),
-            now.getDate() + 1
+            now.getDate() + 1,
           );
           const endOfTomorrow = new Date(
             now.getFullYear(),
             now.getMonth(),
-            now.getDate() + 2
+            now.getDate() + 2,
           );
           where.startDateTime = {
             gte: startOfTomorrow,
             lt: endOfTomorrow,
           };
           break;
-        case 'this_week':
+        case "this_week":
           const startOfWeek = new Date(
             now.getFullYear(),
             now.getMonth(),
-            now.getDate() - now.getDay()
+            now.getDate() - now.getDay(),
           );
           const endOfWeek = new Date(
             now.getFullYear(),
             now.getMonth(),
-            now.getDate() - now.getDay() + 7
+            now.getDate() - now.getDay() + 7,
           );
           where.startDateTime = {
             gte: startOfWeek,
             lt: endOfWeek,
           };
           break;
-        case 'this_month':
+        case "this_month":
           const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
           const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
           where.startDateTime = {
@@ -1034,16 +1034,16 @@ export async function getEventsWithFilters({
             lt: endOfMonth,
           };
           break;
-        case 'next_month':
+        case "next_month":
           const startOfNextMonth = new Date(
             now.getFullYear(),
             now.getMonth() + 1,
-            1
+            1,
           );
           const endOfNextMonth = new Date(
             now.getFullYear(),
             now.getMonth() + 2,
-            1
+            1,
           );
           where.startDateTime = {
             gte: startOfNextMonth,
@@ -1056,13 +1056,13 @@ export async function getEventsWithFilters({
     // Add price range filter (only for non-voting contest events or when multiple event types are selected)
     if (
       priceRange &&
-      (!eventTypes.includes('VOTING_CONTEST') || eventTypes.length > 1)
+      (!eventTypes.includes("VOTING_CONTEST") || eventTypes.length > 1)
     ) {
       switch (priceRange) {
-        case 'free':
+        case "free":
           where.isFree = true;
           break;
-        case 'under_5000':
+        case "under_5000":
           where.AND = [
             { isFree: false },
             {
@@ -1076,7 +1076,7 @@ export async function getEventsWithFilters({
             },
           ];
           break;
-        case '5000_20000':
+        case "5000_20000":
           where.AND = [
             { isFree: false },
             {
@@ -1091,7 +1091,7 @@ export async function getEventsWithFilters({
             },
           ];
           break;
-        case 'over_20000':
+        case "over_20000":
           where.AND = [
             { isFree: false },
             {
@@ -1111,19 +1111,19 @@ export async function getEventsWithFilters({
     // Build order by clause
     let orderBy: any = {};
     switch (sortBy) {
-      case 'startDateTime':
+      case "startDateTime":
         orderBy = { startDateTime: sortOrder };
         break;
-      case 'title':
+      case "title":
         orderBy = { title: sortOrder };
         break;
-      case 'createdAt':
+      case "createdAt":
         orderBy = { createdAt: sortOrder };
         break;
-      case 'featured':
-        orderBy = [{ featured: 'desc' }, { startDateTime: 'asc' }];
+      case "featured":
+        orderBy = [{ featured: "desc" }, { startDateTime: "asc" }];
         break;
-      case 'votes':
+      case "votes":
         // Sort by vote count for voting contests
         orderBy = [
           {
@@ -1133,7 +1133,7 @@ export async function getEventsWithFilters({
               },
             },
           },
-          { startDateTime: 'asc' },
+          { startDateTime: "asc" },
         ];
         break;
       default:
@@ -1161,7 +1161,7 @@ export async function getEventsWithFilters({
             },
           },
           orderBy: {
-            price: 'asc',
+            price: "asc",
           },
         },
         user: {
@@ -1187,15 +1187,15 @@ export async function getEventsWithFilters({
                 },
               },
               where: {
-                status: 'ACTIVE',
+                status: "ACTIVE",
               },
               orderBy: [
                 {
                   votes: {
-                    _count: 'desc',
+                    _count: "desc",
                   },
                 },
-                { contestNumber: 'asc' },
+                { contestNumber: "asc" },
               ],
               take: 3, // Only get top 3 contestants for card display
             },
@@ -1241,7 +1241,7 @@ export async function getEventsWithFilters({
           averageRating: Math.round(averageRating * 10) / 10, // Round to 1 decimal
           ratingsCount: ratings.length,
         };
-      })
+      }),
     );
 
     return {
@@ -1255,10 +1255,10 @@ export async function getEventsWithFilters({
       },
     };
   } catch (error) {
-    console.error('Error fetching events with filters:', error);
+    console.error("Error fetching events with filters:", error);
     return {
       success: false,
-      message: 'Failed to fetch events',
+      message: "Failed to fetch events",
     };
   }
 }
@@ -1274,13 +1274,13 @@ export async function getEventFilterOptions(): Promise<
   try {
     const [categories, cities, tags] = await Promise.all([
       prisma.category.findMany({
-        orderBy: { name: 'asc' },
+        orderBy: { name: "asc" },
       }),
       prisma.city.findMany({
         where: {
           events: {
             some: {
-              publishedStatus: 'PUBLISHED',
+              publishedStatus: "PUBLISHED",
               isCancelled: false,
               endDateTime: {
                 gte: new Date(),
@@ -1288,13 +1288,13 @@ export async function getEventFilterOptions(): Promise<
             },
           },
         },
-        orderBy: { name: 'asc' },
+        orderBy: { name: "asc" },
       }),
       prisma.tag.findMany({
         where: {
           events: {
             some: {
-              publishedStatus: 'PUBLISHED',
+              publishedStatus: "PUBLISHED",
               isCancelled: false,
               endDateTime: {
                 gte: new Date(),
@@ -1302,7 +1302,7 @@ export async function getEventFilterOptions(): Promise<
             },
           },
         },
-        orderBy: { name: 'asc' },
+        orderBy: { name: "asc" },
       }),
     ]);
 
@@ -1315,10 +1315,10 @@ export async function getEventFilterOptions(): Promise<
       },
     };
   } catch (error) {
-    console.error('Error fetching filter options:', error);
+    console.error("Error fetching filter options:", error);
     return {
       success: false,
-      message: 'Failed to fetch filter options',
+      message: "Failed to fetch filter options",
     };
   }
 }
@@ -1333,7 +1333,7 @@ export async function getUserEvents() {
     if (!session) {
       return {
         success: false,
-        message: 'Not authenticated',
+        message: "Not authenticated",
       };
     }
 
@@ -1407,7 +1407,7 @@ export async function getUserEvents() {
         },
       },
       orderBy: {
-        startDateTime: 'desc',
+        startDateTime: "desc",
       },
     });
 
@@ -1416,10 +1416,10 @@ export async function getUserEvents() {
       data: events,
     };
   } catch (error) {
-    console.error('Error fetching user events:', error);
+    console.error("Error fetching user events:", error);
     return {
       success: false,
-      message: 'Failed to fetch events',
+      message: "Failed to fetch events",
     };
   }
 }
@@ -1429,7 +1429,7 @@ export async function getPendingEvents(): Promise<ActionResponse<any[]>> {
   try {
     const events = await prisma.event.findMany({
       where: {
-        publishedStatus: 'PENDING_REVIEW',
+        publishedStatus: "PENDING_REVIEW",
         isCancelled: false,
       },
       include: {
@@ -1460,7 +1460,7 @@ export async function getPendingEvents(): Promise<ActionResponse<any[]>> {
           },
         },
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { updatedAt: "desc" },
     });
 
     return {
@@ -1468,10 +1468,10 @@ export async function getPendingEvents(): Promise<ActionResponse<any[]>> {
       data: events,
     };
   } catch (error) {
-    console.error('Error fetching pending events:', error);
+    console.error("Error fetching pending events:", error);
     return {
       success: false,
-      message: 'Failed to fetch pending events',
+      message: "Failed to fetch pending events",
     };
   }
 }
@@ -1518,7 +1518,7 @@ export async function getFeaturedEventsAdmin(): Promise<ActionResponse<any[]>> {
           },
         },
       },
-      orderBy: { startDateTime: 'asc' },
+      orderBy: { startDateTime: "asc" },
     });
 
     return {
@@ -1526,17 +1526,17 @@ export async function getFeaturedEventsAdmin(): Promise<ActionResponse<any[]>> {
       data: events,
     };
   } catch (error) {
-    console.error('Error fetching featured events:', error);
+    console.error("Error fetching featured events:", error);
     return {
       success: false,
-      message: 'Failed to fetch featured events',
+      message: "Failed to fetch featured events",
     };
   }
 }
 
 // Bulk approve events
 export async function bulkApproveEvents(
-  eventIds: string[]
+  eventIds: string[],
 ): Promise<ActionResponse<{ successful: number; failed: number }>> {
   // Validate user permission - only admins can do this
   const headersList = await headers();
@@ -1544,10 +1544,10 @@ export async function bulkApproveEvents(
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Only administrators can bulk approve events',
+      message: "Only administrators can bulk approve events",
     };
   }
 
@@ -1570,15 +1570,15 @@ export async function bulkApproveEvents(
         await prisma.event.update({
           where: { id: eventId },
           data: {
-            publishedStatus: 'PUBLISHED',
+            publishedStatus: "PUBLISHED",
           },
         });
 
         // Create notification for the event organizer
         await createEventNotification(
           eventId,
-          'EVENT_APPROVED',
-          event.userId ?? undefined
+          "EVENT_APPROVED",
+          event.userId ?? undefined,
         );
 
         successful++;
@@ -1589,28 +1589,28 @@ export async function bulkApproveEvents(
     }
 
     // Revalidate paths
-    revalidatePath('/admin/dashboard/events');
-    revalidatePath('/admin/dashboard/events/pending');
-    revalidatePath('/dashboard/events');
-    revalidatePath('/events');
+    revalidatePath("/admin/dashboard/events");
+    revalidatePath("/admin/dashboard/events/pending");
+    revalidatePath("/dashboard/events");
+    revalidatePath("/events");
 
     return {
       success: true,
-      message: `Successfully approved ${successful} events${failed > 0 ? `, ${failed} failed` : ''}`,
+      message: `Successfully approved ${successful} events${failed > 0 ? `, ${failed} failed` : ""}`,
       data: { successful, failed },
     };
   } catch (error) {
-    console.error('Error in bulk approval:', error);
+    console.error("Error in bulk approval:", error);
     return {
       success: false,
-      message: 'Failed to bulk approve events',
+      message: "Failed to bulk approve events",
     };
   }
 }
 
 // Bulk unfeature events
 export async function bulkUnfeatureEvents(
-  eventIds: string[]
+  eventIds: string[],
 ): Promise<ActionResponse<{ successful: number; failed: number }>> {
   // Validate user permission - only admins can do this
   const headersList = await headers();
@@ -1618,10 +1618,10 @@ export async function bulkUnfeatureEvents(
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Only administrators can bulk unfeature events',
+      message: "Only administrators can bulk unfeature events",
     };
   }
 
@@ -1646,20 +1646,20 @@ export async function bulkUnfeatureEvents(
     }
 
     // Revalidate paths
-    revalidatePath('/admin/dashboard/events');
-    revalidatePath('/admin/dashboard/events/featured');
-    revalidatePath('/events');
+    revalidatePath("/admin/dashboard/events");
+    revalidatePath("/admin/dashboard/events/featured");
+    revalidatePath("/events");
 
     return {
       success: true,
-      message: `Successfully unfeatured ${successful} events${failed > 0 ? `, ${failed} failed` : ''}`,
+      message: `Successfully unfeatured ${successful} events${failed > 0 ? `, ${failed} failed` : ""}`,
       data: { successful, failed },
     };
   } catch (error) {
-    console.error('Error in bulk unfeature:', error);
+    console.error("Error in bulk unfeature:", error);
     return {
       success: false,
-      message: 'Failed to bulk unfeature events',
+      message: "Failed to bulk unfeature events",
     };
   }
 }
@@ -1743,15 +1743,27 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
         inviteOnlyEvent: {
           include: {
             invitations: {
+              include: {
+                seat: {
+                  include: {
+                    table: {
+                      select: {
+                        tableNumber: true,
+                        tableName: true,
+                      },
+                    },
+                  },
+                },
+              },
               orderBy: {
-                createdAt: 'desc',
+                createdAt: "desc",
               },
             },
           },
         },
         donationOrders: {
           where: {
-            paymentStatus: 'COMPLETED',
+            paymentStatus: "COMPLETED",
           },
         },
         Notification: true,
@@ -1761,7 +1773,7 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
     if (!event) {
       return {
         success: false,
-        message: 'Event not found',
+        message: "Event not found",
       };
     }
 
@@ -1773,11 +1785,11 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
         (contestant) => ({
           ...contestant,
           voteCount: contestant.votes.length,
-        })
+        }),
       );
 
       enhancedEvent.votingContest.contestants = contestantsWithStats.sort(
-        (a, b) => b.voteCount - a.voteCount
+        (a, b) => b.voteCount - a.voteCount,
       );
 
       // For edit form compatibility
@@ -1799,13 +1811,13 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
 
       enhancedEvent.inviteOnlyEvent.stats = {
         totalInvited: invitations.length,
-        accepted: invitations.filter((i) => i.status === 'ACCEPTED').length,
-        declined: invitations.filter((i) => i.status === 'DECLINED').length,
-        pending: invitations.filter((i) => i.status === 'PENDING').length,
-        attended: invitations.filter((i) => i.status === 'ATTENDED').length,
+        accepted: invitations.filter((i) => i.status === "ACCEPTED").length,
+        declined: invitations.filter((i) => i.status === "DECLINED").length,
+        pending: invitations.filter((i) => i.status === "PENDING").length,
+        attended: invitations.filter((i) => i.status === "ATTENDED").length,
         totalPlusOnes: invitations.reduce(
           (sum, i) => sum + i.plusOnesConfirmed,
-          0
+          0,
         ),
       };
 
@@ -1824,11 +1836,11 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
       if (event.donationOrders && event.donationOrders.length > 0) {
         const totalDonations = event.donationOrders.reduce(
           (sum, d) => sum + d.amount,
-          0
+          0,
         );
         const totalFees = event.donationOrders.reduce(
           (sum, d) => sum + d.platformFee,
-          0
+          0,
         );
 
         enhancedEvent.inviteOnlyEvent.donationStats = {
@@ -1845,17 +1857,17 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
       data: enhancedEvent,
     };
   } catch (error) {
-    console.error('Error fetching event:', error);
+    console.error("Error fetching event:", error);
     return {
       success: false,
-      message: 'Failed to fetch event',
+      message: "Failed to fetch event",
     };
   }
 }
 
 // Lightweight version for lists and basic operations
 export async function getEventByIdBasic(
-  id: string
+  id: string,
 ): Promise<ActionResponse<any>> {
   try {
     const event = await prisma.event.findUnique({
@@ -1908,7 +1920,7 @@ export async function getEventByIdBasic(
     if (!event) {
       return {
         success: false,
-        message: 'Event not found',
+        message: "Event not found",
       };
     }
 
@@ -1920,7 +1932,7 @@ export async function getEventByIdBasic(
     console.error(`Error fetching basic event data for ID ${id}:`, error);
     return {
       success: false,
-      message: 'Failed to fetch event',
+      message: "Failed to fetch event",
     };
   }
 }
@@ -1930,7 +1942,7 @@ export async function getEventByIdWithPermissions(
   id: string,
   userId?: string,
   userRole?: string,
-  userSubRole?: string
+  userSubRole?: string,
 ): Promise<ActionResponse<any>> {
   const result = await getEventById(id);
 
@@ -1941,9 +1953,9 @@ export async function getEventByIdWithPermissions(
   // Add permission context
   const event = result.data;
   const isOwner = event.userId === userId;
-  const isAdmin = userRole === 'ADMIN';
-  const isSuperAdmin = isAdmin && userSubRole === 'SUPER_ADMIN';
-  const isStaff = isAdmin && userSubRole === 'STAFF';
+  const isAdmin = userRole === "ADMIN";
+  const isSuperAdmin = isAdmin && userSubRole === "SUPER_ADMIN";
+  const isStaff = isAdmin && userSubRole === "STAFF";
 
   event.permissions = {
     canEdit: isOwner || isAdmin,
@@ -1965,7 +1977,7 @@ export async function getEventByIdWithPermissions(
 
 // Fixed: Updated to use findFirst instead of findUnique for slug queries
 export async function getEventBySlug(
-  slug: string
+  slug: string,
 ): Promise<ActionResponse<any>> {
   try {
     const event = await prisma.event.findFirst({
@@ -1980,7 +1992,7 @@ export async function getEventBySlug(
         },
         ticketTypes: {
           orderBy: {
-            price: 'asc',
+            price: "asc",
           },
         },
         user: {
@@ -2002,7 +2014,7 @@ export async function getEventBySlug(
             },
           },
           orderBy: {
-            id: 'desc',
+            id: "desc",
           },
         },
       },
@@ -2011,7 +2023,7 @@ export async function getEventBySlug(
     if (!event) {
       return {
         success: false,
-        message: 'Event not found',
+        message: "Event not found",
       };
     }
 
@@ -2023,7 +2035,7 @@ export async function getEventBySlug(
     console.error(`Error fetching event with slug ${slug}:`, error);
     return {
       success: false,
-      message: 'Failed to fetch event',
+      message: "Failed to fetch event",
     };
   }
 }
@@ -2037,7 +2049,7 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
@@ -2075,24 +2087,24 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
     if (!event) {
       return {
         success: false,
-        message: 'Event not found',
+        message: "Event not found",
       };
     }
 
-    const isSuperAdmin = role === 'ADMIN' && subRole === 'SUPER_ADMIN';
-    const isEventOwner = event.userId === userId && subRole === 'ORGANIZER';
+    const isSuperAdmin = role === "ADMIN" && subRole === "SUPER_ADMIN";
+    const isEventOwner = event.userId === userId && subRole === "ORGANIZER";
 
     if (!isSuperAdmin && !isEventOwner) {
       return {
         success: false,
-        message: 'Only Super Admins or event owners can delete events',
+        message: "Only Super Admins or event owners can delete events",
       };
     }
 
     // Check if event has activity
     const hasOrders = event.orders.length > 0;
     const hasTickets = event.ticketTypes.some(
-      (type) => type.tickets.length > 0
+      (type) => type.tickets.length > 0,
     );
     const hasVotingActivity =
       (event.votingContest?.VoteOrder?.length ?? 0) > 0 ||
@@ -2114,18 +2126,18 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
         where: { id },
         data: {
           isCancelled: true,
-          publishedStatus: 'REJECTED',
+          publishedStatus: "REJECTED",
         },
       });
 
-      revalidatePath('/admin/events');
-      revalidatePath('/dashboard/events');
-      revalidatePath('/events');
+      revalidatePath("/admin/events");
+      revalidatePath("/dashboard/events");
+      revalidatePath("/events");
 
       return {
         success: true,
         message:
-          'Event has been cancelled instead of deleted because it has associated activity',
+          "Event has been cancelled instead of deleted because it has associated activity",
       };
     }
 
@@ -2219,25 +2231,25 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
       });
     });
 
-    revalidatePath('/admin/events');
-    revalidatePath('/dashboard/events');
-    revalidatePath('/events');
+    revalidatePath("/admin/events");
+    revalidatePath("/dashboard/events");
+    revalidatePath("/events");
 
     return {
       success: true,
-      message: 'Event deleted successfully',
+      message: "Event deleted successfully",
     };
   } catch (error) {
-    console.error('Error deleting event:', error);
+    console.error("Error deleting event:", error);
     return {
       success: false,
-      message: 'Failed to delete event',
+      message: "Failed to delete event",
     };
   }
 }
 
 export async function hardDeleteEvent(
-  id: string
+  id: string,
 ): Promise<ActionResponse<null>> {
   // Get session for authentication
   const headersList = await headers();
@@ -2248,17 +2260,17 @@ export async function hardDeleteEvent(
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
   const { role, subRole, id: adminUserId } = session.user;
 
   // STRICT PERMISSION CHECK - Only SUPER_ADMIN can perform hard delete
-  if (role !== 'ADMIN' || subRole !== 'SUPER_ADMIN') {
+  if (role !== "ADMIN" || subRole !== "SUPER_ADMIN") {
     return {
       success: false,
-      message: 'Only Super Administrators can perform hard delete operations',
+      message: "Only Super Administrators can perform hard delete operations",
     };
   }
 
@@ -2332,7 +2344,7 @@ export async function hardDeleteEvent(
       console.log(`Event not found: ${id}`);
       return {
         success: false,
-        message: 'Event not found',
+        message: "Event not found",
       };
     }
 
@@ -2348,7 +2360,7 @@ export async function hardDeleteEvent(
       console.log(`Voting contest found with:`);
       console.log(`- Contestants: ${event.votingContest.contestants.length}`);
       console.log(
-        `- Vote packages: ${event.votingContest.votePackages.length}`
+        `- Vote packages: ${event.votingContest.votePackages.length}`,
       );
       console.log(`- Total votes: ${event.votingContest.votes.length}`);
       console.log(`- Vote orders: ${event.votingContest.VoteOrder.length}`);
@@ -2357,23 +2369,23 @@ export async function hardDeleteEvent(
     // Get client IP and user agent for audit trail
     const headerList = await headers();
     const ipAddress =
-      headerList.get('x-forwarded-for') ||
-      headerList.get('x-real-ip') ||
-      'unknown';
-    const userAgent = headerList.get('user-agent') || 'unknown';
+      headerList.get("x-forwarded-for") ||
+      headerList.get("x-real-ip") ||
+      "unknown";
+    const userAgent = headerList.get("user-agent") || "unknown";
 
     // Perform hard delete in transaction with audit logging
     await prisma.$transaction(async (tx) => {
-      console.log('Starting transaction...');
+      console.log("Starting transaction...");
 
       try {
         // Create comprehensive audit log BEFORE deletion
-        console.log('Creating initial audit log...');
+        console.log("Creating initial audit log...");
         await tx.auditLog.create({
           data: {
             userId: adminUserId,
-            action: 'HARD_DELETE',
-            entity: 'EVENT',
+            action: "HARD_DELETE",
+            entity: "EVENT",
             entityId: id,
             oldValues: {
               event: {
@@ -2400,7 +2412,7 @@ export async function hardDeleteEvent(
               ticketTypesCount: event.ticketTypes.length,
               ticketsCount: event.ticketTypes.reduce(
                 (sum, tt) => sum + tt.tickets.length,
-                0
+                0,
               ),
               ordersCount: event.orders.length,
               ratingsCount: event.ratings.length,
@@ -2408,7 +2420,7 @@ export async function hardDeleteEvent(
               notificationsCount: event.Notification.length,
               totalRevenue: event.orders.reduce(
                 (sum, order) => sum + order.totalAmount,
-                0
+                0,
               ),
               // Add voting contest data to audit log
               votingContest: event.votingContest
@@ -2434,7 +2446,7 @@ export async function hardDeleteEvent(
         });
 
         // 1. Delete all ticket validations
-        console.log('Deleting ticket validations...');
+        console.log("Deleting ticket validations...");
         const ticketTypeIds = event.ticketTypes.map((tt) => tt.id);
         if (ticketTypeIds.length > 0) {
           const deletedValidations = await tx.ticketValidation.deleteMany({
@@ -2448,7 +2460,7 @@ export async function hardDeleteEvent(
         }
 
         // 2. Delete all tickets
-        console.log('Deleting tickets...');
+        console.log("Deleting tickets...");
         if (ticketTypeIds.length > 0) {
           const deletedTickets = await tx.ticket.deleteMany({
             where: {
@@ -2460,7 +2472,7 @@ export async function hardDeleteEvent(
 
         // 3. Delete voting contest data if it exists
         if (event.votingContest) {
-          console.log('Deleting voting contest data...');
+          console.log("Deleting voting contest data...");
 
           // Delete votes first (they reference contestants and vote orders)
           const deletedVotes = await tx.vote.deleteMany({
@@ -2477,7 +2489,7 @@ export async function hardDeleteEvent(
                 where: { voteOrderId: { in: voteOrderIds } },
               });
             console.log(
-              `Deleted ${deletedVoteOrderNotifications.count} vote order notifications`
+              `Deleted ${deletedVoteOrderNotifications.count} vote order notifications`,
             );
           }
 
@@ -2503,11 +2515,11 @@ export async function hardDeleteEvent(
           await tx.votingContest.delete({
             where: { id: event.votingContest.id },
           });
-          console.log('Deleted voting contest');
+          console.log("Deleted voting contest");
         }
 
         // 4. Delete all order notifications
-        console.log('Deleting order notifications...');
+        console.log("Deleting order notifications...");
         const orderIds = event.orders.map((order) => order.id);
         if (orderIds.length > 0) {
           const deletedOrderNotifications = await tx.notification.deleteMany({
@@ -2516,12 +2528,12 @@ export async function hardDeleteEvent(
             },
           });
           console.log(
-            `Deleted ${deletedOrderNotifications.count} order notifications`
+            `Deleted ${deletedOrderNotifications.count} order notifications`,
           );
         }
 
         // 5. Delete all orders
-        console.log('Deleting orders...');
+        console.log("Deleting orders...");
         if (orderIds.length > 0) {
           const deletedOrders = await tx.order.deleteMany({
             where: { eventId: id },
@@ -2530,47 +2542,47 @@ export async function hardDeleteEvent(
         }
 
         // 6. Delete all ticket types
-        console.log('Deleting ticket types...');
+        console.log("Deleting ticket types...");
         const deletedTicketTypes = await tx.ticketType.deleteMany({
           where: { eventId: id },
         });
         console.log(`Deleted ${deletedTicketTypes.count} ticket types`);
 
         // 7. Delete all event notifications
-        console.log('Deleting event notifications...');
+        console.log("Deleting event notifications...");
         const deletedEventNotifications = await tx.notification.deleteMany({
           where: { eventId: id },
         });
         console.log(
-          `Deleted ${deletedEventNotifications.count} event notifications`
+          `Deleted ${deletedEventNotifications.count} event notifications`,
         );
 
         // 8. Delete all ratings
-        console.log('Deleting ratings...');
+        console.log("Deleting ratings...");
         const deletedRatings = await tx.rating.deleteMany({
           where: { eventId: id },
         });
         console.log(`Deleted ${deletedRatings.count} ratings`);
 
         // 9. Delete all waiting list entries
-        console.log('Deleting waiting list entries...');
+        console.log("Deleting waiting list entries...");
         const deletedWaitingList = await tx.waitingList.deleteMany({
           where: { eventId: id },
         });
         console.log(`Deleted ${deletedWaitingList.count} waiting list entries`);
 
         // 10. Delete any audit logs that reference this event (optional - be careful!)
-        console.log('Deleting event-related audit logs...');
+        console.log("Deleting event-related audit logs...");
         const deletedAuditLogs = await tx.auditLog.deleteMany({
           where: {
-            entity: 'EVENT',
+            entity: "EVENT",
             entityId: id,
           },
         });
         console.log(`Deleted ${deletedAuditLogs.count} audit logs`);
 
         // 11. Disconnect tags (many-to-many relationship)
-        console.log('Disconnecting tags...');
+        console.log("Disconnecting tags...");
         await tx.event.update({
           where: { id },
           data: {
@@ -2579,22 +2591,22 @@ export async function hardDeleteEvent(
             },
           },
         });
-        console.log('Tags disconnected');
+        console.log("Tags disconnected");
 
         // 12. Finally delete the event itself
-        console.log('Deleting event...');
+        console.log("Deleting event...");
         await tx.event.delete({
           where: { id },
         });
-        console.log('Event deleted successfully');
+        console.log("Event deleted successfully");
 
         // Log additional audit entry for successful completion
-        console.log('Creating completion audit log...');
+        console.log("Creating completion audit log...");
         await tx.auditLog.create({
           data: {
             userId: adminUserId,
-            action: 'HARD_DELETE_COMPLETED',
-            entity: 'EVENT',
+            action: "HARD_DELETE_COMPLETED",
+            entity: "EVENT",
             entityId: id,
             oldValues: undefined,
             newValues: {
@@ -2605,7 +2617,7 @@ export async function hardDeleteEvent(
               totalRecordsDeleted: {
                 tickets: event.ticketTypes.reduce(
                   (sum, tt) => sum + tt.tickets.length,
-                  0
+                  0,
                 ),
                 orders: event.orders.length,
                 ratings: event.ratings.length,
@@ -2627,43 +2639,43 @@ export async function hardDeleteEvent(
             userAgent,
           },
         });
-        console.log('Transaction completed successfully');
+        console.log("Transaction completed successfully");
       } catch (transactionError) {
-        console.error('Error in transaction:', transactionError);
+        console.error("Error in transaction:", transactionError);
         throw transactionError; // Re-throw to trigger transaction rollback
       }
     });
 
     // Revalidate all relevant paths
-    revalidatePath('/admin/events');
-    revalidatePath('/admin/dashboard/events');
-    revalidatePath('/dashboard/events');
-    revalidatePath('/events');
+    revalidatePath("/admin/events");
+    revalidatePath("/admin/dashboard/events");
+    revalidatePath("/dashboard/events");
+    revalidatePath("/events");
     revalidatePath(`/events/${event.slug}`);
 
-    console.log('Hard delete completed successfully');
+    console.log("Hard delete completed successfully");
     return {
       success: true,
       message: `Event "${event.title}" and all related data (including voting contest data) have been permanently deleted. This action has been logged for audit purposes.`,
     };
   } catch (error) {
-    console.error('Error performing hard delete:', error);
+    console.error("Error performing hard delete:", error);
 
     // Log the full error details
     if (error instanceof Error) {
-      console.error('Error name:', error.name);
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
+      console.error("Error name:", error.name);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
 
       // Check for specific Prisma errors
-      if (error.message.includes('P2003')) {
-        console.error('Foreign key constraint failure');
+      if (error.message.includes("P2003")) {
+        console.error("Foreign key constraint failure");
       }
-      if (error.message.includes('P2025')) {
-        console.error('Record not found');
+      if (error.message.includes("P2025")) {
+        console.error("Record not found");
       }
-      if (error.message.includes('P2002')) {
-        console.error('Unique constraint failure');
+      if (error.message.includes("P2002")) {
+        console.error("Unique constraint failure");
       }
     }
 
@@ -2672,44 +2684,44 @@ export async function hardDeleteEvent(
       await prisma.auditLog.create({
         data: {
           userId: adminUserId,
-          action: 'HARD_DELETE_FAILED',
-          entity: 'EVENT',
+          action: "HARD_DELETE_FAILED",
+          entity: "EVENT",
           entityId: id,
           oldValues: {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            errorName: error instanceof Error ? error.name : 'Unknown',
+            error: error instanceof Error ? error.message : "Unknown error",
+            errorName: error instanceof Error ? error.name : "Unknown",
             stack: error instanceof Error ? error.stack : undefined,
             timestamp: new Date().toISOString(),
           },
           newValues: { failed: true },
-          ipAddress: (await headers()).get('x-forwarded-for') || 'unknown',
-          userAgent: (await headers()).get('user-agent') || 'unknown',
+          ipAddress: (await headers()).get("x-forwarded-for") || "unknown",
+          userAgent: (await headers()).get("user-agent") || "unknown",
         },
       });
     } catch (auditError) {
-      console.error('Failed to log audit entry:', auditError);
+      console.error("Failed to log audit entry:", auditError);
     }
 
     // Return more specific error message
     if (error instanceof Error) {
       if (
-        error.message.includes('foreign key constraint') ||
-        error.message.includes('P2003')
+        error.message.includes("foreign key constraint") ||
+        error.message.includes("P2003")
       ) {
         return {
           success: false,
           message:
-            'Database constraint error: Some related data still exists that prevents deletion.',
+            "Database constraint error: Some related data still exists that prevents deletion.",
         };
       }
 
       if (
-        error.message.includes('Record to delete does not exist') ||
-        error.message.includes('P2025')
+        error.message.includes("Record to delete does not exist") ||
+        error.message.includes("P2025")
       ) {
         return {
           success: false,
-          message: 'Event not found or already deleted.',
+          message: "Event not found or already deleted.",
         };
       }
 
@@ -2722,7 +2734,7 @@ export async function hardDeleteEvent(
 
     return {
       success: false,
-      message: 'Failed to perform hard delete. Check server logs for details.',
+      message: "Failed to perform hard delete. Check server logs for details.",
     };
   }
 }
@@ -2752,7 +2764,7 @@ export async function publishEvent(id: string): Promise<ActionResponse<any>> {
     if (!event) {
       return {
         success: false,
-        message: 'Event not found',
+        message: "Event not found",
       };
     }
 
@@ -2760,7 +2772,7 @@ export async function publishEvent(id: string): Promise<ActionResponse<any>> {
     if (!isAdmin && event.userId !== userId) {
       return {
         success: false,
-        message: 'You can only publish events that you created',
+        message: "You can only publish events that you created",
       };
     }
 
@@ -2768,7 +2780,7 @@ export async function publishEvent(id: string): Promise<ActionResponse<any>> {
     if (event.ticketTypes.length === 0) {
       return {
         success: false,
-        message: 'Cannot publish event without at least one ticket type',
+        message: "Cannot publish event without at least one ticket type",
       };
     }
 
@@ -2777,7 +2789,7 @@ export async function publishEvent(id: string): Promise<ActionResponse<any>> {
       return {
         success: false,
         message:
-          'Event must have a title, description, and cover image before publishing',
+          "Event must have a title, description, and cover image before publishing",
       };
     }
 
@@ -2785,19 +2797,19 @@ export async function publishEvent(id: string): Promise<ActionResponse<any>> {
     const updatedEvent = await prisma.event.update({
       where: { id },
       data: {
-        publishedStatus: isAdmin ? 'PUBLISHED' : 'PENDING_REVIEW',
+        publishedStatus: isAdmin ? "PUBLISHED" : "PENDING_REVIEW",
       },
     });
 
-    revalidatePath('/admin/events');
-    revalidatePath('/dashboard/events');
+    revalidatePath("/admin/events");
+    revalidatePath("/dashboard/events");
     revalidatePath(`/events/${event.slug}`);
     revalidatePath(`/events/${id}`);
-    revalidatePath('/events');
+    revalidatePath("/events");
 
     const message = isAdmin
-      ? 'Event published successfully'
-      : 'Event submitted for review';
+      ? "Event published successfully"
+      : "Event submitted for review";
 
     return {
       success: true,
@@ -2805,10 +2817,10 @@ export async function publishEvent(id: string): Promise<ActionResponse<any>> {
       data: updatedEvent,
     };
   } catch (error) {
-    console.error('Error publishing event:', error);
+    console.error("Error publishing event:", error);
     return {
       success: false,
-      message: 'Failed to publish event',
+      message: "Failed to publish event",
     };
   }
 }

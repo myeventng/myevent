@@ -1,10 +1,10 @@
-'use server';
+"use server";
 
-import { revalidatePath } from 'next/cache';
-import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
-import { TableShape } from '@/generated/prisma';
+import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { TableShape } from "@/generated/prisma";
 
 interface ActionResponse<T> {
   success: boolean;
@@ -34,7 +34,7 @@ export async function createSeatingTable(data: {
     if (!session) {
       return {
         success: false,
-        message: 'Not authenticated',
+        message: "Not authenticated",
       };
     }
 
@@ -51,7 +51,7 @@ export async function createSeatingTable(data: {
     if (existingTable) {
       return {
         success: false,
-        message: 'A table with this number already exists',
+        message: "A table with this number already exists",
       };
     }
 
@@ -99,24 +99,24 @@ export async function createSeatingTable(data: {
             },
           },
           orderBy: {
-            seatNumber: 'asc',
+            seatNumber: "asc",
           },
         },
       },
     });
 
-    revalidatePath('/dashboard/events');
+    revalidatePath("/dashboard/events");
 
     return {
       success: true,
-      message: 'Seating table created successfully',
+      message: "Seating table created successfully",
       data: tableWithSeats,
     };
   } catch (error) {
-    console.error('Error creating seating table:', error);
+    console.error("Error creating seating table:", error);
     return {
       success: false,
-      message: 'Failed to create seating table',
+      message: "Failed to create seating table",
     };
   }
 }
@@ -141,7 +141,7 @@ export async function updateSeatingTable(data: {
     if (!session) {
       return {
         success: false,
-        message: 'Not authenticated',
+        message: "Not authenticated",
       };
     }
 
@@ -153,7 +153,7 @@ export async function updateSeatingTable(data: {
     if (!existingTable) {
       return {
         success: false,
-        message: 'Table not found',
+        message: "Table not found",
       };
     }
 
@@ -175,7 +175,7 @@ export async function updateSeatingTable(data: {
     if (data.capacity && data.capacity < existingTable.capacity) {
       const seatsToRemove = existingTable.seats
         .filter(
-          (seat) => seat.seatNumber > data.capacity! && !seat.invitationId
+          (seat) => seat.seatNumber > data.capacity! && !seat.invitationId,
         )
         .map((seat) => seat.id);
 
@@ -189,7 +189,7 @@ export async function updateSeatingTable(data: {
 
       // Check if there are assigned seats that would be removed
       const assignedSeatsToRemove = existingTable.seats.filter(
-        (seat) => seat.seatNumber > data.capacity! && seat.invitationId
+        (seat) => seat.seatNumber > data.capacity! && seat.invitationId,
       );
 
       if (assignedSeatsToRemove.length > 0) {
@@ -224,31 +224,31 @@ export async function updateSeatingTable(data: {
             },
           },
           orderBy: {
-            seatNumber: 'asc',
+            seatNumber: "asc",
           },
         },
       },
     });
 
-    revalidatePath('/dashboard/events');
+    revalidatePath("/dashboard/events");
 
     return {
       success: true,
-      message: 'Seating table updated successfully',
+      message: "Seating table updated successfully",
       data: updatedTable,
     };
   } catch (error) {
-    console.error('Error updating seating table:', error);
+    console.error("Error updating seating table:", error);
     return {
       success: false,
-      message: 'Failed to update seating table',
+      message: "Failed to update seating table",
     };
   }
 }
 
 // DELETE SEATING TABLE
 export async function deleteSeatingTable(
-  id: string
+  id: string,
 ): Promise<ActionResponse<null>> {
   try {
     const headersList = await headers();
@@ -259,7 +259,7 @@ export async function deleteSeatingTable(
     if (!session) {
       return {
         success: false,
-        message: 'Not authenticated',
+        message: "Not authenticated",
       };
     }
 
@@ -281,7 +281,7 @@ export async function deleteSeatingTable(
       return {
         success: false,
         message:
-          'Cannot delete table with assigned guests. Please unassign guests first.',
+          "Cannot delete table with assigned guests. Please unassign guests first.",
       };
     }
 
@@ -289,24 +289,24 @@ export async function deleteSeatingTable(
       where: { id },
     });
 
-    revalidatePath('/dashboard/events');
+    revalidatePath("/dashboard/events");
 
     return {
       success: true,
-      message: 'Seating table deleted successfully',
+      message: "Seating table deleted successfully",
     };
   } catch (error) {
-    console.error('Error deleting seating table:', error);
+    console.error("Error deleting seating table:", error);
     return {
       success: false,
-      message: 'Failed to delete seating table',
+      message: "Failed to delete seating table",
     };
   }
 }
 
 // GET ALL TABLES FOR EVENT
 export async function getSeatingTables(
-  inviteOnlyEventId: string
+  inviteOnlyEventId: string,
 ): Promise<ActionResponse<any>> {
   try {
     const tables = await prisma.seatingTable.findMany({
@@ -323,14 +323,15 @@ export async function getSeatingTables(
                 plusOnesConfirmed: true,
               },
             },
+            table: true,
           },
           orderBy: {
-            seatNumber: 'asc',
+            seatNumber: "asc",
           },
         },
       },
       orderBy: {
-        tableNumber: 'asc',
+        tableNumber: "asc",
       },
     });
 
@@ -341,14 +342,14 @@ export async function getSeatingTables(
       assignedSeats: tables.reduce(
         (sum, table) =>
           sum + table.seats.filter((seat) => seat.invitationId).length,
-        0
+        0,
       ),
       reservedSeats: tables.reduce(
         (sum, table) =>
           sum +
           table.seats.filter((seat) => seat.isReserved && !seat.invitationId)
             .length,
-        0
+        0,
       ),
       availableSeats: 0,
     };
@@ -364,10 +365,10 @@ export async function getSeatingTables(
       },
     };
   } catch (error) {
-    console.error('Error fetching seating tables:', error);
+    console.error("Error fetching seating tables:", error);
     return {
       success: false,
-      message: 'Failed to fetch seating tables',
+      message: "Failed to fetch seating tables",
     };
   }
 }
@@ -388,7 +389,7 @@ export async function assignGuestToSeat(data: {
     if (!session) {
       return {
         success: false,
-        message: 'Not authenticated',
+        message: "Not authenticated",
       };
     }
 
@@ -401,14 +402,14 @@ export async function assignGuestToSeat(data: {
     if (!seat) {
       return {
         success: false,
-        message: 'Seat not found',
+        message: "Seat not found",
       };
     }
 
     if (seat.invitationId && seat.invitationId !== data.invitationId) {
       return {
         success: false,
-        message: 'Seat is already assigned to another guest',
+        message: "Seat is already assigned to another guest",
       };
     }
 
@@ -450,25 +451,25 @@ export async function assignGuestToSeat(data: {
       },
     });
 
-    revalidatePath('/dashboard/events');
+    revalidatePath("/dashboard/events");
 
     return {
       success: true,
-      message: 'Guest assigned to seat successfully',
+      message: "Guest assigned to seat successfully",
       data: updatedSeat,
     };
   } catch (error) {
-    console.error('Error assigning guest to seat:', error);
+    console.error("Error assigning guest to seat:", error);
     return {
       success: false,
-      message: 'Failed to assign guest to seat',
+      message: "Failed to assign guest to seat",
     };
   }
 }
 
 // UNASSIGN GUEST FROM SEAT
 export async function unassignGuestFromSeat(
-  seatId: string
+  seatId: string,
 ): Promise<ActionResponse<any>> {
   try {
     const headersList = await headers();
@@ -479,7 +480,7 @@ export async function unassignGuestFromSeat(
     if (!session) {
       return {
         success: false,
-        message: 'Not authenticated',
+        message: "Not authenticated",
       };
     }
 
@@ -493,18 +494,18 @@ export async function unassignGuestFromSeat(
       },
     });
 
-    revalidatePath('/dashboard/events');
+    revalidatePath("/dashboard/events");
 
     return {
       success: true,
-      message: 'Guest unassigned from seat',
+      message: "Guest unassigned from seat",
       data: updatedSeat,
     };
   } catch (error) {
-    console.error('Error unassigning guest from seat:', error);
+    console.error("Error unassigning guest from seat:", error);
     return {
       success: false,
-      message: 'Failed to unassign guest from seat',
+      message: "Failed to unassign guest from seat",
     };
   }
 }
@@ -524,7 +525,7 @@ export async function reserveSeat(data: {
     if (!session) {
       return {
         success: false,
-        message: 'Not authenticated',
+        message: "Not authenticated",
       };
     }
 
@@ -535,14 +536,14 @@ export async function reserveSeat(data: {
     if (!seat) {
       return {
         success: false,
-        message: 'Seat not found',
+        message: "Seat not found",
       };
     }
 
     if (seat.invitationId) {
       return {
         success: false,
-        message: 'Cannot reserve a seat that is already assigned',
+        message: "Cannot reserve a seat that is already assigned",
       };
     }
 
@@ -558,25 +559,25 @@ export async function reserveSeat(data: {
       },
     });
 
-    revalidatePath('/dashboard/events');
+    revalidatePath("/dashboard/events");
 
     return {
       success: true,
-      message: 'Seat reserved successfully',
+      message: "Seat reserved successfully",
       data: updatedSeat,
     };
   } catch (error) {
-    console.error('Error reserving seat:', error);
+    console.error("Error reserving seat:", error);
     return {
       success: false,
-      message: 'Failed to reserve seat',
+      message: "Failed to reserve seat",
     };
   }
 }
 
 // UNRESERVE SEAT
 export async function unreserveSeat(
-  seatId: string
+  seatId: string,
 ): Promise<ActionResponse<any>> {
   try {
     const headersList = await headers();
@@ -587,7 +588,7 @@ export async function unreserveSeat(
     if (!session) {
       return {
         success: false,
-        message: 'Not authenticated',
+        message: "Not authenticated",
       };
     }
 
@@ -602,25 +603,25 @@ export async function unreserveSeat(
       },
     });
 
-    revalidatePath('/dashboard/events');
+    revalidatePath("/dashboard/events");
 
     return {
       success: true,
-      message: 'Seat unreserved',
+      message: "Seat unreserved",
       data: updatedSeat,
     };
   } catch (error) {
-    console.error('Error unreserving seat:', error);
+    console.error("Error unreserving seat:", error);
     return {
       success: false,
-      message: 'Failed to unreserve seat',
+      message: "Failed to unreserve seat",
     };
   }
 }
 
 // AUTO-ASSIGN GUESTS TO AVAILABLE SEATS
 export async function autoAssignGuests(
-  inviteOnlyEventId: string
+  inviteOnlyEventId: string,
 ): Promise<ActionResponse<any>> {
   try {
     const headersList = await headers();
@@ -631,7 +632,7 @@ export async function autoAssignGuests(
     if (!session) {
       return {
         success: false,
-        message: 'Not authenticated',
+        message: "Not authenticated",
       };
     }
 
@@ -640,10 +641,10 @@ export async function autoAssignGuests(
       where: {
         inviteOnlyEventId,
         seat: null,
-        status: { in: ['PENDING', 'ACCEPTED'] },
+        status: { in: ["PENDING", "ACCEPTED"] },
       },
       orderBy: {
-        createdAt: 'asc',
+        createdAt: "asc",
       },
     });
 
@@ -659,13 +660,13 @@ export async function autoAssignGuests(
       include: {
         table: true,
       },
-      orderBy: [{ table: { tableNumber: 'asc' } }, { seatNumber: 'asc' }],
+      orderBy: [{ table: { tableNumber: "asc" } }, { seatNumber: "asc" }],
     });
 
     if (unassignedGuests.length === 0) {
       return {
         success: false,
-        message: 'No unassigned guests to assign',
+        message: "No unassigned guests to assign",
       };
     }
 
@@ -683,13 +684,13 @@ export async function autoAssignGuests(
         prisma.seat.update({
           where: { id: availableSeats[i].id },
           data: { invitationId: unassignedGuests[i].id },
-        })
+        }),
       );
     }
 
     await prisma.$transaction(assignments);
 
-    revalidatePath('/dashboard/events');
+    revalidatePath("/dashboard/events");
 
     return {
       success: true,
@@ -697,17 +698,17 @@ export async function autoAssignGuests(
       data: { assignedCount: unassignedGuests.length },
     };
   } catch (error) {
-    console.error('Error auto-assigning guests:', error);
+    console.error("Error auto-assigning guests:", error);
     return {
       success: false,
-      message: 'Failed to auto-assign guests',
+      message: "Failed to auto-assign guests",
     };
   }
 }
 
 // GET UNASSIGNED GUESTS
 export async function getUnassignedGuests(
-  inviteOnlyEventId: string
+  inviteOnlyEventId: string,
 ): Promise<ActionResponse<any>> {
   try {
     const unassignedGuests = await prisma.invitation.findMany({
@@ -716,7 +717,7 @@ export async function getUnassignedGuests(
         seat: null,
       },
       orderBy: {
-        guestName: 'asc',
+        guestName: "asc",
       },
     });
 
@@ -725,10 +726,10 @@ export async function getUnassignedGuests(
       data: unassignedGuests,
     };
   } catch (error) {
-    console.error('Error fetching unassigned guests:', error);
+    console.error("Error fetching unassigned guests:", error);
     return {
       success: false,
-      message: 'Failed to fetch unassigned guests',
+      message: "Failed to fetch unassigned guests",
     };
   }
 }
@@ -747,7 +748,7 @@ export async function toggleSeatingArrangement(data: {
     if (!session) {
       return {
         success: false,
-        message: 'Not authenticated',
+        message: "Not authenticated",
       };
     }
 
@@ -758,18 +759,18 @@ export async function toggleSeatingArrangement(data: {
       },
     });
 
-    revalidatePath('/dashboard/events');
+    revalidatePath("/dashboard/events");
 
     return {
       success: true,
-      message: `Seating arrangement ${data.enabled ? 'enabled' : 'disabled'}`,
+      message: `Seating arrangement ${data.enabled ? "enabled" : "disabled"}`,
       data: updatedEvent,
     };
   } catch (error) {
-    console.error('Error toggling seating arrangement:', error);
+    console.error("Error toggling seating arrangement:", error);
     return {
       success: false,
-      message: 'Failed to update seating arrangement setting',
+      message: "Failed to update seating arrangement setting",
     };
   }
 }

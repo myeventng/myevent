@@ -1021,7 +1021,7 @@ export function AdminTicketsTable({
               )}
               {globalFilter && (
                 <Badge variant="secondary" className="px-3 py-1">
-                  Search: "{globalFilter}"
+                  Search: &quote;{globalFilter}&quote;
                 </Badge>
               )}
             </div>

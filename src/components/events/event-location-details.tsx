@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
-import { Button } from '@/components/ui/button';
+import { useEffect, useState } from "react";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -13,26 +13,26 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
+} from "@/components/ui/form";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { getVenues } from '@/actions/venue-actions';
-import { getUserVenues } from '@/actions/venue-actions';
-import { toast } from 'sonner';
-import { getUserOrganizerProfile } from '@/actions/organizer.actions';
-import { Plus, Loader2, Globe, MapPin, Vote } from 'lucide-react';
-import { CreateVenueModal } from './create-venue-modal';
-import { EventType } from '@/generated/prisma';
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { getVenues } from "@/actions/venue-actions";
+import { getUserVenues } from "@/actions/venue-actions";
+import { toast } from "sonner";
+import { getUserOrganizerProfile } from "@/actions/organizer.actions";
+import { Plus, Loader2, Globe, MapPin, Vote, Mail } from "lucide-react";
+import { CreateVenueModal } from "./create-venue-modal";
+import { EventType } from "@/generated/prisma";
 
 // Form schema for this step
 const formSchema = z.object({
-  venueId: z.string().min(1, 'Venue is required'),
+  venueId: z.string().min(1, "Venue is required"),
   location: z.string().optional(),
   cityId: z.string().optional(),
 });
@@ -59,13 +59,14 @@ export function EventLocationDetails({
   const [showCreateVenue, setShowCreateVenue] = useState(false);
 
   const isVotingContest = formData.eventType === EventType.VOTING_CONTEST;
+  const isInviteOnly = formData.eventType === EventType.INVITE;
   const isStandardEvent = formData.eventType === EventType.STANDARD;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      venueId: formData.venueId || '',
-      location: formData.location || '',
+      venueId: formData.venueId || "",
+      location: formData.location || "",
     },
   });
 
@@ -128,8 +129,8 @@ export function EventLocationDetails({
           }
         }
       } catch (error) {
-        console.error('Error fetching data:', error);
-        toast.error('Failed to load venues');
+        console.error("Error fetching data:", error);
+        toast.error("Failed to load venues");
       } finally {
         setIsLoading(false);
       }
@@ -143,7 +144,7 @@ export function EventLocationDetails({
     if (isVotingContest && !formData.venueId && venues.length > 0) {
       // Look for the online venue (either by ID or name)
       const onlineVenue = venues.find(
-        (v) => v.id === 'online-venue-id' || v.name === 'Online Event'
+        (v) => v.id === "online-venue-id" || v.name === "Online Event",
       );
       if (onlineVenue) {
         handleVenueChange(onlineVenue.id);
@@ -156,7 +157,7 @@ export function EventLocationDetails({
   const handleVenueChange = (venueId: string) => {
     const venue = venues.find((v) => v.id === venueId);
     setSelectedVenue(venue || null);
-    form.setValue('venueId', venueId);
+    form.setValue("venueId", venueId);
   };
 
   // Handle venue creation
@@ -167,9 +168,9 @@ export function EventLocationDetails({
 
     // Auto-select the newly created venue
     setSelectedVenue(venueWithOwnership);
-    form.setValue('venueId', newVenue.id);
+    form.setValue("venueId", newVenue.id);
 
-    toast.success('Venue created and selected!');
+    toast.success("Venue created and selected!");
   };
 
   // Handle form submission
@@ -179,7 +180,7 @@ export function EventLocationDetails({
     let cityId = venue?.cityId || venue?.city?.id;
 
     // For online venues, set cityId appropriately
-    if (venue?.name === 'Online Event' || venue?.id === 'online-venue-id') {
+    if (venue?.name === "Online Event" || venue?.id === "online-venue-id") {
       // Look for the online city or set to null
       cityId = venue?.cityId || undefined;
     }
@@ -192,24 +193,39 @@ export function EventLocationDetails({
     onNext();
   };
 
+  // Determine the icon based on event type
+  const getHeaderIcon = () => {
+    if (isVotingContest) return <Vote className="h-6 w-6 text-primary" />;
+    if (isInviteOnly) return <Mail className="h-6 w-6 text-primary" />;
+    return <MapPin className="h-6 w-6 text-primary" />;
+  };
+
+  // Determine the header title
+  const getHeaderTitle = () => {
+    if (isVotingContest) return "Contest Location";
+    if (isInviteOnly) return "Event Venue";
+    return "Event Location";
+  };
+
+  // Determine the description
+  const getHeaderDescription = () => {
+    if (isVotingContest) {
+      return "Voting contests are conducted online, but you can add additional location details if needed.";
+    }
+    if (isInviteOnly) {
+      return "Select the venue where your invite-only event will take place, or create a new one.";
+    }
+    return "Select the venue for your event or create a new one.";
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <div className="flex items-center gap-3 mb-2">
-          {isVotingContest ? (
-            <Vote className="h-6 w-6 text-primary" />
-          ) : (
-            <MapPin className="h-6 w-6 text-primary" />
-          )}
-          <h2 className="text-2xl font-bold">
-            {isVotingContest ? 'Contest Location' : 'Event Location'}
-          </h2>
+          {getHeaderIcon()}
+          <h2 className="text-2xl font-bold">{getHeaderTitle()}</h2>
         </div>
-        <p className="text-muted-foreground">
-          {isVotingContest
-            ? 'Voting contests are conducted online, but you can add additional location details if needed.'
-            : 'Select the venue for your event or create a new one.'}
-        </p>
+        <p className="text-muted-foreground">{getHeaderDescription()}</p>
       </div>
 
       {isVotingContest && (
@@ -229,6 +245,24 @@ export function EventLocationDetails({
         </div>
       )}
 
+      {isInviteOnly && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <Mail className="h-5 w-5 text-purple-600 mt-0.5" />
+            <div>
+              <h3 className="font-medium text-purple-900">
+                Private Event Venue
+              </h3>
+              <p className="text-sm text-purple-700 mt-1">
+                Select the venue where your guests will gather. This could be a
+                home, banquet hall, outdoor space, or any location suitable for
+                your private event.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <FormField
@@ -237,7 +271,7 @@ export function EventLocationDetails({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>
-                  {isVotingContest ? 'Event Type' : 'Venue'}
+                  {isVotingContest ? "Event Type" : "Venue"}
                 </FormLabel>
                 <div className="space-y-3">
                   <Select
@@ -249,7 +283,7 @@ export function EventLocationDetails({
                       <SelectTrigger>
                         <SelectValue
                           placeholder={
-                            isVotingContest ? 'Online Event' : 'Select a venue'
+                            isVotingContest ? "Online Event" : "Select a venue"
                           }
                         />
                       </SelectTrigger>
@@ -258,17 +292,17 @@ export function EventLocationDetails({
                       {venues.map((venue) => (
                         <SelectItem key={venue.id} value={venue.id}>
                           <div className="flex items-center gap-2">
-                            {(venue.name === 'Online Event' ||
-                              venue.id === 'online-venue-id') && (
+                            {(venue.name === "Online Event" ||
+                              venue.id === "online-venue-id") && (
                               <Globe className="h-4 w-4 text-blue-600" />
                             )}
                             <span>{venue.name}</span>
-                            {venue.isOwned && venue.name !== 'Online Event' && (
+                            {venue.isOwned && venue.name !== "Online Event" && (
                               <span className="text-xs bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
                                 Owned
                               </span>
                             )}
-                            {venue.name !== 'Online Event' && (
+                            {venue.name !== "Online Event" && (
                               <span className="text-muted-foreground">
                                 - {venue.city?.name || venue.address}
                               </span>
@@ -279,8 +313,8 @@ export function EventLocationDetails({
                     </SelectContent>
                   </Select>
 
-                  {/* Quick Venue Creation - Only for standard events */}
-                  {isStandardEvent && (
+                  {/* Quick Venue Creation - For standard events AND invite-only events */}
+                  {(isStandardEvent || isInviteOnly) && (
                     <div className="flex items-center gap-2">
                       <Button
                         type="button"
@@ -300,7 +334,9 @@ export function EventLocationDetails({
                 <FormDescription>
                   {isVotingContest
                     ? "Voting contests are conducted online and don't require a physical venue."
-                    : 'Select the venue where your event will take place.'}
+                    : isInviteOnly
+                      ? "Select the venue where your private event will be held."
+                      : "Select the venue where your event will take place."}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -310,17 +346,17 @@ export function EventLocationDetails({
           {selectedVenue && (
             <div className="border rounded-md p-4 bg-muted/20">
               <h3 className="font-medium mb-2 flex items-center gap-2">
-                {selectedVenue.name === 'Online Event'
-                  ? 'Event Type:'
-                  : 'Venue Details:'}
+                {selectedVenue.name === "Online Event"
+                  ? "Event Type:"
+                  : "Venue Details:"}
                 {selectedVenue.isOwned &&
-                  selectedVenue.name !== 'Online Event' && (
+                  selectedVenue.name !== "Online Event" && (
                     <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
                       Your Venue
                     </span>
                   )}
-                {(selectedVenue.name === 'Online Event' ||
-                  selectedVenue.id === 'online-venue-id') && (
+                {(selectedVenue.name === "Online Event" ||
+                  selectedVenue.id === "online-venue-id") && (
                   <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded">
                     Online
                   </span>
@@ -331,9 +367,9 @@ export function EventLocationDetails({
                   <p>
                     <strong>Location:</strong> {selectedVenue.address}
                   </p>
-                  {selectedVenue.name !== 'Online Event' && (
+                  {selectedVenue.name !== "Online Event" && (
                     <p>
-                      <strong>City:</strong> {selectedVenue.city?.name},{' '}
+                      <strong>City:</strong> {selectedVenue.city?.name},{" "}
                       {selectedVenue.city?.state}
                     </p>
                   )}
@@ -341,7 +377,7 @@ export function EventLocationDetails({
                 <div>
                   {selectedVenue.capacity && (
                     <p>
-                      <strong>Capacity:</strong>{' '}
+                      <strong>Capacity:</strong>{" "}
                       {selectedVenue.capacity.toLocaleString()} people
                     </p>
                   )}
@@ -353,7 +389,7 @@ export function EventLocationDetails({
                 </div>
               </div>
               {selectedVenue.description &&
-                selectedVenue.name !== 'Online Event' && (
+                selectedVenue.name !== "Online Event" && (
                   <div className="mt-3 pt-3 border-t">
                     <p className="text-sm">{selectedVenue.description}</p>
                   </div>
@@ -368,23 +404,29 @@ export function EventLocationDetails({
               <FormItem>
                 <FormLabel>
                   {isVotingContest
-                    ? 'Additional Contest Information'
-                    : 'Additional Location Details'}
+                    ? "Additional Contest Information"
+                    : isInviteOnly
+                      ? "Additional Event Details"
+                      : "Additional Location Details"}
                 </FormLabel>
                 <FormControl>
                   <Textarea
                     placeholder={
                       isVotingContest
-                        ? 'Provide any additional information about the contest platform, voting instructions, or other relevant details...'
-                        : 'Provide any additional location information...'
+                        ? "Provide any additional information about the contest platform, voting instructions, or other relevant details..."
+                        : isInviteOnly
+                          ? "Provide any additional information about the event location, parking instructions, dress code, or special notes for guests..."
+                          : "Provide any additional location information..."
                     }
                     {...field}
                   />
                 </FormControl>
                 <FormDescription>
                   {isVotingContest
-                    ? 'Provide specific details about how the voting will work, any special instructions for voters, or other important contest information.'
-                    : 'Provide specific details about the location, such as entry information, parking instructions, or specific room/area within the venue.'}
+                    ? "Provide specific details about how the voting will work, any special instructions for voters, or other important contest information."
+                    : isInviteOnly
+                      ? "Share specific details about the venue, entry instructions, parking availability, or any special requirements guests should know about."
+                      : "Provide specific details about the location, such as entry information, parking instructions, or specific room/area within the venue."}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -400,8 +442,8 @@ export function EventLocationDetails({
         </form>
       </Form>
 
-      {/* Create Venue Modal - Only show for standard events */}
-      {isStandardEvent && (
+      {/* Create Venue Modal - For standard events AND invite-only events */}
+      {(isStandardEvent || isInviteOnly) && (
         <CreateVenueModal
           isOpen={showCreateVenue}
           onClose={() => setShowCreateVenue(false)}
