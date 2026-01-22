@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,9 +41,13 @@ import {
   MapPin,
   Users,
   Eye,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
-import { resendInvitation } from "@/actions/invite-only.action";
+import {
+  resendInvitation,
+  createInvitation,
+} from "@/actions/invite-only.action";
 import { getEventById } from "@/actions/event.actions";
 import { SeatingArrangement } from "@/components/events/seating-arrangement";
 
@@ -94,6 +98,8 @@ export function GuestManagement({
   const [highlightedGuestId, setHighlightedGuestId] = useState<string | null>(
     null,
   );
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
 
   const [newGuest, setNewGuest] = useState<Omit<Guest, "id">>({
     guestName: "",
@@ -108,7 +114,23 @@ export function GuestManagement({
   const inviteOnly = formData.inviteOnly || {};
   const seatingEnabled = inviteOnly.enableSeatingArrangement || false;
 
-  const handleAddGuest = () => {
+  const [previousTab, setPreviousTab] = useState(activeTab);
+
+  // ✅ OPTIMIZED: Only auto-refresh when switching FROM seating TO guests
+  useEffect(() => {
+    if (
+      isEditMode &&
+      inviteOnlyEventId &&
+      previousTab === "seating" &&
+      activeTab === "guests"
+    ) {
+      handleRefreshGuests();
+    }
+    setPreviousTab(activeTab);
+  }, [activeTab, isEditMode, inviteOnlyEventId]);
+
+  // ✅ FIXED: In edit mode, save directly to database
+  const handleAddGuest = async () => {
     if (!newGuest.guestName || !newGuest.guestEmail) {
       toast.error("Guest name and email are required");
       return;
@@ -119,25 +141,66 @@ export function GuestManagement({
       return;
     }
 
-    const guestToAdd: Guest = {
-      ...newGuest,
-      id: `temp-${Date.now()}`,
-    };
+    // ✅ FIX: In edit mode, save directly to database
+    if (isEditMode && inviteOnlyEventId) {
+      setIsAdding(true);
+      try {
+        const result = await createInvitation({
+          inviteOnlyEventId,
+          guestName: newGuest.guestName,
+          guestEmail: newGuest.guestEmail,
+          guestPhone: newGuest.guestPhone,
+          plusOnesAllowed: newGuest.plusOnesAllowed,
+          specialRequirements: newGuest.specialRequirements,
+          organizerNotes: newGuest.organizerNotes,
+          sendEmail: false,
+        });
 
-    updateFormData({
-      guests: [...guests, guestToAdd],
-    });
+        if (result.success) {
+          toast.success("Guest added successfully");
+          setNewGuest({
+            guestName: "",
+            guestEmail: "",
+            guestPhone: "",
+            plusOnesAllowed: 0,
+            specialRequirements: "",
+            organizerNotes: "",
+          });
+          setIsAddDialogOpen(false);
 
-    setNewGuest({
-      guestName: "",
-      guestEmail: "",
-      guestPhone: "",
-      plusOnesAllowed: 0,
-      specialRequirements: "",
-      organizerNotes: "",
-    });
-    setIsAddDialogOpen(false);
-    toast.success("Guest added successfully");
+          // Refresh to show the new guest
+          await handleRefreshGuests();
+        } else {
+          toast.error(result.message || "Failed to add guest");
+        }
+      } catch (error) {
+        console.error("Error adding guest:", error);
+        toast.error("Failed to add guest");
+      } finally {
+        setIsAdding(false);
+      }
+    } else {
+      // ✅ For create mode, use temporary ID
+      const guestToAdd: Guest = {
+        ...newGuest,
+        id: `temp-${Date.now()}`,
+      };
+
+      updateFormData({
+        guests: [...guests, guestToAdd],
+      });
+
+      setNewGuest({
+        guestName: "",
+        guestEmail: "",
+        guestPhone: "",
+        plusOnesAllowed: 0,
+        specialRequirements: "",
+        organizerNotes: "",
+      });
+      setIsAddDialogOpen(false);
+      toast.success("Guest added successfully");
+    }
   };
 
   const handleEditGuest = () => {
@@ -271,26 +334,85 @@ export function GuestManagement({
     );
   };
 
+  // ✅ FIXED: Properly handle the seat assignment updates (no temp guests in edit mode)
   const handleRefreshGuests = async () => {
-    if (!inviteOnlyEventId || !formData.id) return;
-
-    const result = await getEventById(formData.id);
-    if (result.success && result.data?.inviteOnlyEvent?.invitations) {
-      const updatedGuests = result.data.inviteOnlyEvent.invitations.map(
-        (inv: any) => ({
-          id: inv.id,
-          guestName: inv.guestName,
-          guestEmail: inv.guestEmail,
-          guestPhone: inv.guestPhone || "",
-          plusOnesAllowed: inv.plusOnesAllowed || 0,
-          specialRequirements: inv.specialRequirements || "",
-          organizerNotes: inv.organizerNotes || "",
-          seat: inv.seat,
-        }),
-      );
-
-      updateFormData({ guests: updatedGuests });
+    if (!inviteOnlyEventId || !formData.id) {
+      console.log("DEBUG: Missing IDs", {
+        inviteOnlyEventId,
+        formDataId: formData.id,
+      });
+      return;
     }
+
+    setIsRefreshing(true);
+
+    try {
+      console.log("DEBUG: Fetching event with ID:", formData.id);
+
+      const result = await getEventById(formData.id);
+
+      console.log("DEBUG: getEventById result:", result);
+
+      if (result.success && result.data?.inviteOnlyEvent?.invitations) {
+        console.log(
+          "DEBUG: Raw invitations data:",
+          result.data.inviteOnlyEvent.invitations,
+        );
+
+        // ✅ Map all guests from database (no temp guests in edit mode)
+        const updatedGuests = result.data.inviteOnlyEvent.invitations.map(
+          (inv: any) => {
+            console.log("DEBUG: Processing invitation:", {
+              id: inv.id,
+              guestName: inv.guestName,
+              hasSeat: !!inv.seat,
+              seatData: inv.seat,
+            });
+
+            return {
+              id: inv.id,
+              guestName: inv.guestName,
+              guestEmail: inv.guestEmail,
+              guestPhone: inv.guestPhone || "",
+              plusOnesAllowed: inv.plusOnesAllowed || 0,
+              specialRequirements: inv.specialRequirements || "",
+              organizerNotes: inv.organizerNotes || "",
+              seat: inv.seat
+                ? {
+                    id: inv.seat.id,
+                    seatNumber: inv.seat.seatNumber,
+                    table: {
+                      tableNumber: inv.seat.table.tableNumber,
+                      tableName: inv.seat.table.tableName || undefined,
+                    },
+                  }
+                : undefined,
+            };
+          },
+        );
+
+        console.log("DEBUG: Updated guests array:", updatedGuests);
+
+        updateFormData({ guests: updatedGuests });
+        toast.success("Guest list refreshed");
+      } else {
+        console.log("DEBUG: No invitations found or result failed", {
+          success: result.success,
+          hasInviteOnlyEvent: !!result.data?.inviteOnlyEvent,
+          hasInvitations: !!result.data?.inviteOnlyEvent?.invitations,
+        });
+      }
+    } catch (error) {
+      console.error("DEBUG: Error refreshing guests:", error);
+      toast.error("Failed to refresh guest list");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // ✅ NEW: Manual refresh button handler
+  const handleManualRefresh = async () => {
+    await handleRefreshGuests();
   };
 
   // Render guest table rows
@@ -412,12 +534,25 @@ export function GuestManagement({
                   <Mail className="h-4 w-4" />
                   Bulk Import
                 </Button>
+                {/* ✅ NEW: Manual Refresh Button */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleManualRefresh}
+                  disabled={isRefreshing}
+                  className="gap-2"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+                  />
+                  {isRefreshing ? "Refreshing..." : "Refresh"}
+                </Button>
                 <Dialog
                   open={isAddDialogOpen}
                   onOpenChange={setIsAddDialogOpen}
                 >
                   <DialogTrigger asChild>
-                    <Button type="button" className="gap-2">
+                    <Button type="button" className="gap-2" disabled={isAdding}>
                       <Plus className="h-4 w-4" />
                       Add Guest
                     </Button>
@@ -540,8 +675,12 @@ export function GuestManagement({
                       >
                         Cancel
                       </Button>
-                      <Button type="button" onClick={handleAddGuest}>
-                        Add Guest
+                      <Button
+                        type="button"
+                        onClick={handleAddGuest}
+                        disabled={isAdding}
+                      >
+                        {isAdding ? "Adding..." : "Add Guest"}
                       </Button>
                     </DialogFooter>
                   </DialogContent>

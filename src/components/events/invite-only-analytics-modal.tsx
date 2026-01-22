@@ -1,17 +1,17 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { format } from 'date-fns';
+import { useState, useEffect } from "react";
+import { format } from "date-fns";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+} from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -19,9 +19,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { Progress } from '@/components/ui/progress';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+} from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Users,
   UserCheck,
@@ -40,10 +40,13 @@ import {
   Calendar,
   Shield,
   Armchair,
-} from 'lucide-react';
-import { getEventInvitations, getEventDonations } from '@/actions/invite-only.action';
-import { toast } from 'sonner';
-import { SeatingAnalyticsTab } from './seating-analytics-tab';
+} from "lucide-react";
+import {
+  getEventInvitations,
+  getEventDonations,
+} from "@/actions/invite-only.action";
+import { toast } from "sonner";
+import { SeatingAnalyticsTab } from "./seating-analytics-tab";
 
 interface InviteOnlyAnalyticsModalProps {
   event: any;
@@ -77,11 +80,16 @@ export function InviteOnlyAnalyticsModal({
   userSubRole,
 }: InviteOnlyAnalyticsModalProps) {
   const [invitations, setInvitations] = useState<any[]>([]);
-  const [invitationStats, setInvitationStats] = useState<InvitationStats | null>(null);
+  const [invitationStats, setInvitationStats] =
+    useState<InvitationStats | null>(null);
   const [donations, setDonations] = useState<any[]>([]);
-  const [donationStats, setDonationStats] = useState<DonationStats | null>(null);
+  const [donationStats, setDonationStats] = useState<DonationStats | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(false);
-  const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(null);
+  const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(
+    null,
+  );
 
   // Load invitation data
   const loadInvitationData = async () => {
@@ -89,13 +97,15 @@ export function InviteOnlyAnalyticsModal({
 
     setIsLoading(true);
     try {
-      const invitationResponse = await getEventInvitations(event.inviteOnlyEvent.id);
+      const invitationResponse = await getEventInvitations(
+        event.inviteOnlyEvent.id,
+      );
 
       if (invitationResponse.success && invitationResponse.data) {
         setInvitations(invitationResponse.data.invitations);
         setInvitationStats(invitationResponse.data.stats);
       } else {
-        toast.error('Failed to load invitation data');
+        toast.error("Failed to load invitation data");
       }
 
       // Load donation data if enabled
@@ -112,8 +122,8 @@ export function InviteOnlyAnalyticsModal({
         }
       }
     } catch (error) {
-      console.error('Error loading invite data:', error);
-      toast.error('Failed to load analytics');
+      console.error("Error loading invite data:", error);
+      toast.error("Failed to load analytics");
     } finally {
       setIsLoading(false);
     }
@@ -143,40 +153,40 @@ export function InviteOnlyAnalyticsModal({
   }, [isOpen, event?.inviteOnlyEvent?.id]);
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-NG', {
-      style: 'currency',
-      currency: 'NGN',
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
     }).format(amount);
   };
 
   const formatDateTime = (date: string | Date) => {
-    return format(new Date(date), 'PPP p');
+    return format(new Date(date), "PPP p");
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'ACCEPTED':
+      case "ACCEPTED":
         return (
           <Badge variant="outline" className="bg-green-100 text-green-800">
             <CheckCircle className="w-3 h-3 mr-1" />
             Accepted
           </Badge>
         );
-      case 'DECLINED':
+      case "DECLINED":
         return (
           <Badge variant="outline" className="bg-red-100 text-red-800">
             <XCircle className="w-3 h-3 mr-1" />
             Declined
           </Badge>
         );
-      case 'PENDING':
+      case "PENDING":
         return (
           <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
             <Clock className="w-3 h-3 mr-1" />
             Pending
           </Badge>
         );
-      case 'ATTENDED':
+      case "ATTENDED":
         return (
           <Badge variant="outline" className="bg-blue-100 text-blue-800">
             <UserCheck className="w-3 h-3 mr-1" />
@@ -192,19 +202,19 @@ export function InviteOnlyAnalyticsModal({
     if (!rsvpResponse) return null;
 
     switch (rsvpResponse) {
-      case 'ATTENDING':
+      case "ATTENDING":
         return (
           <Badge variant="outline" className="bg-green-100 text-green-800">
             Attending
           </Badge>
         );
-      case 'NOT_ATTENDING':
+      case "NOT_ATTENDING":
         return (
           <Badge variant="outline" className="bg-red-100 text-red-800">
             Not Attending
           </Badge>
         );
-      case 'MAYBE':
+      case "MAYBE":
         return (
           <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
             Maybe
@@ -222,53 +232,64 @@ export function InviteOnlyAnalyticsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden">
-        <DialogHeader className="pb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                <Shield className="h-5 w-5" />
-                {event.title} - Invite-Only Analytics
+      <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="pb-4 border-b">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <DialogTitle className="text-2xl font-bold flex items-center gap-2 mb-2">
+                <Shield className="h-6 w-6 text-purple-600" />
+                {event.title}
               </DialogTitle>
-              <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                <span>{formatDateTime(event.startDateTime)}</span>
-                <Badge variant="outline" className="bg-purple-100 text-purple-800">
+              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                <div className="flex items-center gap-1">
+                  <Calendar className="h-4 w-4" />
+                  {format(new Date(event.startDateTime), "PPP p")}
+                </div>
+                <Badge
+                  variant="outline"
+                  className="bg-purple-100 text-purple-800"
+                >
                   <Users className="w-3 h-3 mr-1" />
                   Invite Only
                 </Badge>
                 {event.inviteOnlyEvent.isPrivate && (
-                  <Badge variant="outline" className="bg-gray-100 text-gray-800">
+                  <Badge
+                    variant="outline"
+                    className="bg-gray-100 text-gray-800"
+                  >
                     <Shield className="w-3 h-3 mr-1" />
                     Private
                   </Badge>
                 )}
                 {seatingEnabled && (
-                  <Badge variant="outline" className="bg-blue-100 text-blue-800">
+                  <Badge
+                    variant="outline"
+                    className="bg-blue-100 text-blue-800"
+                  >
                     <Armchair className="w-3 h-3 mr-1" />
                     Seating Arranged
                   </Badge>
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadInvitationData}
-                disabled={isLoading}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`}
-                />
-                Refresh
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadInvitationData}
+              disabled={isLoading}
+              className="ml-4"
+            >
+              <RefreshCw
+                className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
+              />
+              Refresh
+            </Button>
           </div>
         </DialogHeader>
 
         {/* Auto-refresh indicator */}
         {refreshInterval && invitationStats && (
-          <Alert className="mb-4">
+          <Alert className="mx-6 mt-4">
             <Info className="h-4 w-4" />
             <AlertDescription>
               Analytics refresh automatically every 30 seconds
@@ -277,18 +298,31 @@ export function InviteOnlyAnalyticsModal({
         )}
 
         {isLoading && !invitationStats ? (
-          <div className="flex items-center justify-center min-h-96">
+          <div className="flex items-center justify-center flex-1 py-12">
             <div className="flex items-center gap-2">
-              <RefreshCw className="h-5 w-5 animate-spin" />
-              <span>Loading invite analytics...</span>
+              <RefreshCw className="h-5 w-5 animate-spin text-purple-600" />
+              <span className="text-lg">Loading invite analytics...</span>
             </div>
           </div>
         ) : invitationStats ? (
-          <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
+          <div className="flex-1 overflow-y-auto px-6 pb-6">
             <Tabs defaultValue="overview" className="w-full">
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList
+                className="grid w-full mb-6"
+                style={{
+                  gridTemplateColumns:
+                    seatingEnabled && event.inviteOnlyEvent.acceptDonations
+                      ? "repeat(5, 1fr)"
+                      : seatingEnabled || event.inviteOnlyEvent.acceptDonations
+                        ? "repeat(4, 1fr)"
+                        : "repeat(3, 1fr)",
+                }}
+              >
                 <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="guests">Guest List</TabsTrigger>
+                <TabsTrigger value="guests">
+                  <Users className="h-4 w-4 mr-2" />
+                  Guest List ({invitations.length})
+                </TabsTrigger>
                 {seatingEnabled && (
                   <TabsTrigger value="seating">
                     <Armchair className="h-4 w-4 mr-2" />
@@ -296,82 +330,89 @@ export function InviteOnlyAnalyticsModal({
                   </TabsTrigger>
                 )}
                 {event.inviteOnlyEvent.acceptDonations && (
-                  <TabsTrigger value="donations">Donations</TabsTrigger>
+                  <TabsTrigger value="donations">
+                    <Gift className="h-4 w-4 mr-2" />
+                    Donations ({donations.length})
+                  </TabsTrigger>
                 )}
-                <TabsTrigger value="settings">Settings</TabsTrigger>
+                <TabsTrigger value="settings">
+                  <Info className="h-4 w-4 mr-2" />
+                  Settings
+                </TabsTrigger>
               </TabsList>
 
               {/* Overview Tab */}
               <TabsContent value="overview" className="space-y-6">
                 {/* Key Metrics Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <Card>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card className="border-purple-200">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">
                         Total Invited
                       </CardTitle>
-                      <Mail className="h-4 w-4 text-muted-foreground" />
+                      <Mail className="h-4 w-4 text-purple-600" />
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">
+                      <div className="text-3xl font-bold text-purple-600">
                         {invitationStats.total}
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        Total invitations sent
-                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Invitations sent
+                      </p>
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="border-green-200">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">
                         Accepted
                       </CardTitle>
-                      <UserCheck className="h-4 w-4 text-muted-foreground" />
+                      <UserCheck className="h-4 w-4 text-green-600" />
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold text-green-600">
+                      <div className="text-3xl font-bold text-green-600">
                         {invitationStats.accepted}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground mt-1">
                         {invitationStats.total > 0
                           ? `${((invitationStats.accepted / invitationStats.total) * 100).toFixed(1)}% acceptance rate`
-                          : '0% acceptance rate'}
-                      </div>
+                          : "0% acceptance rate"}
+                      </p>
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="border-blue-200">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">
                         Plus Ones
                       </CardTitle>
-                      <UserPlus className="h-4 w-4 text-muted-foreground" />
+                      <UserPlus className="h-4 w-4 text-blue-600" />
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">
+                      <div className="text-3xl font-bold text-blue-600">
                         {invitationStats.totalPlusOnes}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground mt-1">
                         Additional guests
-                      </div>
+                      </p>
                     </CardContent>
                   </Card>
 
-                  <Card>
+                  <Card className="border-indigo-200">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">
                         Total Expected
                       </CardTitle>
-                      <Users className="h-4 w-4 text-muted-foreground" />
+                      <Users className="h-4 w-4 text-indigo-600" />
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">
-                        {invitationStats.accepted + invitationStats.totalPlusOnes}
+                      <div className="text-3xl font-bold text-indigo-600">
+                        {invitationStats.accepted +
+                          invitationStats.totalPlusOnes}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground mt-1">
                         Including plus ones
-                      </div>
+                      </p>
                     </CardContent>
                   </Card>
                 </div>
@@ -379,7 +420,9 @@ export function InviteOnlyAnalyticsModal({
                 {/* RSVP Status Breakdown */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>RSVP Status Breakdown</CardTitle>
+                    <CardTitle className="text-lg">
+                      RSVP Status Breakdown
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
@@ -388,12 +431,18 @@ export function InviteOnlyAnalyticsModal({
                         <div className="flex justify-between items-center mb-2">
                           <div className="flex items-center gap-2">
                             <CheckCircle className="h-4 w-4 text-green-600" />
-                            <span className="text-sm font-medium">Accepted</span>
+                            <span className="text-sm font-medium">
+                              Accepted
+                            </span>
                           </div>
-                          <span className="text-sm font-bold">
+                          <span className="text-sm font-bold text-green-600">
                             {invitationStats.accepted} (
                             {invitationStats.total > 0
-                              ? ((invitationStats.accepted / invitationStats.total) * 100).toFixed(1)
+                              ? (
+                                  (invitationStats.accepted /
+                                    invitationStats.total) *
+                                  100
+                                ).toFixed(1)
                               : 0}
                             %)
                           </span>
@@ -401,10 +450,12 @@ export function InviteOnlyAnalyticsModal({
                         <Progress
                           value={
                             invitationStats.total > 0
-                              ? (invitationStats.accepted / invitationStats.total) * 100
+                              ? (invitationStats.accepted /
+                                  invitationStats.total) *
+                                100
                               : 0
                           }
-                          className="h-2 bg-green-100"
+                          className="h-3 [&>div]:bg-green-600"
                         />
                       </div>
 
@@ -413,12 +464,18 @@ export function InviteOnlyAnalyticsModal({
                         <div className="flex justify-between items-center mb-2">
                           <div className="flex items-center gap-2">
                             <XCircle className="h-4 w-4 text-red-600" />
-                            <span className="text-sm font-medium">Declined</span>
+                            <span className="text-sm font-medium">
+                              Declined
+                            </span>
                           </div>
-                          <span className="text-sm font-bold">
+                          <span className="text-sm font-bold text-red-600">
                             {invitationStats.declined} (
                             {invitationStats.total > 0
-                              ? ((invitationStats.declined / invitationStats.total) * 100).toFixed(1)
+                              ? (
+                                  (invitationStats.declined /
+                                    invitationStats.total) *
+                                  100
+                                ).toFixed(1)
                               : 0}
                             %)
                           </span>
@@ -426,10 +483,12 @@ export function InviteOnlyAnalyticsModal({
                         <Progress
                           value={
                             invitationStats.total > 0
-                              ? (invitationStats.declined / invitationStats.total) * 100
+                              ? (invitationStats.declined /
+                                  invitationStats.total) *
+                                100
                               : 0
                           }
-                          className="h-2 bg-red-100"
+                          className="h-3 [&>div]:bg-red-600"
                         />
                       </div>
 
@@ -440,10 +499,14 @@ export function InviteOnlyAnalyticsModal({
                             <Clock className="h-4 w-4 text-yellow-600" />
                             <span className="text-sm font-medium">Pending</span>
                           </div>
-                          <span className="text-sm font-bold">
+                          <span className="text-sm font-bold text-yellow-600">
                             {invitationStats.pending} (
                             {invitationStats.total > 0
-                              ? ((invitationStats.pending / invitationStats.total) * 100).toFixed(1)
+                              ? (
+                                  (invitationStats.pending /
+                                    invitationStats.total) *
+                                  100
+                                ).toFixed(1)
                               : 0}
                             %)
                           </span>
@@ -451,10 +514,12 @@ export function InviteOnlyAnalyticsModal({
                         <Progress
                           value={
                             invitationStats.total > 0
-                              ? (invitationStats.pending / invitationStats.total) * 100
+                              ? (invitationStats.pending /
+                                  invitationStats.total) *
+                                100
                               : 0
                           }
-                          className="h-2 bg-yellow-100"
+                          className="h-3 [&>div]:bg-yellow-600"
                         />
                       </div>
 
@@ -464,12 +529,18 @@ export function InviteOnlyAnalyticsModal({
                           <div className="flex justify-between items-center mb-2">
                             <div className="flex items-center gap-2">
                               <UserCheck className="h-4 w-4 text-blue-600" />
-                              <span className="text-sm font-medium">Attended</span>
+                              <span className="text-sm font-medium">
+                                Attended
+                              </span>
                             </div>
-                            <span className="text-sm font-bold">
+                            <span className="text-sm font-bold text-blue-600">
                               {invitationStats.attended} (
                               {invitationStats.accepted > 0
-                                ? ((invitationStats.attended / invitationStats.accepted) * 100).toFixed(1)
+                                ? (
+                                    (invitationStats.attended /
+                                      invitationStats.accepted) *
+                                    100
+                                  ).toFixed(1)
                                 : 0}
                               % of accepted)
                             </span>
@@ -477,10 +548,12 @@ export function InviteOnlyAnalyticsModal({
                           <Progress
                             value={
                               invitationStats.accepted > 0
-                                ? (invitationStats.attended / invitationStats.accepted) * 100
+                                ? (invitationStats.attended /
+                                    invitationStats.accepted) *
+                                  100
                                 : 0
                             }
-                            className="h-2 bg-blue-100"
+                            className="h-3 [&>div]:bg-blue-600"
                           />
                         </div>
                       )}
@@ -491,54 +564,54 @@ export function InviteOnlyAnalyticsModal({
                 {/* Donation Summary (if enabled) */}
                 {event.inviteOnlyEvent.acceptDonations && donationStats && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card>
+                    <Card className="border-green-200">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">
                           Total Donations
                         </CardTitle>
-                        <Gift className="h-4 w-4 text-muted-foreground" />
+                        <Gift className="h-4 w-4 text-green-600" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">
+                        <div className="text-2xl font-bold text-green-600">
                           {formatCurrency(donationStats.totalDonations)}
                         </div>
-                        <div className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground mt-1">
                           From {donationStats.donorCount} donors
-                        </div>
+                        </p>
                       </CardContent>
                     </Card>
 
-                    <Card>
+                    <Card className="border-orange-200">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">
                           Platform Fee
                         </CardTitle>
-                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                        <DollarSign className="h-4 w-4 text-orange-600" />
                       </CardHeader>
                       <CardContent>
                         <div className="text-2xl font-bold text-orange-600">
                           {formatCurrency(donationStats.totalFees)}
                         </div>
-                        <div className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground mt-1">
                           Processing fees
-                        </div>
+                        </p>
                       </CardContent>
                     </Card>
 
-                    <Card>
+                    <Card className="border-emerald-200 bg-emerald-50">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">
                           Your Total
                         </CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                        <TrendingUp className="h-4 w-4 text-emerald-600" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold text-green-600">
+                        <div className="text-2xl font-bold text-emerald-600">
                           {formatCurrency(donationStats.netTotal)}
                         </div>
-                        <div className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground mt-1">
                           Net donations
-                        </div>
+                        </p>
                       </CardContent>
                     </Card>
                   </div>
@@ -546,140 +619,209 @@ export function InviteOnlyAnalyticsModal({
               </TabsContent>
 
               {/* Guest List Tab */}
-              <TabsContent value="guests" className="space-y-6">
+              <TabsContent value="guests" className="space-y-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Complete Guest List</CardTitle>
+                    <CardTitle className="text-lg flex items-center justify-between">
+                      <span>Complete Guest List</span>
+                      <Badge variant="secondary" className="text-base">
+                        {invitations.length} Guests
+                      </Badge>
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Contact</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>RSVP</TableHead>
-                          <TableHead>Plus Ones</TableHead>
-                          {seatingEnabled && <TableHead>Seating</TableHead>}
-                          <TableHead>Invited</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {invitations.map((invitation) => (
-                          <TableRow key={invitation.id}>
-                            <TableCell className="font-medium">
-                              {invitation.guestName}
-                            </TableCell>
-                            <TableCell>
-                              <div className="text-sm">
-                                <div>{invitation.guestEmail}</div>
-                                {invitation.guestPhone && (
-                                  <div className="text-muted-foreground">
-                                    {invitation.guestPhone}
-                                  </div>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>{getStatusBadge(invitation.status)}</TableCell>
-                            <TableCell>
-                              {getRSVPBadge(invitation.rsvpResponse)}
-                            </TableCell>
-                            <TableCell>
-                              {invitation.plusOnesConfirmed > 0 ? (
-                                <span>
-                                  {invitation.plusOnesConfirmed} of{' '}
-                                  {invitation.plusOnesAllowed}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">
-                                  0 / {invitation.plusOnesAllowed}
-                                </span>
-                              )}
-                            </TableCell>
+                    <div className="rounded-md border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="font-semibold">
+                              Guest Name
+                            </TableHead>
+                            <TableHead className="font-semibold">
+                              Contact Info
+                            </TableHead>
+                            <TableHead className="font-semibold">
+                              Status
+                            </TableHead>
+                            <TableHead className="font-semibold">
+                              RSVP
+                            </TableHead>
+                            <TableHead className="font-semibold">
+                              Plus Ones
+                            </TableHead>
                             {seatingEnabled && (
+                              <TableHead className="font-semibold">
+                                Seating
+                              </TableHead>
+                            )}
+                            <TableHead className="font-semibold">
+                              Invited Date
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {invitations.map((invitation) => (
+                            <TableRow key={invitation.id}>
+                              <TableCell className="font-medium">
+                                {invitation.guestName}
+                              </TableCell>
                               <TableCell>
-                                {invitation.seat ? (
+                                <div className="space-y-1">
                                   <div className="text-sm">
-                                    <div className="font-medium">
-                                      Table {invitation.seat.table.tableNumber}
-                                    </div>
-                                    <div className="text-muted-foreground">
-                                      Seat {invitation.seat.seatNumber}
-                                    </div>
+                                    {invitation.guestEmail}
                                   </div>
-                                ) : (
-                                  <Badge variant="outline" className="text-xs">
-                                    Not Assigned
-                                  </Badge>
+                                  {invitation.guestPhone && (
+                                    <div className="text-sm text-muted-foreground">
+                                      {invitation.guestPhone}
+                                    </div>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {getStatusBadge(invitation.status)}
+                              </TableCell>
+                              <TableCell>
+                                {getRSVPBadge(invitation.rsvpResponse) || (
+                                  <span className="text-sm text-muted-foreground">
+                                    -
+                                  </span>
                                 )}
                               </TableCell>
-                            )}
-                            <TableCell className="text-sm text-muted-foreground">
-                              {format(new Date(invitation.createdAt), 'MMM dd')}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                              <TableCell>
+                                {invitation.plusOnesConfirmed > 0 ? (
+                                  <span className="font-medium">
+                                    {invitation.plusOnesConfirmed} /{" "}
+                                    {invitation.plusOnesAllowed}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">
+                                    0 / {invitation.plusOnesAllowed}
+                                  </span>
+                                )}
+                              </TableCell>
+                              {seatingEnabled && (
+                                <TableCell>
+                                  {invitation.seat ? (
+                                    <div className="text-sm">
+                                      <div className="font-medium">
+                                        Table{" "}
+                                        {invitation.seat.table.tableNumber}
+                                      </div>
+                                      {invitation.seat.table.tableName && (
+                                        <div className="text-muted-foreground">
+                                          {invitation.seat.table.tableName}
+                                        </div>
+                                      )}
+                                      <div className="text-muted-foreground">
+                                        Seat {invitation.seat.seatNumber}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs"
+                                    >
+                                      Not Assigned
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                              )}
+                              <TableCell className="text-sm text-muted-foreground">
+                                {format(
+                                  new Date(invitation.createdAt),
+                                  "MMM dd, yyyy",
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
 
               {/* Seating Arrangement Tab */}
               {seatingEnabled && (
-                <TabsContent value="seating" className="space-y-6">
-                  <SeatingAnalyticsTab inviteOnlyEventId={event.inviteOnlyEvent.id} />
+                <TabsContent value="seating" className="space-y-4">
+                  <SeatingAnalyticsTab
+                    inviteOnlyEventId={event.inviteOnlyEvent.id}
+                  />
                 </TabsContent>
               )}
 
               {/* Donations Tab */}
               {event.inviteOnlyEvent.acceptDonations && (
-                <TabsContent value="donations" className="space-y-6">
+                <TabsContent value="donations" className="space-y-4">
                   <Card>
                     <CardHeader>
-                      <CardTitle>Donation Details</CardTitle>
+                      <CardTitle className="text-lg flex items-center justify-between">
+                        <span>Donation Details</span>
+                        {donationStats && (
+                          <Badge variant="secondary" className="text-base">
+                            {donationStats.donorCount} Donors
+                          </Badge>
+                        )}
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       {donations.length > 0 ? (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Donor</TableHead>
-                              <TableHead>Amount</TableHead>
-                              <TableHead>Platform Fee</TableHead>
-                              <TableHead>Net Amount</TableHead>
-                              <TableHead>Date</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {donations.map((donation) => (
-                              <TableRow key={donation.id}>
-                                <TableCell>
-                                  {donation.isAnonymous
-                                    ? 'Anonymous'
-                                    : donation.donorName || 'Unknown'}
-                                </TableCell>
-                                <TableCell className="font-medium">
-                                  {formatCurrency(donation.amount)}
-                                </TableCell>
-                                <TableCell className="text-orange-600">
-                                  {formatCurrency(donation.platformFee)}
-                                </TableCell>
-                                <TableCell className="font-medium text-green-600">
-                                  {formatCurrency(donation.netAmount)}
-                                </TableCell>
-                                <TableCell className="text-sm text-muted-foreground">
-                                  {format(new Date(donation.createdAt), 'PPP')}
-                                </TableCell>
+                        <div className="rounded-md border">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="font-semibold">
+                                  Donor Name
+                                </TableHead>
+                                <TableHead className="font-semibold">
+                                  Amount
+                                </TableHead>
+                                <TableHead className="font-semibold">
+                                  Platform Fee
+                                </TableHead>
+                                <TableHead className="font-semibold">
+                                  Net Amount
+                                </TableHead>
+                                <TableHead className="font-semibold">
+                                  Date
+                                </TableHead>
                               </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                            </TableHeader>
+                            <TableBody>
+                              {donations.map((donation) => (
+                                <TableRow key={donation.id}>
+                                  <TableCell className="font-medium">
+                                    {donation.isAnonymous
+                                      ? "🎭 Anonymous"
+                                      : donation.donorName || "Unknown"}
+                                  </TableCell>
+                                  <TableCell className="font-medium">
+                                    {formatCurrency(donation.amount)}
+                                  </TableCell>
+                                  <TableCell className="text-orange-600">
+                                    {formatCurrency(donation.platformFee)}
+                                  </TableCell>
+                                  <TableCell className="font-medium text-green-600">
+                                    {formatCurrency(donation.netAmount)}
+                                  </TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    {format(
+                                      new Date(donation.createdAt),
+                                      "PPP",
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
                       ) : (
-                        <div className="text-center py-8">
-                          <Gift className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                          <p className="text-lg font-medium">No donations yet</p>
-                          <p className="text-muted-foreground">
+                        <div className="text-center py-12">
+                          <Gift className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+                          <p className="text-lg font-medium text-muted-foreground mb-2">
+                            No donations yet
+                          </p>
+                          <p className="text-sm text-muted-foreground">
                             Donations will appear here once guests contribute.
                           </p>
                         </div>
@@ -688,12 +830,17 @@ export function InviteOnlyAnalyticsModal({
                   </Card>
 
                   {event.inviteOnlyEvent.donationDescription && (
-                    <Card>
+                    <Card className="bg-blue-50 border-blue-200">
                       <CardHeader>
-                        <CardTitle>Donation Message</CardTitle>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Info className="h-5 w-5 text-blue-600" />
+                          Donation Message to Guests
+                        </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <p className="text-sm">{event.inviteOnlyEvent.donationDescription}</p>
+                        <p className="text-sm leading-relaxed">
+                          {event.inviteOnlyEvent.donationDescription}
+                        </p>
                       </CardContent>
                     </Card>
                   )}
@@ -701,148 +848,223 @@ export function InviteOnlyAnalyticsModal({
               )}
 
               {/* Settings Tab */}
-              <TabsContent value="settings" className="space-y-6">
+              <TabsContent value="settings" className="space-y-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Info className="h-5 w-5" />
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Info className="h-5 w-5 text-purple-600" />
                       Event Configuration
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-6">
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm">Privacy</span>
-                          <Badge variant={event.inviteOnlyEvent.isPrivate ? 'secondary' : 'default'}>
-                            {event.inviteOnlyEvent.isPrivate ? 'Private' : 'Public'}
-                          </Badge>
-                        </div>
-
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm">RSVP Required</span>
-                          <span className="font-medium">
-                            {event.inviteOnlyEvent.requireRSVP ? 'Yes' : 'No'}
-                          </span>
-                        </div>
-
-                        {event.inviteOnlyEvent.rsvpDeadline && (
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-4">
+                        <h3 className="font-semibold text-base mb-3 flex items-center gap-2">
+                          <Shield className="h-4 w-4" />
+                          Privacy & Access
+                        </h3>
+                        <div className="space-y-3 pl-6">
                           <div className="flex justify-between items-center">
-                            <span className="text-sm">RSVP Deadline</span>
-                            <span className="font-medium">
-                              {format(new Date(event.inviteOnlyEvent.rsvpDeadline), 'PPP')}
+                            <span className="text-sm text-muted-foreground">
+                              Privacy
+                            </span>
+                            <Badge
+                              variant={
+                                event.inviteOnlyEvent.isPrivate
+                                  ? "secondary"
+                                  : "default"
+                              }
+                            >
+                              {event.inviteOnlyEvent.isPrivate
+                                ? "Private"
+                                : "Public"}
+                            </Badge>
+                          </div>
+
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">
+                              Require Approval
+                            </span>
+                            <span className="font-medium text-sm">
+                              {event.inviteOnlyEvent.requireApproval
+                                ? "Yes"
+                                : "No"}
                             </span>
                           </div>
-                        )}
-
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm">Plus Ones</span>
-                          <span className="font-medium">
-                            {event.inviteOnlyEvent.allowPlusOnes ? 'Allowed' : 'Not Allowed'}
-                          </span>
                         </div>
 
-                        {event.inviteOnlyEvent.maxPlusOnes && (
+                        <h3 className="font-semibold text-base mb-3 mt-6 flex items-center gap-2">
+                          <Users className="h-4 w-4" />
+                          Guest Settings
+                        </h3>
+                        <div className="space-y-3 pl-6">
+                          {event.inviteOnlyEvent.maxInvitations && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">
+                                Max Invitations
+                              </span>
+                              <span className="font-medium text-sm">
+                                {event.inviteOnlyEvent.maxInvitations}
+                              </span>
+                            </div>
+                          )}
+
                           <div className="flex justify-between items-center">
-                            <span className="text-sm">Max Plus Ones</span>
-                            <span className="font-medium">
-                              {event.inviteOnlyEvent.maxPlusOnes}
+                            <span className="text-sm text-muted-foreground">
+                              Plus Ones
+                            </span>
+                            <span className="font-medium text-sm">
+                              {event.inviteOnlyEvent.allowPlusOnes
+                                ? "Allowed"
+                                : "Not Allowed"}
                             </span>
                           </div>
-                        )}
 
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm">Seating Arrangement</span>
-                          <span className="font-medium">
-                            {seatingEnabled ? 'Enabled' : 'Disabled'}
-                          </span>
+                          {event.inviteOnlyEvent.maxPlusOnes && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">
+                                Max Plus Ones
+                              </span>
+                              <span className="font-medium text-sm">
+                                {event.inviteOnlyEvent.maxPlusOnes}
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">
+                              Seating Arrangement
+                            </span>
+                            <Badge
+                              variant={seatingEnabled ? "default" : "outline"}
+                            >
+                              {seatingEnabled ? "Enabled" : "Disabled"}
+                            </Badge>
+                          </div>
                         </div>
                       </div>
 
-                      <div className="space-y-3">
-                        {event.inviteOnlyEvent.maxInvitations && (
+                      <div className="space-y-4">
+                        <h3 className="font-semibold text-base mb-3 flex items-center gap-2">
+                          <Mail className="h-4 w-4" />
+                          RSVP Settings
+                        </h3>
+                        <div className="space-y-3 pl-6">
                           <div className="flex justify-between items-center">
-                            <span className="text-sm">Max Invitations</span>
-                            <span className="font-medium">
-                              {event.inviteOnlyEvent.maxInvitations}
+                            <span className="text-sm text-muted-foreground">
+                              RSVP Required
+                            </span>
+                            <span className="font-medium text-sm">
+                              {event.inviteOnlyEvent.requireRSVP ? "Yes" : "No"}
                             </span>
                           </div>
-                        )}
 
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm">Auto Reminders</span>
-                          <span className="font-medium">
-                            {event.inviteOnlyEvent.sendAutoReminders ? 'Enabled' : 'Disabled'}
-                          </span>
-                        </div>
+                          {event.inviteOnlyEvent.rsvpDeadline && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">
+                                RSVP Deadline
+                              </span>
+                              <span className="font-medium text-sm">
+                                {format(
+                                  new Date(event.inviteOnlyEvent.rsvpDeadline),
+                                  "PPP",
+                                )}
+                              </span>
+                            </div>
+                          )}
 
-                        {event.inviteOnlyEvent.reminderDaysBefore && (
                           <div className="flex justify-between items-center">
-                            <span className="text-sm">Reminder Timing</span>
-                            <span className="font-medium">
-                              {event.inviteOnlyEvent.reminderDaysBefore} days before
+                            <span className="text-sm text-muted-foreground">
+                              Auto Reminders
                             </span>
+                            <Badge
+                              variant={
+                                event.inviteOnlyEvent.sendAutoReminders
+                                  ? "default"
+                                  : "outline"
+                              }
+                            >
+                              {event.inviteOnlyEvent.sendAutoReminders
+                                ? "Enabled"
+                                : "Disabled"}
+                            </Badge>
                           </div>
-                        )}
 
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm">Require Approval</span>
-                          <span className="font-medium">
-                            {event.inviteOnlyEvent.requireApproval ? 'Yes' : 'No'}
-                          </span>
+                          {event.inviteOnlyEvent.reminderDaysBefore && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">
+                                Reminder Timing
+                              </span>
+                              <span className="font-medium text-sm">
+                                {event.inviteOnlyEvent.reminderDaysBefore} days
+                                before
+                              </span>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    </div>
 
-                    {/* Donation Settings */}
-                    {event.inviteOnlyEvent.acceptDonations && (
-                      <>
-                        <div className="border-t pt-4 mt-4">
-                          <h3 className="font-medium mb-3">Donation Settings</h3>
-                          <div className="grid grid-cols-2 gap-6">
-                            <div className="space-y-3">
+                        {/* Donation Settings */}
+                        {event.inviteOnlyEvent.acceptDonations && (
+                          <>
+                            <h3 className="font-semibold text-base mb-3 mt-6 flex items-center gap-2">
+                              <Gift className="h-4 w-4" />
+                              Donation Settings
+                            </h3>
+                            <div className="space-y-3 pl-6">
                               {event.inviteOnlyEvent.suggestedDonation && (
                                 <div className="flex justify-between items-center">
-                                  <span className="text-sm">Suggested Amount</span>
-                                  <span className="font-medium">
-                                    {formatCurrency(event.inviteOnlyEvent.suggestedDonation)}
+                                  <span className="text-sm text-muted-foreground">
+                                    Suggested Amount
+                                  </span>
+                                  <span className="font-medium text-sm">
+                                    {formatCurrency(
+                                      event.inviteOnlyEvent.suggestedDonation,
+                                    )}
                                   </span>
                                 </div>
                               )}
 
                               {event.inviteOnlyEvent.minimumDonation && (
                                 <div className="flex justify-between items-center">
-                                  <span className="text-sm">Minimum Amount</span>
-                                  <span className="font-medium">
-                                    {formatCurrency(event.inviteOnlyEvent.minimumDonation)}
+                                  <span className="text-sm text-muted-foreground">
+                                    Minimum Amount
+                                  </span>
+                                  <span className="font-medium text-sm">
+                                    {formatCurrency(
+                                      event.inviteOnlyEvent.minimumDonation,
+                                    )}
                                   </span>
                                 </div>
                               )}
-                            </div>
 
-                            <div className="space-y-3">
                               <div className="flex justify-between items-center">
-                                <span className="text-sm">Show Donor Names</span>
-                                <span className="font-medium">
-                                  {event.inviteOnlyEvent.showDonorNames ? 'Yes' : 'No'}
+                                <span className="text-sm text-muted-foreground">
+                                  Show Donor Names
+                                </span>
+                                <span className="font-medium text-sm">
+                                  {event.inviteOnlyEvent.showDonorNames
+                                    ? "Yes"
+                                    : "No"}
                                 </span>
                               </div>
                             </div>
-                          </div>
-                        </div>
-                      </>
-                    )}
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               </TabsContent>
             </Tabs>
           </div>
         ) : (
-          <div className="flex items-center justify-center min-h-96">
+          <div className="flex items-center justify-center flex-1 py-12">
             <div className="text-center">
-              <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium">No Invitation Data Available</h3>
-              <p className="text-muted-foreground">
+              <Users className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+              <h3 className="text-lg font-medium mb-2">
+                No Invitation Data Available
+              </h3>
+              <p className="text-muted-foreground text-sm">
                 Invitation analytics data is not available for this event yet.
               </p>
             </div>

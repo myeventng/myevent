@@ -1664,7 +1664,7 @@ export async function bulkUnfeatureEvents(
   }
 }
 
-// Enhanced getEventById function with comprehensive nested data
+// FIXED: Enhanced getEventById function with comprehensive nested data
 export async function getEventById(id: string): Promise<ActionResponse<any>> {
   try {
     const event = await prisma.event.findUnique({
@@ -1739,7 +1739,7 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
             },
           },
         },
-        // Invite-only
+        // FIXED: Invite-only with proper seat includes
         inviteOnlyEvent: {
           include: {
             invitations: {
@@ -1748,8 +1748,11 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
                   include: {
                     table: {
                       select: {
+                        id: true,
                         tableNumber: true,
                         tableName: true,
+                        capacity: true,
+                        shape: true,
                       },
                     },
                   },
@@ -1757,6 +1760,24 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
               },
               orderBy: {
                 createdAt: "desc",
+              },
+            },
+            seatingTables: {
+              include: {
+                seats: {
+                  include: {
+                    invitation: {
+                      select: {
+                        id: true,
+                        guestName: true,
+                        guestEmail: true,
+                      },
+                    },
+                  },
+                },
+              },
+              orderBy: {
+                tableNumber: "asc",
               },
             },
           },
@@ -1821,7 +1842,7 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
         ),
       };
 
-      // For edit form compatibility
+      // FIXED: For edit form compatibility with proper seat mapping
       enhancedEvent.guests = invitations.map((inv: any) => ({
         id: inv.id,
         guestName: inv.guestName,
@@ -1830,6 +1851,17 @@ export async function getEventById(id: string): Promise<ActionResponse<any>> {
         plusOnesAllowed: inv.plusOnesAllowed,
         specialRequirements: inv.specialRequirements,
         organizerNotes: inv.organizerNotes,
+        // CRITICAL: Properly map the seat structure
+        seat: inv.seat
+          ? {
+              id: inv.seat.id,
+              seatNumber: inv.seat.seatNumber,
+              table: {
+                tableNumber: inv.seat.table.tableNumber,
+                tableName: inv.seat.table.tableName || undefined,
+              },
+            }
+          : undefined,
       }));
 
       // Donation stats
@@ -2040,6 +2072,9 @@ export async function getEventBySlug(
   }
 }
 
+// Updated deleteEvent function with proper invite-only event deletion
+
+// FIXED: Delete Event Function - Updated to include invite-only event data in query
 export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
@@ -2056,6 +2091,7 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
   const { role, subRole, id: userId } = session.user;
 
   try {
+    // FIXED: Include all invite-only related data in the query
     const event = await prisma.event.findUnique({
       where: { id },
       include: {
@@ -2078,6 +2114,11 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
         inviteOnlyEvent: {
           include: {
             invitations: true,
+            seatingTables: {
+              include: {
+                seats: true,
+              },
+            },
           },
         },
         donationOrders: true,
@@ -2121,7 +2162,7 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
       hasInvitations ||
       hasDonations
     ) {
-      // Mark as cancelled
+      // Mark as cancelled instead of deleting
       await prisma.event.update({
         where: { id },
         data: {
@@ -2162,14 +2203,36 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
         });
       }
 
-      // Delete invite-only data
+      // FIXED: Delete invite-only data with proper order
       if (event.inviteOnlyEvent) {
-        await tx.invitation.deleteMany({
+        console.log("Deleting invite-only event data...");
+
+        // 1. Delete seats first (they reference invitations via invitationId)
+        if (event.inviteOnlyEvent.seatingTables.length > 0) {
+          const tableIds = event.inviteOnlyEvent.seatingTables.map((t) => t.id);
+          const deletedSeats = await tx.seat.deleteMany({
+            where: { tableId: { in: tableIds } },
+          });
+          console.log(`Deleted ${deletedSeats.count} seats`);
+        }
+
+        // 2. Delete seating tables
+        const deletedTables = await tx.seatingTable.deleteMany({
           where: { inviteOnlyEventId: event.inviteOnlyEvent.id },
         });
+        console.log(`Deleted ${deletedTables.count} seating tables`);
+
+        // 3. Delete invitations
+        const deletedInvitations = await tx.invitation.deleteMany({
+          where: { inviteOnlyEventId: event.inviteOnlyEvent.id },
+        });
+        console.log(`Deleted ${deletedInvitations.count} invitations`);
+
+        // 4. Delete invite-only event
         await tx.inviteOnlyEvent.delete({
           where: { id: event.inviteOnlyEvent.id },
         });
+        console.log("Deleted invite-only event");
       }
 
       // Delete donations
@@ -2248,10 +2311,10 @@ export async function deleteEvent(id: string): Promise<ActionResponse<null>> {
   }
 }
 
+// FIXED: Hard Delete with optimized transaction and increased timeout
 export async function hardDeleteEvent(
   id: string,
 ): Promise<ActionResponse<null>> {
-  // Get session for authentication
   const headersList = await headers();
   const session = await auth.api.getSession({
     headers: headersList,
@@ -2277,7 +2340,7 @@ export async function hardDeleteEvent(
   try {
     console.log(`Starting hard delete for event ID: ${id}`);
 
-    // Check if event exists and get full data for audit log including voting contest
+    // FIXED: Include invite-only event data in the query
     const event = await prisma.event.findUnique({
       where: { id },
       include: {
@@ -2310,7 +2373,6 @@ export async function hardDeleteEvent(
             email: true,
           },
         },
-        // Include comprehensive voting contest data
         votingContest: {
           include: {
             contestants: {
@@ -2337,6 +2399,18 @@ export async function hardDeleteEvent(
             },
           },
         },
+        // FIXED: Include invite-only event with all related data
+        inviteOnlyEvent: {
+          include: {
+            invitations: true,
+            seatingTables: {
+              include: {
+                seats: true,
+              },
+            },
+          },
+        },
+        donationOrders: true,
       },
     });
 
@@ -2350,21 +2424,6 @@ export async function hardDeleteEvent(
 
     console.log(`Event found: ${event.title}`);
     console.log(`Event type: ${event.eventType}`);
-    console.log(`Ticket types: ${event.ticketTypes.length}`);
-    console.log(`Orders: ${event.orders.length}`);
-    console.log(`Ratings: ${event.ratings.length}`);
-    console.log(`Notifications: ${event.Notification.length}`);
-    console.log(`Waiting list: ${event.waitingList.length}`);
-
-    if (event.votingContest) {
-      console.log(`Voting contest found with:`);
-      console.log(`- Contestants: ${event.votingContest.contestants.length}`);
-      console.log(
-        `- Vote packages: ${event.votingContest.votePackages.length}`,
-      );
-      console.log(`- Total votes: ${event.votingContest.votes.length}`);
-      console.log(`- Vote orders: ${event.votingContest.VoteOrder.length}`);
-    }
 
     // Get client IP and user agent for audit trail
     const headerList = await headers();
@@ -2374,312 +2433,245 @@ export async function hardDeleteEvent(
       "unknown";
     const userAgent = headerList.get("user-agent") || "unknown";
 
-    // Perform hard delete in transaction with audit logging
-    await prisma.$transaction(async (tx) => {
-      console.log("Starting transaction...");
+    // Prepare audit data BEFORE transaction to save time
+    const auditData = {
+      event: {
+        id: event.id,
+        title: event.title,
+        slug: event.slug,
+        eventType: event.eventType,
+        startDateTime: event.startDateTime?.toISOString(),
+        endDateTime: event.endDateTime?.toISOString(),
+        publishedStatus: event.publishedStatus,
+        isCancelled: event.isCancelled,
+        featured: event.featured,
+      },
+      organizer: event.user,
+      ticketTypesCount: event.ticketTypes.length,
+      ticketsCount: event.ticketTypes.reduce(
+        (sum, tt) => sum + tt.tickets.length,
+        0,
+      ),
+      ordersCount: event.orders.length,
+      votingContest: event.votingContest
+        ? {
+            contestantsCount: event.votingContest.contestants.length,
+            totalVotes: event.votingContest.votes.length,
+            voteOrdersCount: event.votingContest.VoteOrder.length,
+          }
+        : null,
+      inviteOnlyEvent: event.inviteOnlyEvent
+        ? {
+            invitationsCount: event.inviteOnlyEvent.invitations.length,
+            seatingTablesCount: event.inviteOnlyEvent.seatingTables.length,
+            totalSeats: event.inviteOnlyEvent.seatingTables.reduce(
+              (sum, table) => sum + table.seats.length,
+              0,
+            ),
+          }
+        : null,
+    };
 
-      try {
-        // Create comprehensive audit log BEFORE deletion
-        console.log("Creating initial audit log...");
-        await tx.auditLog.create({
-          data: {
-            userId: adminUserId,
-            action: "HARD_DELETE",
-            entity: "EVENT",
-            entityId: id,
-            oldValues: {
-              event: {
-                id: event.id,
-                title: event.title,
-                slug: event.slug,
-                description: event.description,
-                eventType: event.eventType,
-                startDateTime: event.startDateTime?.toISOString(),
-                endDateTime: event.endDateTime?.toISOString(),
-                publishedStatus: event.publishedStatus,
-                isCancelled: event.isCancelled,
-                featured: event.featured,
-                userId: event.userId,
-                venueId: event.venueId,
-                categoryId: event.categoryId,
-                createdAt: event.createdAt?.toISOString(),
-                updatedAt: event.updatedAt?.toISOString(),
-              },
-              organizer: event.user,
-              venue: event.venue?.name,
-              category: event.category?.name,
-              tags: event.tags.map((tag) => tag.name),
-              ticketTypesCount: event.ticketTypes.length,
-              ticketsCount: event.ticketTypes.reduce(
-                (sum, tt) => sum + tt.tickets.length,
-                0,
-              ),
-              ordersCount: event.orders.length,
-              ratingsCount: event.ratings.length,
-              waitingListCount: event.waitingList.length,
-              notificationsCount: event.Notification.length,
-              totalRevenue: event.orders.reduce(
-                (sum, order) => sum + order.totalAmount,
-                0,
-              ),
-              // Add voting contest data to audit log
-              votingContest: event.votingContest
-                ? {
-                    id: event.votingContest.id,
-                    votingType: event.votingContest.votingType,
-                    contestantsCount: event.votingContest.contestants.length,
-                    votePackagesCount: event.votingContest.votePackages.length,
-                    totalVotes: event.votingContest.votes.length,
-                    voteOrdersCount: event.votingContest.VoteOrder.length,
-                    contestants: event.votingContest.contestants.map((c) => ({
-                      name: c.name,
-                      contestNumber: c.contestNumber,
-                      votesCount: c.votes.length,
-                    })),
-                  }
-                : null,
-            },
-            newValues: { deleted: true },
-            ipAddress,
-            userAgent,
-          },
-        });
+    // OPTIMIZED: Perform hard delete with increased timeout (15 seconds)
+    await prisma.$transaction(
+      async (tx) => {
+        console.log("Starting optimized transaction...");
 
-        // 1. Delete all ticket validations
-        console.log("Deleting ticket validations...");
+        // 1. Delete ticket validations
         const ticketTypeIds = event.ticketTypes.map((tt) => tt.id);
         if (ticketTypeIds.length > 0) {
-          const deletedValidations = await tx.ticketValidation.deleteMany({
+          await tx.ticketValidation.deleteMany({
             where: {
               ticket: {
                 ticketTypeId: { in: ticketTypeIds },
               },
             },
           });
-          console.log(`Deleted ${deletedValidations.count} ticket validations`);
         }
 
-        // 2. Delete all tickets
-        console.log("Deleting tickets...");
+        // 2. Delete tickets
         if (ticketTypeIds.length > 0) {
-          const deletedTickets = await tx.ticket.deleteMany({
+          await tx.ticket.deleteMany({
             where: {
               ticketTypeId: { in: ticketTypeIds },
             },
           });
-          console.log(`Deleted ${deletedTickets.count} tickets`);
         }
 
-        // 3. Delete voting contest data if it exists
+        // 3. Delete voting contest data
         if (event.votingContest) {
-          console.log("Deleting voting contest data...");
-
-          // Delete votes first (they reference contestants and vote orders)
-          const deletedVotes = await tx.vote.deleteMany({
+          await tx.vote.deleteMany({
             where: { contestId: event.votingContest.id },
           });
-          console.log(`Deleted ${deletedVotes.count} votes`);
 
-          // Delete vote order notifications
           const voteOrderIds =
             event.votingContest.VoteOrder?.map((order) => order.id) || [];
           if (voteOrderIds.length > 0) {
-            const deletedVoteOrderNotifications =
-              await tx.notification.deleteMany({
-                where: { voteOrderId: { in: voteOrderIds } },
-              });
-            console.log(
-              `Deleted ${deletedVoteOrderNotifications.count} vote order notifications`,
-            );
+            await tx.notification.deleteMany({
+              where: { voteOrderId: { in: voteOrderIds } },
+            });
           }
 
-          // Delete vote orders
-          const deletedVoteOrders = await tx.voteOrder.deleteMany({
+          await tx.voteOrder.deleteMany({
             where: { contestId: event.votingContest.id },
           });
-          console.log(`Deleted ${deletedVoteOrders.count} vote orders`);
 
-          // Delete vote packages
-          const deletedVotePackages = await tx.votePackage.deleteMany({
+          await tx.votePackage.deleteMany({
             where: { contestId: event.votingContest.id },
           });
-          console.log(`Deleted ${deletedVotePackages.count} vote packages`);
 
-          // Delete contestants
-          const deletedContestants = await tx.contestant.deleteMany({
+          await tx.contestant.deleteMany({
             where: { contestId: event.votingContest.id },
           });
-          console.log(`Deleted ${deletedContestants.count} contestants`);
 
-          // Delete voting contest itself
           await tx.votingContest.delete({
             where: { id: event.votingContest.id },
           });
-          console.log("Deleted voting contest");
         }
 
-        // 4. Delete all order notifications
-        console.log("Deleting order notifications...");
+        // 4. FIXED: Delete invite-only event data with proper order
+        if (event.inviteOnlyEvent) {
+          console.log("Deleting invite-only event data...");
+
+          // Delete seats first
+          if (event.inviteOnlyEvent.seatingTables.length > 0) {
+            const tableIds = event.inviteOnlyEvent.seatingTables.map(
+              (t) => t.id,
+            );
+            await tx.seat.deleteMany({
+              where: { tableId: { in: tableIds } },
+            });
+          }
+
+          // Delete seating tables
+          await tx.seatingTable.deleteMany({
+            where: { inviteOnlyEventId: event.inviteOnlyEvent.id },
+          });
+
+          // Delete invitations
+          await tx.invitation.deleteMany({
+            where: { inviteOnlyEventId: event.inviteOnlyEvent.id },
+          });
+
+          // Delete invite-only event
+          await tx.inviteOnlyEvent.delete({
+            where: { id: event.inviteOnlyEvent.id },
+          });
+        }
+
+        // 5. Delete donation orders and their notifications
+        const donationOrderIds = event.donationOrders?.map((d) => d.id) || [];
+        if (donationOrderIds.length > 0) {
+          await tx.notification.deleteMany({
+            where: {
+              DonationOrder: {
+                some: {
+                  id: { in: donationOrderIds },
+                },
+              },
+            },
+          });
+
+          await tx.donationOrder.deleteMany({
+            where: { eventId: id },
+          });
+        }
+
+        // 6. Delete order notifications
         const orderIds = event.orders.map((order) => order.id);
         if (orderIds.length > 0) {
-          const deletedOrderNotifications = await tx.notification.deleteMany({
+          await tx.notification.deleteMany({
             where: {
               orderId: { in: orderIds },
             },
           });
-          console.log(
-            `Deleted ${deletedOrderNotifications.count} order notifications`,
-          );
         }
 
-        // 5. Delete all orders
-        console.log("Deleting orders...");
+        // 7. Delete orders
         if (orderIds.length > 0) {
-          const deletedOrders = await tx.order.deleteMany({
+          await tx.order.deleteMany({
             where: { eventId: id },
           });
-          console.log(`Deleted ${deletedOrders.count} orders`);
         }
 
-        // 6. Delete all ticket types
-        console.log("Deleting ticket types...");
-        const deletedTicketTypes = await tx.ticketType.deleteMany({
+        // 8. Delete ticket types
+        await tx.ticketType.deleteMany({
           where: { eventId: id },
         });
-        console.log(`Deleted ${deletedTicketTypes.count} ticket types`);
 
-        // 7. Delete all event notifications
-        console.log("Deleting event notifications...");
-        const deletedEventNotifications = await tx.notification.deleteMany({
+        // 9. Delete event notifications
+        await tx.notification.deleteMany({
           where: { eventId: id },
         });
-        console.log(
-          `Deleted ${deletedEventNotifications.count} event notifications`,
-        );
 
-        // 8. Delete all ratings
-        console.log("Deleting ratings...");
-        const deletedRatings = await tx.rating.deleteMany({
+        // 10. Delete ratings
+        await tx.rating.deleteMany({
           where: { eventId: id },
         });
-        console.log(`Deleted ${deletedRatings.count} ratings`);
 
-        // 9. Delete all waiting list entries
-        console.log("Deleting waiting list entries...");
-        const deletedWaitingList = await tx.waitingList.deleteMany({
+        // 11. Delete waiting list
+        await tx.waitingList.deleteMany({
           where: { eventId: id },
         });
-        console.log(`Deleted ${deletedWaitingList.count} waiting list entries`);
 
-        // 10. Delete any audit logs that reference this event (optional - be careful!)
-        console.log("Deleting event-related audit logs...");
-        const deletedAuditLogs = await tx.auditLog.deleteMany({
-          where: {
-            entity: "EVENT",
-            entityId: id,
-          },
-        });
-        console.log(`Deleted ${deletedAuditLogs.count} audit logs`);
-
-        // 11. Disconnect tags (many-to-many relationship)
-        console.log("Disconnecting tags...");
+        // 12. Disconnect tags
         await tx.event.update({
           where: { id },
           data: {
             tags: {
-              set: [], // Disconnect all tags
+              set: [],
             },
           },
         });
-        console.log("Tags disconnected");
 
-        // 12. Finally delete the event itself
-        console.log("Deleting event...");
+        // 13. Delete event
         await tx.event.delete({
           where: { id },
         });
-        console.log("Event deleted successfully");
 
-        // Log additional audit entry for successful completion
-        console.log("Creating completion audit log...");
+        // 14. Create audit log (simple version)
         await tx.auditLog.create({
           data: {
             userId: adminUserId,
             action: "HARD_DELETE_COMPLETED",
             entity: "EVENT",
             entityId: id,
-            oldValues: undefined,
+            oldValues: auditData,
             newValues: {
               deletedAt: new Date().toISOString(),
               deletedBy: adminUserId,
-              eventTitle: event.title,
-              eventType: event.eventType,
-              totalRecordsDeleted: {
-                tickets: event.ticketTypes.reduce(
-                  (sum, tt) => sum + tt.tickets.length,
-                  0,
-                ),
-                orders: event.orders.length,
-                ratings: event.ratings.length,
-                notifications: event.Notification.length,
-                waitingList: event.waitingList.length,
-                ticketTypes: event.ticketTypes.length,
-                // Add voting contest deletion counts
-                votingContestData: event.votingContest
-                  ? {
-                      contestants: event.votingContest.contestants.length,
-                      votes: event.votingContest.votes.length,
-                      voteOrders: event.votingContest.VoteOrder.length,
-                      votePackages: event.votingContest.votePackages.length,
-                    }
-                  : null,
-              },
             },
             ipAddress,
             userAgent,
           },
         });
+
         console.log("Transaction completed successfully");
-      } catch (transactionError) {
-        console.error("Error in transaction:", transactionError);
-        throw transactionError; // Re-throw to trigger transaction rollback
-      }
-    });
+      },
+      {
+        maxWait: 10000, // Maximum time to wait for transaction to start (10 seconds)
+        timeout: 15000, // Maximum time for transaction to complete (15 seconds)
+      },
+    );
 
     // Revalidate all relevant paths
     revalidatePath("/admin/events");
     revalidatePath("/admin/dashboard/events");
     revalidatePath("/dashboard/events");
     revalidatePath("/events");
-    revalidatePath(`/events/${event.slug}`);
+    if (event.slug) {
+      revalidatePath(`/events/${event.slug}`);
+    }
 
     console.log("Hard delete completed successfully");
     return {
       success: true,
-      message: `Event "${event.title}" and all related data (including voting contest data) have been permanently deleted. This action has been logged for audit purposes.`,
+      message: `Event "${event.title}" and all related data have been permanently deleted. This action has been logged for audit purposes.`,
     };
   } catch (error) {
     console.error("Error performing hard delete:", error);
 
-    // Log the full error details
-    if (error instanceof Error) {
-      console.error("Error name:", error.name);
-      console.error("Error message:", error.message);
-      console.error("Error stack:", error.stack);
-
-      // Check for specific Prisma errors
-      if (error.message.includes("P2003")) {
-        console.error("Foreign key constraint failure");
-      }
-      if (error.message.includes("P2025")) {
-        console.error("Record not found");
-      }
-      if (error.message.includes("P2002")) {
-        console.error("Unique constraint failure");
-      }
-    }
-
-    // Log failed deletion attempt with more details
+    // Log failed deletion attempt
     try {
       await prisma.auditLog.create({
         data: {
@@ -2689,8 +2681,6 @@ export async function hardDeleteEvent(
           entityId: id,
           oldValues: {
             error: error instanceof Error ? error.message : "Unknown error",
-            errorName: error instanceof Error ? error.name : "Unknown",
-            stack: error instanceof Error ? error.stack : undefined,
             timestamp: new Date().toISOString(),
           },
           newValues: { failed: true },
@@ -2702,8 +2692,16 @@ export async function hardDeleteEvent(
       console.error("Failed to log audit entry:", auditError);
     }
 
-    // Return more specific error message
+    // Return specific error message
     if (error instanceof Error) {
+      if (error.message.includes("Transaction already closed")) {
+        return {
+          success: false,
+          message:
+            "Hard delete operation timed out. The event may have too much associated data. Please contact technical support.",
+        };
+      }
+
       if (
         error.message.includes("foreign key constraint") ||
         error.message.includes("P2003")
@@ -2715,17 +2713,6 @@ export async function hardDeleteEvent(
         };
       }
 
-      if (
-        error.message.includes("Record to delete does not exist") ||
-        error.message.includes("P2025")
-      ) {
-        return {
-          success: false,
-          message: "Event not found or already deleted.",
-        };
-      }
-
-      // Return the actual error message for debugging
       return {
         success: false,
         message: `Hard delete failed: ${error.message}`,
