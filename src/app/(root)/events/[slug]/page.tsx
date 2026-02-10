@@ -445,8 +445,8 @@ export default async function EventPage({ params }: EventPageProps) {
                         {format(new Date(event.startDateTime), "PPP")}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {formatTime(event.startDateTime)} -{" "}
-                        {formatTime(event.endDateTime)}
+                        {formatLagosTime(event.startDateTime, "p")} -{" "}
+                        {formatLagosTime(event.endDateTime, "p")}
                       </p>
                     </div>
                   </div>
