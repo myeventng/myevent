@@ -1,7 +1,8 @@
 //src/app/(root)/events/[slug]/page.tsx
-import { notFound } from 'next/navigation';
-import { Metadata } from 'next';
-import { format } from 'date-fns';
+import { notFound } from "next/navigation";
+import { Metadata } from "next";
+import { format } from "date-fns";
+import { formatLagosTime } from "@/lib/utils";
 import {
   Calendar,
   Clock,
@@ -12,20 +13,20 @@ import {
   Star,
   Trophy,
   Vote,
-} from 'lucide-react';
-import { getEventBySlug } from '@/actions/event.actions';
-import { getEventRatings } from '@/actions/rating.actions';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { EventTicketBooking } from '@/components/events/clientside/event-ticket-booking';
-import { VotingContestComponent } from '@/components/voting/voting-contest-component';
-import { EventGallery } from '@/components/events/clientside/event-gallery';
-import { EventReviews } from '@/components/events/clientside/event-reviews';
-import { ShareEventButton } from '@/components/events/clientside/share-event-button';
-import { EventType } from '@/generated/prisma';
-import Image from 'next/image';
+} from "lucide-react";
+import { getEventBySlug } from "@/actions/event.actions";
+import { getEventRatings } from "@/actions/rating.actions";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { EventTicketBooking } from "@/components/events/clientside/event-ticket-booking";
+import { VotingContestComponent } from "@/components/voting/voting-contest-component";
+import { EventGallery } from "@/components/events/clientside/event-gallery";
+import { EventReviews } from "@/components/events/clientside/event-reviews";
+import { ShareEventButton } from "@/components/events/clientside/share-event-button";
+import { EventType } from "@/generated/prisma";
+import Image from "next/image";
 
 interface EventPageProps {
   params: Promise<{
@@ -39,7 +40,7 @@ export async function generateMetadata({ params }: EventPageProps) {
 
   if (!response.success || !response.data) {
     return {
-      title: 'Event Not Found',
+      title: "Event Not Found",
     };
   }
 
@@ -60,39 +61,40 @@ export async function generateMetadata({ params }: EventPageProps) {
 
   let description = event.description
     ? `${event.description.slice(0, 160)}...`
-    : `${isVotingContest ? 'Vote in' : 'Join us for'} ${event.title}! ${ratingsCount > 0
-      ? `Rated ${averageRating}/5 stars by ${ratingsCount} ${isVotingContest ? 'participants' : 'attendees'}.`
-      : ''
-    }`;
+    : `${isVotingContest ? "Vote in" : "Join us for"} ${event.title}! ${
+        ratingsCount > 0
+          ? `Rated ${averageRating}/5 stars by ${ratingsCount} ${isVotingContest ? "participants" : "attendees"}.`
+          : ""
+      }`;
 
   if (isVotingContest && event.votingContest) {
     description = `Vote for your favorite contestant in ${event.title}! ${event.votingContest.contestants?.length || 0} contestants competing.`;
   }
 
   return {
-    title: `${event.title} ${isVotingContest ? '| Voting Contest' : ''} | ${format(
+    title: `${event.title} ${isVotingContest ? "| Voting Contest" : ""} | ${format(
       new Date(event.startDateTime),
-      'MMM d, yyyy'
+      "MMM d, yyyy",
     )}`,
     description,
     openGraph: {
       title: event.title,
       description,
       images: event.coverImageUrl ? [event.coverImageUrl] : [],
-      type: 'website',
+      type: "website",
     },
     twitter: {
-      card: 'summary_large_image',
+      card: "summary_large_image",
       title: event.title,
       description,
       images: event.coverImageUrl ? [event.coverImageUrl] : [],
     },
     other: {
       // Add structured data for events
-      'event:start_time': event.startDateTime,
-      'event:end_time': event.endDateTime,
-      'event:location': `${event.venue.name}, ${event.venue.address}`,
-      'event:type': event.eventType,
+      "event:start_time": event.startDateTime,
+      "event:end_time": event.endDateTime,
+      "event:location": `${event.venue.name}, ${event.venue.address}`,
+      "event:type": event.eventType,
     },
   };
 }
@@ -108,7 +110,7 @@ export default async function EventPage({ params }: EventPageProps) {
   const event = response.data;
 
   // Check if event is published and not cancelled
-  if (event.publishedStatus !== 'PUBLISHED' || event.isCancelled) {
+  if (event.publishedStatus !== "PUBLISHED" || event.isCancelled) {
     notFound();
   }
 
@@ -120,11 +122,11 @@ export default async function EventPage({ params }: EventPageProps) {
       : [];
 
   const formatDateTime = (date: string) => {
-    return format(new Date(date), 'PPP p');
+    return format(new Date(date), "PPP p");
   };
 
   const formatTime = (date: string) => {
-    return format(new Date(date), 'p');
+    return format(new Date(date), "p");
   };
 
   const isEventPast = new Date(event.endDateTime) < new Date();
@@ -142,9 +144,9 @@ export default async function EventPage({ params }: EventPageProps) {
   const availableTickets = isVotingContest
     ? 0
     : event.ticketTypes?.reduce(
-      (sum: number, type: any) => sum + type.quantity,
-      0
-    ) || 0;
+        (sum: number, type: any) => sum + type.quantity,
+        0,
+      ) || 0;
 
   // Calculate average rating for display
   const averageRating =
@@ -289,12 +291,12 @@ export default async function EventPage({ params }: EventPageProps) {
                     <p className="text-gray-300">
                       {format(
                         new Date(event.startDateTime),
-                        'EEEE, MMMM d, yyyy'
+                        "EEEE, MMMM d, yyyy",
                       )}
                     </p>
                     <p className="text-gray-300">
-                      {formatTime(event.startDateTime)} -{' '}
-                      {formatTime(event.endDateTime)}
+                      {formatLagosTime(event.startDateTime, "p")} -{" "}
+                      {formatLagosTime(event.endDateTime, "p")}
                     </p>
                   </div>
                 </div>
@@ -377,16 +379,16 @@ export default async function EventPage({ params }: EventPageProps) {
                     <Trophy className="h-8 w-8 text-purple-600" />
                     <div>
                       <h3 className="font-semibold text-purple-900">
-                        {isVotingActive ? 'Voting is Live!' : 'Voting Contest'}
+                        {isVotingActive ? "Voting is Live!" : "Voting Contest"}
                       </h3>
                       <p className="text-purple-700">
                         {isVotingActive
-                          ? 'Cast your vote for your favorite contestant below'
+                          ? "Cast your vote for your favorite contestant below"
                           : event.votingContest.votingStartDate &&
-                            new Date() <
-                            new Date(event.votingContest.votingStartDate)
-                            ? `Voting starts ${format(new Date(event.votingContest.votingStartDate), 'PPP p')}`
-                            : 'Voting has ended'}
+                              new Date() <
+                                new Date(event.votingContest.votingStartDate)
+                            ? `Voting starts ${format(new Date(event.votingContest.votingStartDate), "PPP p")}`
+                            : "Voting has ended"}
                       </p>
                     </div>
                   </div>
@@ -398,7 +400,7 @@ export default async function EventPage({ params }: EventPageProps) {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  {isVotingContest ? 'About This Contest' : 'About This Event'}
+                  {isVotingContest ? "About This Contest" : "About This Event"}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -409,8 +411,8 @@ export default async function EventPage({ params }: EventPageProps) {
                     </p>
                   ) : (
                     <p className="text-muted-foreground italic">
-                      No description provided for this{' '}
-                      {isVotingContest ? 'contest' : 'event'}.
+                      No description provided for this{" "}
+                      {isVotingContest ? "contest" : "event"}.
                     </p>
                   )}
                 </div>
@@ -430,7 +432,7 @@ export default async function EventPage({ params }: EventPageProps) {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  {isVotingContest ? 'Contest Details' : 'Event Details'}
+                  {isVotingContest ? "Contest Details" : "Event Details"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -440,10 +442,10 @@ export default async function EventPage({ params }: EventPageProps) {
                     <div>
                       <p className="font-medium">Date & Time</p>
                       <p className="text-sm text-muted-foreground">
-                        {format(new Date(event.startDateTime), 'PPP')}
+                        {format(new Date(event.startDateTime), "PPP")}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {formatTime(event.startDateTime)} -{' '}
+                        {formatTime(event.startDateTime)} -{" "}
                         {formatTime(event.endDateTime)}
                       </p>
                     </div>
@@ -478,15 +480,15 @@ export default async function EventPage({ params }: EventPageProps) {
                             <p className="text-sm text-muted-foreground">
                               {format(
                                 new Date(event.votingContest.votingStartDate),
-                                'PPP p'
+                                "PPP p",
                               )}
                               {event.votingContest.votingEndDate && (
                                 <span>
-                                  {' '}
-                                  -{' '}
+                                  {" "}
+                                  -{" "}
                                   {format(
                                     new Date(event.votingContest.votingEndDate),
-                                    'PPP p'
+                                    "PPP p",
                                   )}
                                 </span>
                               )}
@@ -500,7 +502,7 @@ export default async function EventPage({ params }: EventPageProps) {
                         <div>
                           <p className="font-medium">Contestants</p>
                           <p className="text-sm text-muted-foreground">
-                            {event.votingContest.contestants?.length || 0}{' '}
+                            {event.votingContest.contestants?.length || 0}{" "}
                             contestants competing
                           </p>
                         </div>
@@ -511,11 +513,11 @@ export default async function EventPage({ params }: EventPageProps) {
                         <div>
                           <p className="font-medium">Voting Type</p>
                           <p className="text-sm text-muted-foreground">
-                            {event.votingContest.votingType === 'FREE'
-                              ? 'Free Voting'
-                              : 'Paid Voting'}
+                            {event.votingContest.votingType === "FREE"
+                              ? "Free Voting"
+                              : "Paid Voting"}
                             {event.votingContest.allowGuestVoting &&
-                              ' (Guests allowed)'}
+                              " (Guests allowed)"}
                           </p>
                         </div>
                       </div>
@@ -544,10 +546,10 @@ export default async function EventPage({ params }: EventPageProps) {
                             <p className="font-medium">Age Restriction</p>
                             <p className="text-sm text-muted-foreground">
                               {(event.age as string)
-                                .replace(/_/g, ' ')
+                                .replace(/_/g, " ")
                                 .toLowerCase()
                                 .replace(/\b\w/g, (l: string) =>
-                                  l.toUpperCase()
+                                  l.toUpperCase(),
                                 )}
                             </p>
                           </div>
@@ -561,10 +563,10 @@ export default async function EventPage({ params }: EventPageProps) {
                             <p className="font-medium">Dress Code</p>
                             <p className="text-sm text-muted-foreground">
                               {(event.dressCode as string)
-                                .replace(/_/g, ' ')
+                                .replace(/_/g, " ")
                                 .toLowerCase()
                                 .replace(/\b\w/g, (l: string) =>
-                                  l.toUpperCase()
+                                  l.toUpperCase(),
                                 )}
                             </p>
                           </div>
@@ -603,7 +605,7 @@ export default async function EventPage({ params }: EventPageProps) {
               <Card>
                 <CardHeader>
                   <CardTitle>
-                    {isVotingContest ? 'Contest Preview' : 'Event Preview'}
+                    {isVotingContest ? "Contest Preview" : "Event Preview"}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -632,7 +634,7 @@ export default async function EventPage({ params }: EventPageProps) {
                       unoptimized
                       quality={100}
                       src={event.user.image}
-                      alt={event.user.name || 'Organizer'}
+                      alt={event.user.name || "Organizer"}
                       className="h-12 w-12 rounded-full object-cover"
                     />
                   )}
@@ -653,7 +655,7 @@ export default async function EventPage({ params }: EventPageProps) {
                       </>
                     ) : (
                       <h4 className="font-semibold">
-                        {event.user?.name || 'Unknown Organizer'}
+                        {event.user?.name || "Unknown Organizer"}
                       </h4>
                     )}
                   </div>
@@ -697,7 +699,7 @@ export default async function EventPage({ params }: EventPageProps) {
                       rel="noopener noreferrer"
                     >
                       <ExternalLink className="h-4 w-4 mr-2" />
-                      {isVotingContest ? 'Contest Website' : 'Event Website'}
+                      {isVotingContest ? "Contest Website" : "Event Website"}
                     </a>
                   </Button>
                 </CardContent>
@@ -726,10 +728,10 @@ export default async function EventPage({ params }: EventPageProps) {
                   <span className="text-sm text-muted-foreground">Type</span>
                   <span className="text-sm font-medium">
                     {event.eventType === EventType.VOTING_CONTEST
-                      ? 'Voting Contest'
+                      ? "Voting Contest"
                       : event.eventType === EventType.INVITE
-                        ? 'Invite Only'
-                        : 'Standard Event'}
+                        ? "Invite Only"
+                        : "Standard Event"}
                   </span>
                 </div>
 
@@ -738,7 +740,7 @@ export default async function EventPage({ params }: EventPageProps) {
                     Category
                   </span>
                   <span className="text-sm font-medium">
-                    {event.category?.name || 'Uncategorized'}
+                    {event.category?.name || "Uncategorized"}
                   </span>
                 </div>
 
@@ -750,14 +752,14 @@ export default async function EventPage({ params }: EventPageProps) {
                       </span>
                       <span className="text-sm font-medium">
                         {event.isFree
-                          ? 'Free'
+                          ? "Free"
                           : event.ticketTypes && event.ticketTypes.length > 0
                             ? `₦${Math.min(
-                              ...event.ticketTypes.map((t: any) => t.price)
-                            )} - ₦${Math.max(
-                              ...event.ticketTypes.map((t: any) => t.price)
-                            )}`
-                            : 'N/A'}
+                                ...event.ticketTypes.map((t: any) => t.price),
+                              )} - ₦${Math.max(
+                                ...event.ticketTypes.map((t: any) => t.price),
+                              )}`
+                            : "N/A"}
                       </span>
                     </div>
 
@@ -797,7 +799,7 @@ export default async function EventPage({ params }: EventPageProps) {
                         Voting Status
                       </span>
                       <span className="text-sm font-medium">
-                        {isVotingActive ? 'Live' : 'Ended'}
+                        {isVotingActive ? "Live" : "Ended"}
                       </span>
                     </div>
                   </>
@@ -830,11 +832,11 @@ export default async function EventPage({ params }: EventPageProps) {
                 <CardContent className="p-6 text-center">
                   <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="font-semibold mb-2">
-                    {isVotingContest ? 'Contest Has Ended' : 'Event Has Ended'}
+                    {isVotingContest ? "Contest Has Ended" : "Event Has Ended"}
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    This {isVotingContest ? 'contest' : 'event'} took place on{' '}
-                    {format(new Date(event.startDateTime), 'PPP')}
+                    This {isVotingContest ? "contest" : "event"} took place on{" "}
+                    {format(new Date(event.startDateTime), "PPP")}
                   </p>
                   {ratingsCount > 0 && (
                     <div className="mt-3 flex items-center justify-center gap-2">
@@ -842,10 +844,11 @@ export default async function EventPage({ params }: EventPageProps) {
                         {[1, 2, 3, 4, 5].map((star) => (
                           <Star
                             key={star}
-                            className={`h-4 w-4 ${star <= Math.round(averageRating)
-                              ? 'fill-yellow-400 text-yellow-400'
-                              : 'fill-muted stroke-muted-foreground'
-                              }`}
+                            className={`h-4 w-4 ${
+                              star <= Math.round(averageRating)
+                                ? "fill-yellow-400 text-yellow-400"
+                                : "fill-muted stroke-muted-foreground"
+                            }`}
                           />
                         ))}
                       </div>
