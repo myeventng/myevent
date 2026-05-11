@@ -1,12 +1,12 @@
 //src/actions/payout.actions.ts
-'use server';
+"use server";
 
-import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
-import { revalidatePath } from 'next/cache';
-import { createNotification } from '@/actions/notification.actions';
-import { getSetting } from '@/actions/platform-settings.actions';
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
+import { createNotification } from "@/actions/notification.actions";
+import { getCachedSetting } from "@/actions/platform-settings.actions";
 
 interface ActionResponse<T> {
   success: boolean;
@@ -23,10 +23,12 @@ interface BankAccountVerification {
 // Verify bank account with Paystack
 export async function verifyBankAccount(
   accountNumber: string,
-  bankCode: string
+  bankCode: string,
 ): Promise<ActionResponse<any>> {
   try {
-    let paystackSecretKey = await getSetting('financial.paystackSecretKey');
+    let paystackSecretKey = await getCachedSetting(
+      "financial.paystackSecretKey",
+    );
 
     if (!paystackSecretKey) {
       paystackSecretKey = process.env.PAYSTACK_SECRET_KEY;
@@ -35,19 +37,19 @@ export async function verifyBankAccount(
     if (!paystackSecretKey) {
       return {
         success: false,
-        message: 'Payment system not configured. Please contact administrator.',
+        message: "Payment system not configured. Please contact administrator.",
       };
     }
 
-    const url = new URL('https://api.paystack.co/bank/resolve');
-    url.searchParams.set('account_number', accountNumber);
-    url.searchParams.set('bank_code', bankCode);
+    const url = new URL("https://api.paystack.co/bank/resolve");
+    url.searchParams.set("account_number", accountNumber);
+    url.searchParams.set("bank_code", bankCode);
 
     const verifyResponse = await fetch(url.toString(), {
-      method: 'GET',
+      method: "GET",
       headers: {
         Authorization: `Bearer ${paystackSecretKey}`,
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     });
 
@@ -66,20 +68,20 @@ export async function verifyBankAccount(
 
     return {
       success: false,
-      message: data.message || 'Failed to verify bank account',
+      message: data.message || "Failed to verify bank account",
     };
   } catch (error) {
-    console.error('Error in verifyBankAccount:', error);
+    console.error("Error in verifyBankAccount:", error);
     return {
       success: false,
-      message: 'Failed to verify bank account',
+      message: "Failed to verify bank account",
     };
   }
 }
 
 // Update organizer bank details
 export async function updateOrganizerBankDetails(
-  bankData: BankAccountVerification
+  bankData: BankAccountVerification,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
@@ -89,14 +91,14 @@ export async function updateOrganizerBankDetails(
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
   try {
     const verification = await verifyBankAccount(
       bankData.account_number,
-      bankData.bank_code
+      bankData.bank_code,
     );
 
     if (!verification.success) {
@@ -104,21 +106,21 @@ export async function updateOrganizerBankDetails(
     }
 
     const { updateOrganizerBankDetails: updateBankDetails } = await import(
-      '@/actions/organizer.actions'
+      "@/actions/organizer.actions"
     );
 
     const result = await updateBankDetails(
       bankData.account_number,
       bankData.bank_code,
-      verification.data?.account_name
+      verification.data?.account_name,
     );
 
     return result;
   } catch (error) {
-    console.error('Error updating bank details:', error);
+    console.error("Error updating bank details:", error);
     return {
       success: false,
-      message: 'Failed to update bank details',
+      message: "Failed to update bank details",
     };
   }
 }
@@ -130,10 +132,10 @@ export async function requestPayout(): Promise<ActionResponse<any>> {
     headers: headersList,
   });
 
-  if (!session || session.user.subRole !== 'ORGANIZER') {
+  if (!session || session.user.subRole !== "ORGANIZER") {
     return {
       success: false,
-      message: 'Only organizers can request payouts',
+      message: "Only organizers can request payouts",
     };
   }
 
@@ -145,7 +147,7 @@ export async function requestPayout(): Promise<ActionResponse<any>> {
     if (!organizerProfile?.bankAccount || !organizerProfile?.bankCode) {
       return {
         success: false,
-        message: 'Please add your bank details before requesting a payout',
+        message: "Please add your bank details before requesting a payout",
       };
     }
 
@@ -162,7 +164,7 @@ export async function requestPayout(): Promise<ActionResponse<any>> {
     if (recentPayout) {
       return {
         success: false,
-        message: 'You can only request a payout every 14 days',
+        message: "You can only request a payout every 14 days",
       };
     }
 
@@ -171,7 +173,7 @@ export async function requestPayout(): Promise<ActionResponse<any>> {
     if (payoutCalculation.netAmount <= 0) {
       return {
         success: false,
-        message: 'No funds available for payout',
+        message: "No funds available for payout",
       };
     }
 
@@ -181,7 +183,7 @@ export async function requestPayout(): Promise<ActionResponse<any>> {
         amount: payoutCalculation.grossAmount,
         platformFee: payoutCalculation.platformFee,
         netAmount: payoutCalculation.netAmount,
-        status: 'PENDING',
+        status: "PENDING",
         bankAccount: organizerProfile.bankAccount,
         bankCode: organizerProfile.bankCode,
         accountName: organizerProfile.accountName,
@@ -191,8 +193,8 @@ export async function requestPayout(): Promise<ActionResponse<any>> {
     });
 
     await createNotification({
-      type: 'PAYMENT_RECEIVED',
-      title: 'New Payout Request',
+      type: "PAYMENT_RECEIVED",
+      title: "New Payout Request",
       message: `${session.user.name} has requested a payout of ₦${payoutCalculation.netAmount.toLocaleString()}`,
       actionUrl: `/admin/dashboard/payouts/${payout.id}`,
       isAdminNotification: true,
@@ -206,19 +208,19 @@ export async function requestPayout(): Promise<ActionResponse<any>> {
       sendEmail: true,
     });
 
-    revalidatePath('/dashboard/analytics');
+    revalidatePath("/dashboard/analytics");
 
     return {
       success: true,
       message:
-        'Payout request submitted successfully. It will be processed within 24 hours.',
+        "Payout request submitted successfully. It will be processed within 24 hours.",
       data: payout,
     };
   } catch (error) {
-    console.error('Error requesting payout:', error);
+    console.error("Error requesting payout:", error);
     return {
       success: false,
-      message: 'Failed to request payout',
+      message: "Failed to request payout",
     };
   }
 }
@@ -228,9 +230,9 @@ async function calculateOrganizerPayout(organizerId: string) {
   const lastPayout = await prisma.payout.findFirst({
     where: {
       organizerId,
-      status: { in: ['COMPLETED', 'PROCESSING'] },
+      status: { in: ["COMPLETED", "PROCESSING"] },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: "desc" },
   });
 
   const periodStart = lastPayout ? new Date(lastPayout.createdAt) : new Date(0);
@@ -242,7 +244,7 @@ async function calculateOrganizerPayout(organizerId: string) {
       event: {
         userId: organizerId,
       },
-      paymentStatus: 'COMPLETED',
+      paymentStatus: "COMPLETED",
       createdAt: {
         gt: periodStart,
         lte: periodEnd,
@@ -253,7 +255,7 @@ async function calculateOrganizerPayout(organizerId: string) {
   const grossAmount = orders.reduce((sum, order) => sum + order.totalAmount, 0);
   const platformFee = orders.reduce(
     (sum, order) => sum + (order.platformFee || order.totalAmount * 0.05),
-    0
+    0,
   );
   const netAmount = grossAmount - platformFee;
 
@@ -277,14 +279,14 @@ export async function getOrganizerPayouts(): Promise<ActionResponse<any[]>> {
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
   try {
     const payouts = await prisma.payout.findMany({
       where: { organizerId: session.user.id },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     return {
@@ -292,10 +294,10 @@ export async function getOrganizerPayouts(): Promise<ActionResponse<any[]>> {
       data: payouts,
     };
   } catch (error) {
-    console.error('Error fetching organizer payouts:', error);
+    console.error("Error fetching organizer payouts:", error);
     return {
       success: false,
-      message: 'Failed to fetch payouts',
+      message: "Failed to fetch payouts",
     };
   }
 }
@@ -307,10 +309,10 @@ export async function getAllPayoutRequests(): Promise<ActionResponse<any[]>> {
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Admin access required',
+      message: "Admin access required",
     };
   }
 
@@ -330,7 +332,7 @@ export async function getAllPayoutRequests(): Promise<ActionResponse<any[]>> {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     return {
@@ -338,10 +340,10 @@ export async function getAllPayoutRequests(): Promise<ActionResponse<any[]>> {
       data: payouts,
     };
   } catch (error) {
-    console.error('Error fetching payout requests:', error);
+    console.error("Error fetching payout requests:", error);
     return {
       success: false,
-      message: 'Failed to fetch payout requests',
+      message: "Failed to fetch payout requests",
     };
   }
 }
@@ -350,17 +352,17 @@ export async function getAllPayoutRequests(): Promise<ActionResponse<any[]>> {
 export async function processPayout(
   payoutId: string,
   approve: boolean,
-  notes?: string
+  notes?: string,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Admin access required',
+      message: "Admin access required",
     };
   }
 
@@ -381,14 +383,14 @@ export async function processPayout(
     if (!payout) {
       return {
         success: false,
-        message: 'Payout request not found',
+        message: "Payout request not found",
       };
     }
 
-    if (payout.status !== 'PENDING') {
+    if (payout.status !== "PENDING") {
       return {
         success: false,
-        message: 'Payout has already been processed',
+        message: "Payout has already been processed",
       };
     }
 
@@ -396,16 +398,16 @@ export async function processPayout(
       await prisma.payout.update({
         where: { id: payoutId },
         data: {
-          status: 'FAILED',
-          failureReason: notes || 'Rejected by admin',
+          status: "FAILED",
+          failureReason: notes || "Rejected by admin",
         },
       });
 
       await createNotification({
-        type: 'PAYMENT_RECEIVED',
-        title: 'Payout Request Rejected',
-        message: `Your payout request of ₦${payout.netAmount.toLocaleString()} has been rejected. ${notes || ''}`,
-        actionUrl: '/dashboard/analytics',
+        type: "PAYMENT_RECEIVED",
+        title: "Payout Request Rejected",
+        message: `Your payout request of ₦${payout.netAmount.toLocaleString()} has been rejected. ${notes || ""}`,
+        actionUrl: "/dashboard/analytics",
         userId: payout.organizerId,
         metadata: {
           payoutId: payout.id,
@@ -417,14 +419,14 @@ export async function processPayout(
 
       return {
         success: true,
-        message: 'Payout request rejected',
+        message: "Payout request rejected",
       };
     }
 
     const updatedPayout = await prisma.payout.update({
       where: { id: payoutId },
       data: {
-        status: 'PROCESSING',
+        status: "PROCESSING",
         processedAt: new Date(),
       },
     });
@@ -432,15 +434,15 @@ export async function processPayout(
     await prisma.payout.update({
       where: { id: payoutId },
       data: {
-        status: 'COMPLETED',
+        status: "COMPLETED",
       },
     });
 
     await createNotification({
-      type: 'PAYMENT_RECEIVED',
-      title: 'Payout Processed Successfully',
+      type: "PAYMENT_RECEIVED",
+      title: "Payout Processed Successfully",
       message: `Your payout of ₦${payout.netAmount.toLocaleString()} has been processed and will reflect in your account within 24 hours.`,
-      actionUrl: '/dashboard/analytics',
+      actionUrl: "/dashboard/analytics",
       userId: payout.organizerId,
       metadata: {
         payoutId: payout.id,
@@ -450,18 +452,18 @@ export async function processPayout(
       sendEmail: true,
     });
 
-    revalidatePath('/admin/dashboard/payouts');
+    revalidatePath("/admin/dashboard/payouts");
 
     return {
       success: true,
-      message: 'Payout processed successfully',
+      message: "Payout processed successfully",
       data: updatedPayout,
     };
   } catch (error) {
-    console.error('Error processing payout:', error);
+    console.error("Error processing payout:", error);
     return {
       success: false,
-      message: 'Failed to process payout',
+      message: "Failed to process payout",
     };
   }
 }
@@ -469,40 +471,40 @@ export async function processPayout(
 // Admin: Bulk process payouts
 export async function bulkProcessPayouts(
   payoutIds: string[],
-  approve: boolean
+  approve: boolean,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Admin access required',
+      message: "Admin access required",
     };
   }
 
   try {
     const results = await Promise.allSettled(
-      payoutIds.map((id) => processPayout(id, approve))
+      payoutIds.map((id) => processPayout(id, approve)),
     );
 
     const successful = results.filter(
-      (r) => r.status === 'fulfilled' && r.value.success
+      (r) => r.status === "fulfilled" && r.value.success,
     ).length;
     const failed = results.length - successful;
 
     return {
       success: true,
-      message: `Processed ${successful} payouts successfully${failed > 0 ? `, ${failed} failed` : ''}`,
+      message: `Processed ${successful} payouts successfully${failed > 0 ? `, ${failed} failed` : ""}`,
       data: { successful, failed },
     };
   } catch (error) {
-    console.error('Error bulk processing payouts:', error);
+    console.error("Error bulk processing payouts:", error);
     return {
       success: false,
-      message: 'Failed to bulk process payouts',
+      message: "Failed to bulk process payouts",
     };
   }
 }
@@ -519,7 +521,7 @@ export async function getOrganizerRevenueAnalytics(): Promise<
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
@@ -528,14 +530,14 @@ export async function getOrganizerRevenueAnalytics(): Promise<
 
     const payoutHistory = await prisma.payout.findMany({
       where: { organizerId: session.user.id },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: 5,
     });
 
     const totalEarnings = await prisma.payout.aggregate({
       where: {
         organizerId: session.user.id,
-        status: 'COMPLETED',
+        status: "COMPLETED",
       },
       _sum: { netAmount: true },
     });
@@ -544,7 +546,7 @@ export async function getOrganizerRevenueAnalytics(): Promise<
     const recentOrders = await prisma.order.findMany({
       where: {
         event: { userId: session.user.id },
-        paymentStatus: 'COMPLETED',
+        paymentStatus: "COMPLETED",
       },
       include: {
         event: { select: { title: true } },
@@ -555,7 +557,7 @@ export async function getOrganizerRevenueAnalytics(): Promise<
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: 10,
     });
 
@@ -586,10 +588,10 @@ export async function getOrganizerRevenueAnalytics(): Promise<
       },
     };
   } catch (error) {
-    console.error('Error fetching revenue analytics:', error);
+    console.error("Error fetching revenue analytics:", error);
     return {
       success: false,
-      message: 'Failed to fetch revenue analytics',
+      message: "Failed to fetch revenue analytics",
     };
   }
 }

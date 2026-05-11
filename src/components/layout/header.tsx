@@ -1,7 +1,11 @@
-import { AuthUser, getProfileUrl, getSettingsUrl } from '@/lib/auth-client';
-import { SignOutButton } from '@/components/auth/sign-out-button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Button } from '@/components/ui/button';
+import {
+  AuthUser,
+  getProfileUrl,
+  getCachedSettingsUrl,
+} from "@/lib/auth-client";
+import { SignOutButton } from "@/components/auth/sign-out-button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,10 +13,10 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Menu, Settings, User } from 'lucide-react';
-import { NotificationBell } from '@/components/notification/notification-bell';
-import Link from 'next/link';
+} from "@/components/ui/dropdown-menu";
+import { Menu, Settings, User } from "lucide-react";
+import { NotificationBell } from "@/components/notification/notification-bell";
+import Link from "next/link";
 
 interface HeaderProps {
   user: AuthUser;
@@ -21,9 +25,9 @@ interface HeaderProps {
 
 export function Header({ user, onMobileToggle }: HeaderProps) {
   const initials = user.name
-    .split(' ')
+    .split(" ")
     .map((n) => n[0])
-    .join('')
+    .join("")
     .toUpperCase();
 
   return (
@@ -40,7 +44,7 @@ export function Header({ user, onMobileToggle }: HeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user.image || ''} alt={user.name} />
+                <AvatarImage src={user.image || ""} alt={user.name} />
                 <AvatarFallback>{initials}</AvatarFallback>
               </Avatar>
             </Button>
@@ -74,7 +78,10 @@ export function Header({ user, onMobileToggle }: HeaderProps) {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href={getSettingsUrl(user)} className="cursor-pointer">
+              <Link
+                href={getCachedSettingsUrl(user)}
+                className="cursor-pointer"
+              >
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Settings</span>
               </Link>

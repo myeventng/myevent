@@ -1,37 +1,37 @@
 // Update your existing app/api/payment/webhook/route.ts to handle both regular orders and vote orders
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { completeOrder } from '@/actions/order.actions';
-import { verifyVotePayment } from '@/actions/voting-contest.actions';
-import { getSetting } from '@/actions/platform-settings.actions';
-import crypto from 'crypto';
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { completeOrder } from "@/actions/order.actions";
+import { verifyVotePayment } from "@/actions/voting-contest.actions";
+import { getCachedSetting } from "@/actions/platform-settings.actions";
+import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text();
-    const signature = request.headers.get('x-paystack-signature');
+    const signature = request.headers.get("x-paystack-signature");
 
     if (!signature) {
-      return NextResponse.json({ error: 'No signature' }, { status: 400 });
+      return NextResponse.json({ error: "No signature" }, { status: 400 });
     }
 
     // Verify webhook signature
     const paystackSecretKey =
-      (await getSetting('financial.paystackSecretKey')) ||
+      (await getCachedSetting("financial.paystackSecretKey")) ||
       process.env.PAYSTACK_SECRET_KEY;
     if (!paystackSecretKey) {
       return NextResponse.json(
-        { error: 'Configuration error' },
-        { status: 500 }
+        { error: "Configuration error" },
+        { status: 500 },
       );
     }
 
     const hash = crypto
-      .createHmac('sha512', paystackSecretKey)
+      .createHmac("sha512", paystackSecretKey)
       .update(body)
-      .digest('hex');
+      .digest("hex");
     if (hash !== signature) {
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+      return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
     const webhookData = JSON.parse(body);
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     console.log(`Webhook received: ${event} for reference: ${data?.reference}`);
 
     // Handle successful payment
-    if (event === 'charge.success' && data?.reference) {
+    if (event === "charge.success" && data?.reference) {
       // First, check if it's a vote order
       const voteOrder = await prisma.voteOrder.findUnique({
         where: { paystackId: data.reference },
@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
 
       if (voteOrder) {
         // Handle vote order payment
-        if (voteOrder.paymentStatus === 'COMPLETED') {
-          return NextResponse.json({ status: 'already_completed' });
+        if (voteOrder.paymentStatus === "COMPLETED") {
+          return NextResponse.json({ status: "already_completed" });
         }
 
         // Verify amount
@@ -59,9 +59,9 @@ export async function POST(request: NextRequest) {
 
         if (paidKobo !== expectedKobo) {
           console.error(
-            `Vote webhook: Amount mismatch - expected ${expectedKobo}, got ${paidKobo}`
+            `Vote webhook: Amount mismatch - expected ${expectedKobo}, got ${paidKobo}`,
           );
-          return NextResponse.json({ status: 'amount_mismatch' });
+          return NextResponse.json({ status: "amount_mismatch" });
         }
 
         // Verify the vote payment
@@ -73,16 +73,16 @@ export async function POST(request: NextRequest) {
 
         if (result.success) {
           console.log(
-            `Vote webhook: Order ${voteOrder.id} completed successfully`
+            `Vote webhook: Order ${voteOrder.id} completed successfully`,
           );
-          return NextResponse.json({ status: 'success' });
+          return NextResponse.json({ status: "success" });
         } else {
           console.error(
             `Vote webhook: Failed to verify payment for order ${voteOrder.id}:`,
-            result.message
+            result.message,
           );
           return NextResponse.json({
-            status: 'verification_failed',
+            status: "verification_failed",
             error: result.message,
           });
         }
@@ -95,13 +95,13 @@ export async function POST(request: NextRequest) {
 
         if (!order) {
           console.error(
-            `Webhook: Order not found for reference: ${data.reference}`
+            `Webhook: Order not found for reference: ${data.reference}`,
           );
-          return NextResponse.json({ status: 'order_not_found' });
+          return NextResponse.json({ status: "order_not_found" });
         }
 
-        if (order.paymentStatus === 'COMPLETED') {
-          return NextResponse.json({ status: 'already_completed' });
+        if (order.paymentStatus === "COMPLETED") {
+          return NextResponse.json({ status: "already_completed" });
         }
 
         // Verify amount
@@ -110,9 +110,9 @@ export async function POST(request: NextRequest) {
 
         if (paidKobo !== expectedKobo) {
           console.error(
-            `Webhook: Amount mismatch - expected ${expectedKobo}, got ${paidKobo}`
+            `Webhook: Amount mismatch - expected ${expectedKobo}, got ${paidKobo}`,
           );
-          return NextResponse.json({ status: 'amount_mismatch' });
+          return NextResponse.json({ status: "amount_mismatch" });
         }
 
         // Complete the order
@@ -120,14 +120,14 @@ export async function POST(request: NextRequest) {
 
         if (result.success) {
           console.log(`Webhook: Order ${order.id} completed successfully`);
-          return NextResponse.json({ status: 'success' });
+          return NextResponse.json({ status: "success" });
         } else {
           console.error(
             `Webhook: Failed to complete order ${order.id}:`,
-            result.message
+            result.message,
           );
           return NextResponse.json({
-            status: 'completion_failed',
+            status: "completion_failed",
             error: result.message,
           });
         }
@@ -135,12 +135,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Handle failed payment
-    if (event === 'charge.failed' && data?.reference) {
+    if (event === "charge.failed" && data?.reference) {
       // Try to update vote order first
       const voteOrderUpdate = await prisma.voteOrder
         .update({
           where: { paystackId: data.reference },
-          data: { paymentStatus: 'FAILED' },
+          data: { paymentStatus: "FAILED" },
         })
         .catch(() => null);
 
@@ -149,16 +149,16 @@ export async function POST(request: NextRequest) {
         await prisma.order
           .update({
             where: { paystackId: data.reference },
-            data: { paymentStatus: 'FAILED' },
+            data: { paymentStatus: "FAILED" },
           })
           .catch(() => {}); // Ignore errors for failed orders
       }
     }
 
-    return NextResponse.json({ status: 'success' });
+    return NextResponse.json({ status: "success" });
   } catch (error) {
-    console.error('Webhook processing error:', error);
-    return NextResponse.json({ status: 'error' }, { status: 500 });
+    console.error("Webhook processing error:", error);
+    return NextResponse.json({ status: "error" }, { status: 500 });
   }
 }
 
@@ -171,10 +171,10 @@ async function handleChargeFailed(data: any) {
       where: { paystackId: reference },
     });
 
-    if (voteOrder && voteOrder.paymentStatus === 'PENDING') {
+    if (voteOrder && voteOrder.paymentStatus === "PENDING") {
       await prisma.voteOrder.update({
         where: { id: voteOrder.id },
-        data: { paymentStatus: 'FAILED' },
+        data: { paymentStatus: "FAILED" },
       });
 
       console.log(`Vote order ${voteOrder.id} marked as failed`);
@@ -186,16 +186,16 @@ async function handleChargeFailed(data: any) {
       where: { paystackId: reference },
     });
 
-    if (order && order.paymentStatus === 'PENDING') {
+    if (order && order.paymentStatus === "PENDING") {
       await prisma.order.update({
         where: { id: order.id },
-        data: { paymentStatus: 'FAILED' },
+        data: { paymentStatus: "FAILED" },
       });
 
       console.log(`Order ${order.id} marked as failed`);
     }
   } catch (error) {
-    console.error('Error handling charge failed:', error);
+    console.error("Error handling charge failed:", error);
   }
 }
 
@@ -212,7 +212,7 @@ async function handleRefundProcessed(data: any) {
       await prisma.voteOrder.update({
         where: { id: voteOrder.id },
         data: {
-          paymentStatus: 'REFUNDED',
+          paymentStatus: "REFUNDED",
           // Note: For vote orders, we might not want to return votes to inventory
           // as they may have already been used
         },
@@ -234,20 +234,20 @@ async function handleRefundProcessed(data: any) {
         await tx.order.update({
           where: { id: order.id },
           data: {
-            paymentStatus: 'REFUNDED',
-            refundStatus: 'PROCESSED',
+            paymentStatus: "REFUNDED",
+            refundStatus: "PROCESSED",
           },
         });
 
         // Update tickets status
         await tx.ticket.updateMany({
           where: { orderId: order.id },
-          data: { status: 'REFUNDED' },
+          data: { status: "REFUNDED" },
         });
 
         // Return ticket quantities to inventory
         const ticketCounts = await tx.ticket.groupBy({
-          by: ['ticketTypeId'],
+          by: ["ticketTypeId"],
           where: { orderId: order.id },
           _count: true,
         });
@@ -263,6 +263,6 @@ async function handleRefundProcessed(data: any) {
       console.log(`Refund processed for order ${order.id}`);
     }
   } catch (error) {
-    console.error('Error handling refund processed:', error);
+    console.error("Error handling refund processed:", error);
   }
 }

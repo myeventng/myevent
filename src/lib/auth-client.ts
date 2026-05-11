@@ -1,14 +1,14 @@
-'use client';
+"use client";
 
-import { createAuthClient } from 'better-auth/react';
+import { createAuthClient } from "better-auth/react";
 import {
   inferAdditionalFields,
   adminClient,
   customSessionClient,
   magicLinkClient,
-} from 'better-auth/client/plugins';
-import type { auth } from '@/lib/auth';
-import { ac, roles } from '@/lib/permissions';
+} from "better-auth/client/plugins";
+import type { auth } from "@/lib/auth";
+import { ac, roles } from "@/lib/permissions";
 
 // Import shared types and utilities
 export type {
@@ -16,7 +16,7 @@ export type {
   SubRoleType,
   AuthUser,
   AuthSession,
-} from './auth-types';
+} from "./auth-types";
 export {
   isAdmin,
   isOrganizer,
@@ -24,10 +24,10 @@ export {
   isSuperAdmin,
   getDashboardUrl,
   getProfileUrl,
-  getSettingsUrl,
+  getCachedSettingsUrl,
   convertSessionUser,
   filterNavigation,
-} from './auth-utils';
+} from "./auth-utils";
 
 // Auth Client
 const authClient = createAuthClient({

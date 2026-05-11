@@ -1,13 +1,13 @@
 // src/actions/voting-contest.actions.ts
-'use server';
+"use server";
 
-import { revalidatePath } from 'next/cache';
-import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
-import { VotingType, ContestantStatus, EventType } from '@/generated/prisma';
-import { createNotification } from '@/actions/notification.actions';
-import { getPlatformFeePercentage } from '@/actions/platform-settings.actions';
+import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { VotingType, ContestantStatus, EventType } from "@/generated/prisma";
+import { createNotification } from "@/actions/notification.actions";
+import { getPlatformFee } from "@/actions/platform-settings.actions";
 
 interface ActionResponse<T> {
   success: boolean;
@@ -18,7 +18,7 @@ interface ActionResponse<T> {
 // Cast a free vote - UPDATED with guest voting support
 export async function castFreeVote(
   contestantId: string,
-  guestIdentifier?: string // For guest voting
+  guestIdentifier?: string, // For guest voting
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({ headers: headersList });
@@ -27,7 +27,7 @@ export async function castFreeVote(
   if (!session && !guestIdentifier) {
     return {
       success: false,
-      message: 'Authentication required or provide guest identifier',
+      message: "Authentication required or provide guest identifier",
     };
   }
 
@@ -45,29 +45,29 @@ export async function castFreeVote(
     });
 
     if (!contestant) {
-      return { success: false, message: 'Contestant not found' };
+      return { success: false, message: "Contestant not found" };
     }
 
     const contest = contestant.contest;
 
     // Check if voting is allowed
     if (contest.votingType !== VotingType.FREE) {
-      return { success: false, message: 'This is not a free voting contest' };
+      return { success: false, message: "This is not a free voting contest" };
     }
 
     // Check if contestant is active
     if (contestant.status !== ContestantStatus.ACTIVE) {
-      return { success: false, message: 'This contestant is not active' };
+      return { success: false, message: "This contestant is not active" };
     }
 
     // Check voting window
     const now = new Date();
     if (contest.votingStartDate && now < contest.votingStartDate) {
-      return { success: false, message: 'Voting has not started yet' };
+      return { success: false, message: "Voting has not started yet" };
     }
 
     if (contest.votingEndDate && now > contest.votingEndDate) {
-      return { success: false, message: 'Voting has ended' };
+      return { success: false, message: "Voting has ended" };
     }
 
     const userId = session?.user?.id;
@@ -75,10 +75,10 @@ export async function castFreeVote(
     // Handle guest voting vs authenticated voting differently
     if (contest.allowGuestVoting && !userId) {
       // Guest voting - check by IP address and guest identifier
-      const forwardedFor = headersList.get('x-forwarded-for');
+      const forwardedFor = headersList.get("x-forwarded-for");
       const ipAddress = forwardedFor
-        ? forwardedFor.split(',')[0]
-        : headersList.get('x-real-ip') || 'unknown';
+        ? forwardedFor.split(",")[0]
+        : headersList.get("x-real-ip") || "unknown";
 
       // Check if this IP/guest combination has already voted for this contestant
       const existingVote = await prisma.vote.findFirst({
@@ -93,7 +93,7 @@ export async function castFreeVote(
       if (existingVote) {
         return {
           success: false,
-          message: 'You have already voted for this contestant',
+          message: "You have already voted for this contestant",
         };
       }
 
@@ -110,7 +110,7 @@ export async function castFreeVote(
       if (hasVotedInContest) {
         return {
           success: false,
-          message: 'You can only vote once in this contest',
+          message: "You can only vote once in this contest",
         };
       }
 
@@ -122,14 +122,14 @@ export async function castFreeVote(
           contestantId: contestantId,
           voteType: VotingType.FREE,
           ipAddress,
-          userAgent: headersList.get('user-agent') || 'unknown',
+          userAgent: headersList.get("user-agent") || "unknown",
         },
       });
 
       // Create notification for the contest owner (no voter name for guests)
       await createNotification({
-        type: 'VOTE_PURCHASED',
-        title: 'New Vote Cast',
+        type: "VOTE_PURCHASED",
+        title: "New Vote Cast",
         message: `A guest voter voted for ${contestant.name} in ${contest.event.title}`,
         userId: contest.event.userId || undefined,
         metadata: {
@@ -161,7 +161,7 @@ export async function castFreeVote(
       if (existingVote) {
         return {
           success: false,
-          message: 'You have already voted for this contestant',
+          message: "You have already voted for this contestant",
         };
       }
 
@@ -178,7 +178,7 @@ export async function castFreeVote(
         if (hasVotedInContest) {
           return {
             success: false,
-            message: 'You can only vote for one contestant in this contest',
+            message: "You can only vote for one contestant in this contest",
           };
         }
       }
@@ -202,11 +202,11 @@ export async function castFreeVote(
       }
 
       // Get user's IP address
-      const forwardedFor = headersList.get('x-forwarded-for');
+      const forwardedFor = headersList.get("x-forwarded-for");
       const ipAddress = forwardedFor
-        ? forwardedFor.split(',')[0]
-        : headersList.get('x-real-ip') || 'unknown';
-      const userAgent = headersList.get('user-agent') || 'unknown';
+        ? forwardedFor.split(",")[0]
+        : headersList.get("x-real-ip") || "unknown";
+      const userAgent = headersList.get("user-agent") || "unknown";
 
       // Cast the vote
       const vote = await prisma.vote.create({
@@ -222,8 +222,8 @@ export async function castFreeVote(
 
       // Create notification for the contest owner
       await createNotification({
-        type: 'VOTE_PURCHASED',
-        title: 'New Vote Cast',
+        type: "VOTE_PURCHASED",
+        title: "New Vote Cast",
         message: `${session.user.name} voted for ${contestant.name} in ${contest.event.title}`,
         userId: contest.event.userId || undefined,
         metadata: {
@@ -243,10 +243,10 @@ export async function castFreeVote(
         data: vote,
       };
     } else {
-      return { success: false, message: 'Unable to process vote' };
+      return { success: false, message: "Unable to process vote" };
     }
   } catch (error) {
-    return { success: false, message: 'Failed to cast vote' };
+    return { success: false, message: "Failed to cast vote" };
   }
 }
 
@@ -265,7 +265,7 @@ export async function createVotingContest(data: {
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Not authenticated' };
+    return { success: false, message: "Not authenticated" };
   }
 
   try {
@@ -282,18 +282,18 @@ export async function createVotingContest(data: {
     });
 
     if (!event) {
-      return { success: false, message: 'Event not found' };
+      return { success: false, message: "Event not found" };
     }
 
-    const isAdmin = session.user.role === 'ADMIN';
+    const isAdmin = session.user.role === "ADMIN";
     const isOwner = event.userId === session.user.id;
 
     if (!isAdmin && !isOwner) {
-      return { success: false, message: 'Not authorized' };
+      return { success: false, message: "Not authorized" };
     }
 
     if (event.eventType !== EventType.VOTING_CONTEST) {
-      return { success: false, message: 'Event must be a voting contest type' };
+      return { success: false, message: "Event must be a voting contest type" };
     }
 
     // Create voting contest with new fields
@@ -317,13 +317,13 @@ export async function createVotingContest(data: {
     revalidatePath(`/dashboard/events/${data.eventId}`);
     return {
       success: true,
-      message: 'Voting contest created successfully',
+      message: "Voting contest created successfully",
       data: votingContest,
     };
   } catch (error) {
     return {
       success: false,
-      message: `Failed to create voting contest: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      message: `Failed to create voting contest: ${error instanceof Error ? error.message : "Unknown error"}`,
     };
   }
 }
@@ -344,7 +344,7 @@ export async function updateVotingContest(data: {
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Not authenticated' };
+    return { success: false, message: "Not authenticated" };
   }
 
   try {
@@ -363,14 +363,14 @@ export async function updateVotingContest(data: {
     });
 
     if (!contest) {
-      return { success: false, message: 'Contest not found' };
+      return { success: false, message: "Contest not found" };
     }
 
-    const isAdmin = session.user.role === 'ADMIN';
+    const isAdmin = session.user.role === "ADMIN";
     const isOwner = contest.event.userId === session.user.id;
 
     if (!isAdmin && !isOwner) {
-      return { success: false, message: 'Not authorized' };
+      return { success: false, message: "Not authorized" };
     }
 
     // Update contest with new fields
@@ -387,17 +387,17 @@ export async function updateVotingContest(data: {
     revalidatePath(`/dashboard/events/${contest.eventId}`);
     return {
       success: true,
-      message: 'Voting contest updated successfully',
+      message: "Voting contest updated successfully",
       data: updatedContest,
     };
   } catch (error) {
-    return { success: false, message: 'Failed to update voting contest' };
+    return { success: false, message: "Failed to update voting contest" };
   }
 }
 
 // Rest of the existing functions remain the same...
 export async function getContestResults(
-  contestId: string
+  contestId: string,
 ): Promise<ActionResponse<any>> {
   try {
     // Get contest with all related data
@@ -423,12 +423,12 @@ export async function getContestResults(
             },
           },
           orderBy: {
-            contestNumber: 'asc',
+            contestNumber: "asc",
           },
         },
         votePackages: {
           orderBy: {
-            sortOrder: 'asc',
+            sortOrder: "asc",
           },
         },
         votes: {
@@ -449,14 +449,14 @@ export async function getContestResults(
             },
           },
           orderBy: {
-            createdAt: 'desc',
+            createdAt: "desc",
           },
         },
       },
     });
 
     if (!contest) {
-      return { success: false, message: 'Contest not found' };
+      return { success: false, message: "Contest not found" };
     }
 
     // Calculate total votes
@@ -498,7 +498,7 @@ export async function getContestResults(
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const dailyVotes = await prisma.vote.groupBy({
-      by: ['createdAt'],
+      by: ["createdAt"],
       where: {
         contestId,
         createdAt: {
@@ -512,14 +512,14 @@ export async function getContestResults(
 
     // Group votes by day
     const votingActivity = dailyVotes.reduce((acc: any, vote) => {
-      const date = vote.createdAt.toISOString().split('T')[0];
+      const date = vote.createdAt.toISOString().split("T")[0];
       acc[date] = (acc[date] || 0) + vote._count.id;
       return acc;
     }, {});
 
     // Get top voters (exclude guest votes and show voter names only if enabled)
     const topVoters = await prisma.vote.groupBy({
-      by: ['userId'],
+      by: ["userId"],
       where: {
         contestId,
         userId: { not: null }, // Exclude guest votes
@@ -529,7 +529,7 @@ export async function getContestResults(
       },
       orderBy: {
         _count: {
-          id: 'desc',
+          id: "desc",
         },
       },
       take: 10,
@@ -557,8 +557,8 @@ export async function getContestResults(
         const user = voterDetails.find((u) => u.id === voter.userId);
         return {
           userId: voter.userId,
-          name: user?.name || 'Unknown',
-          email: user?.email || '',
+          name: user?.name || "Unknown",
+          email: user?.email || "",
           voteCount: voter._count.id,
         };
       });
@@ -572,7 +572,7 @@ export async function getContestResults(
       const voteOrders = await prisma.voteOrder.aggregate({
         where: {
           contestId,
-          paymentStatus: 'COMPLETED',
+          paymentStatus: "COMPLETED",
         },
         _sum: {
           totalAmount: true,
@@ -626,7 +626,7 @@ export async function getContestResults(
       },
     };
   } catch (error) {
-    return { success: false, message: 'Failed to get contest results' };
+    return { success: false, message: "Failed to get contest results" };
   }
 }
 
@@ -645,7 +645,7 @@ export async function createContestant(data: {
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Not authenticated' };
+    return { success: false, message: "Not authenticated" };
   }
 
   try {
@@ -656,14 +656,14 @@ export async function createContestant(data: {
     });
 
     if (!contest) {
-      return { success: false, message: 'Contest not found' };
+      return { success: false, message: "Contest not found" };
     }
 
-    const isAdmin = session.user.role === 'ADMIN';
+    const isAdmin = session.user.role === "ADMIN";
     const isOwner = contest.event.userId === session.user.id;
 
     if (!isAdmin && !isOwner) {
-      return { success: false, message: 'Not authorized' };
+      return { success: false, message: "Not authorized" };
     }
 
     // Create contestant
@@ -683,14 +683,14 @@ export async function createContestant(data: {
     revalidatePath(`/dashboard/contests/${data.contestId}`);
     return {
       success: true,
-      message: 'Contestant created successfully',
+      message: "Contestant created successfully",
       data: contestant,
     };
   } catch (error) {
-    if (error instanceof Error && error.message.includes('Unique constraint')) {
-      return { success: false, message: 'Contest number already exists' };
+    if (error instanceof Error && error.message.includes("Unique constraint")) {
+      return { success: false, message: "Contest number already exists" };
     }
-    return { success: false, message: 'Failed to create contestant' };
+    return { success: false, message: "Failed to create contestant" };
   }
 }
 
@@ -707,7 +707,7 @@ export async function createVotePackage(data: {
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Not authenticated' };
+    return { success: false, message: "Not authenticated" };
   }
 
   try {
@@ -718,14 +718,14 @@ export async function createVotePackage(data: {
     });
 
     if (!contest) {
-      return { success: false, message: 'Contest not found' };
+      return { success: false, message: "Contest not found" };
     }
 
-    const isAdmin = session.user.role === 'ADMIN';
+    const isAdmin = session.user.role === "ADMIN";
     const isOwner = contest.event.userId === session.user.id;
 
     if (!isAdmin && !isOwner) {
-      return { success: false, message: 'Not authorized' };
+      return { success: false, message: "Not authorized" };
     }
 
     const votePackage = await prisma.votePackage.create({
@@ -742,11 +742,11 @@ export async function createVotePackage(data: {
     revalidatePath(`/dashboard/contests/${data.contestId}`);
     return {
       success: true,
-      message: 'Vote package created successfully',
+      message: "Vote package created successfully",
       data: votePackage,
     };
   } catch (error) {
-    return { success: false, message: 'Failed to create vote package' };
+    return { success: false, message: "Failed to create vote package" };
   }
 }
 
@@ -765,7 +765,7 @@ export async function createVotePackages(data: {
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Not authenticated' };
+    return { success: false, message: "Not authenticated" };
   }
 
   try {
@@ -776,14 +776,14 @@ export async function createVotePackages(data: {
     });
 
     if (!contest) {
-      return { success: false, message: 'Contest not found' };
+      return { success: false, message: "Contest not found" };
     }
 
-    const isAdmin = session.user.role === 'ADMIN';
+    const isAdmin = session.user.role === "ADMIN";
     const isOwner = contest.event.userId === session.user.id;
 
     if (!isAdmin && !isOwner) {
-      return { success: false, message: 'Not authorized' };
+      return { success: false, message: "Not authorized" };
     }
 
     // Delete existing packages and create new ones
@@ -811,7 +811,7 @@ export async function createVotePackages(data: {
       message: `Successfully created ${data.packages.length} vote packages`,
     };
   } catch (error) {
-    return { success: false, message: 'Failed to create vote packages' };
+    return { success: false, message: "Failed to create vote packages" };
   }
 }
 
@@ -824,7 +824,7 @@ export async function purchaseVotePackage(data: {
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Please log in to purchase votes' };
+    return { success: false, message: "Please log in to purchase votes" };
   }
 
   try {
@@ -841,28 +841,28 @@ export async function purchaseVotePackage(data: {
     });
 
     if (!votePackage) {
-      return { success: false, message: 'Vote package not found' };
+      return { success: false, message: "Vote package not found" };
     }
 
     const contest = votePackage.contest;
 
     // Check if voting is allowed
     if (contest.votingType !== VotingType.PAID) {
-      return { success: false, message: 'This is not a paid voting contest' };
+      return { success: false, message: "This is not a paid voting contest" };
     }
 
     // Check voting window
     const now = new Date();
     if (contest.votingStartDate && now < contest.votingStartDate) {
-      return { success: false, message: 'Voting has not started yet' };
+      return { success: false, message: "Voting has not started yet" };
     }
 
     if (contest.votingEndDate && now > contest.votingEndDate) {
-      return { success: false, message: 'Voting has ended' };
+      return { success: false, message: "Voting has ended" };
     }
 
     // Get platform fee percentage
-    const platformFeePercentage = await getPlatformFeePercentage();
+    const platformFeePercentage = await getPlatformFee();
     const platformFee = (votePackage.price * platformFeePercentage) / 100;
 
     // Create a unique reference for Paystack
@@ -879,15 +879,15 @@ export async function purchaseVotePackage(data: {
         platformFee,
         voteCount: votePackage.voteCount,
         votesRemaining: votePackage.voteCount,
-        paymentStatus: 'PENDING',
-        currency: 'NGN',
+        paymentStatus: "PENDING",
+        currency: "NGN",
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
       },
     });
 
     return {
       success: true,
-      message: 'Vote order created successfully',
+      message: "Vote order created successfully",
       data: {
         orderId: voteOrder.id,
         reference: voteOrder.paystackId,
@@ -896,7 +896,7 @@ export async function purchaseVotePackage(data: {
       },
     };
   } catch (error) {
-    return { success: false, message: 'Failed to purchase vote package' };
+    return { success: false, message: "Failed to purchase vote package" };
   }
 }
 
@@ -909,7 +909,7 @@ export async function castPaidVote(data: {
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Please log in to vote' };
+    return { success: false, message: "Please log in to vote" };
   }
 
   try {
@@ -930,51 +930,51 @@ export async function castPaidVote(data: {
     });
 
     if (!voteOrder) {
-      return { success: false, message: 'Vote order not found' };
+      return { success: false, message: "Vote order not found" };
     }
 
     if (!contestant) {
-      return { success: false, message: 'Contestant not found' };
+      return { success: false, message: "Contestant not found" };
     }
 
     // Check if user owns the vote order
     if (voteOrder.userId !== session.user.id) {
-      return { success: false, message: 'Not authorized to use these votes' };
+      return { success: false, message: "Not authorized to use these votes" };
     }
 
     // Check if payment is completed
-    if (voteOrder.paymentStatus !== 'COMPLETED') {
+    if (voteOrder.paymentStatus !== "COMPLETED") {
       return {
         success: false,
-        message: 'Payment not completed for this vote package',
+        message: "Payment not completed for this vote package",
       };
     }
 
     // Check if votes are available
     if (voteOrder.votesRemaining <= 0) {
-      return { success: false, message: 'No votes remaining in this package' };
+      return { success: false, message: "No votes remaining in this package" };
     }
 
     // Check if votes have expired
     if (voteOrder.expiresAt && new Date() > voteOrder.expiresAt) {
-      return { success: false, message: 'Vote package has expired' };
+      return { success: false, message: "Vote package has expired" };
     }
 
     const contest = voteOrder.contest;
 
     // Check if contestant is active
     if (contestant.status !== ContestantStatus.ACTIVE) {
-      return { success: false, message: 'This contestant is not active' };
+      return { success: false, message: "This contestant is not active" };
     }
 
     // Check voting window
     const now = new Date();
     if (contest.votingStartDate && now < contest.votingStartDate) {
-      return { success: false, message: 'Voting has not started yet' };
+      return { success: false, message: "Voting has not started yet" };
     }
 
     if (contest.votingEndDate && now > contest.votingEndDate) {
-      return { success: false, message: 'Voting has ended' };
+      return { success: false, message: "Voting has ended" };
     }
 
     // Check if multiple votes are allowed
@@ -989,17 +989,17 @@ export async function castPaidVote(data: {
       if (hasVotedInContest) {
         return {
           success: false,
-          message: 'You can only vote for one contestant in this contest',
+          message: "You can only vote for one contestant in this contest",
         };
       }
     }
 
     // Get user's IP address
-    const forwardedFor = headersList.get('x-forwarded-for');
+    const forwardedFor = headersList.get("x-forwarded-for");
     const ipAddress = forwardedFor
-      ? forwardedFor.split(',')[0]
-      : headersList.get('x-real-ip') || 'unknown';
-    const userAgent = headersList.get('user-agent') || 'unknown';
+      ? forwardedFor.split(",")[0]
+      : headersList.get("x-real-ip") || "unknown";
+    const userAgent = headersList.get("user-agent") || "unknown";
 
     // Cast the vote and update vote order in a transaction
     const result = await prisma.$transaction(async (tx) => {
@@ -1034,8 +1034,8 @@ export async function castPaidVote(data: {
 
     // Create notification for the contest owner
     await createNotification({
-      type: 'VOTE_PURCHASED',
-      title: 'New Paid Vote Cast',
+      type: "VOTE_PURCHASED",
+      title: "New Paid Vote Cast",
       message: `${session.user.name} used a paid vote for ${contestant.name} in ${contest.event.title}`,
       userId: contest.event.userId || undefined, // Handle null case
       metadata: {
@@ -1059,7 +1059,7 @@ export async function castPaidVote(data: {
       },
     };
   } catch (error) {
-    return { success: false, message: 'Failed to cast vote' };
+    return { success: false, message: "Failed to cast vote" };
   }
 }
 
@@ -1073,7 +1073,7 @@ export async function purchaseVoteWithDefaultPrice(data: {
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Please log in to purchase votes' };
+    return { success: false, message: "Please log in to purchase votes" };
   }
 
   try {
@@ -1086,26 +1086,26 @@ export async function purchaseVoteWithDefaultPrice(data: {
     });
 
     if (!contest) {
-      return { success: false, message: 'Contest not found' };
+      return { success: false, message: "Contest not found" };
     }
 
     // Check if voting is allowed
     if (contest.votingType !== VotingType.PAID) {
-      return { success: false, message: 'This is not a paid voting contest' };
+      return { success: false, message: "This is not a paid voting contest" };
     }
 
     // Check voting window
     const now = new Date();
     if (contest.votingStartDate && now < contest.votingStartDate) {
-      return { success: false, message: 'Voting has not started yet' };
+      return { success: false, message: "Voting has not started yet" };
     }
 
     if (contest.votingEndDate && now > contest.votingEndDate) {
-      return { success: false, message: 'Voting has ended' };
+      return { success: false, message: "Voting has ended" };
     }
 
     // Get platform fee percentage
-    const platformFeePercentage = await getPlatformFeePercentage();
+    const platformFeePercentage = await getPlatformFee();
     const platformFee = (data.amount * platformFeePercentage) / 100;
 
     // Create a unique reference for Paystack
@@ -1122,15 +1122,15 @@ export async function purchaseVoteWithDefaultPrice(data: {
         platformFee,
         voteCount: data.voteCount || 1,
         votesRemaining: data.voteCount || 1,
-        paymentStatus: 'PENDING',
-        currency: 'NGN',
+        paymentStatus: "PENDING",
+        currency: "NGN",
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
       },
     });
 
     return {
       success: true,
-      message: 'Vote order created successfully',
+      message: "Vote order created successfully",
       data: {
         orderId: voteOrder.id,
         reference: voteOrder.paystackId,
@@ -1139,7 +1139,7 @@ export async function purchaseVoteWithDefaultPrice(data: {
       },
     };
   } catch (error) {
-    return { success: false, message: 'Failed to purchase vote' };
+    return { success: false, message: "Failed to purchase vote" };
   }
 }
 
@@ -1167,26 +1167,26 @@ export async function verifyVotePayment(data: {
     });
 
     if (!voteOrder) {
-      return { success: false, message: 'Vote order not found' };
+      return { success: false, message: "Vote order not found" };
     }
 
-    if (voteOrder.paymentStatus === 'COMPLETED') {
-      return { success: true, message: 'Payment already verified' };
+    if (voteOrder.paymentStatus === "COMPLETED") {
+      return { success: true, message: "Payment already verified" };
     }
 
     // Update payment status
     await prisma.voteOrder.update({
       where: { id: data.voteOrderId },
       data: {
-        paymentStatus: 'COMPLETED',
-        paymentMethod: data.paystackData.channel || 'card',
+        paymentStatus: "COMPLETED",
+        paymentMethod: data.paystackData.channel || "card",
       },
     });
 
     // Create notification for user
     await createNotification({
-      type: 'VOTE_PURCHASED',
-      title: 'Vote Package Purchase Confirmed',
+      type: "VOTE_PURCHASED",
+      title: "Vote Package Purchase Confirmed",
       message: `Your purchase of ${voteOrder.voteCount} votes for ${voteOrder.contest.event.title} has been confirmed`,
       userId: voteOrder.userId,
       metadata: {
@@ -1199,8 +1199,8 @@ export async function verifyVotePayment(data: {
 
     // Create notification for contest owner
     await createNotification({
-      type: 'VOTE_PURCHASED',
-      title: 'New Vote Package Purchased',
+      type: "VOTE_PURCHASED",
+      title: "New Vote Package Purchased",
       message: `${voteOrder.user.name} purchased ${voteOrder.voteCount} votes for ${voteOrder.contest.event.title}`,
       userId: voteOrder.contest.event.userId || undefined, // Handle null case
       metadata: {
@@ -1216,23 +1216,23 @@ export async function verifyVotePayment(data: {
 
     return {
       success: true,
-      message: 'Vote payment verified successfully',
+      message: "Vote payment verified successfully",
       data: voteOrder,
     };
   } catch (error) {
-    return { success: false, message: 'Failed to verify payment' };
+    return { success: false, message: "Failed to verify payment" };
   }
 }
 
 // Get user's vote orders and remaining votes
 export async function getUserVoteOrders(
-  contestId: string
+  contestId: string,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Not authenticated' };
+    return { success: false, message: "Not authenticated" };
   }
 
   try {
@@ -1240,7 +1240,7 @@ export async function getUserVoteOrders(
       where: {
         userId: session.user.id,
         contestId,
-        paymentStatus: 'COMPLETED',
+        paymentStatus: "COMPLETED",
       },
       include: {
         votePackage: true,
@@ -1255,18 +1255,18 @@ export async function getUserVoteOrders(
             },
           },
           orderBy: {
-            createdAt: 'desc',
+            createdAt: "desc",
           },
         },
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
     });
 
     const totalVotesRemaining = voteOrders.reduce(
       (sum, order) => sum + order.votesRemaining,
-      0
+      0,
     );
 
     return {
@@ -1276,21 +1276,21 @@ export async function getUserVoteOrders(
         totalVotesRemaining,
         totalVotesPurchased: voteOrders.reduce(
           (sum, order) => sum + order.voteCount,
-          0
+          0,
         ),
         totalAmountSpent: voteOrders.reduce(
           (sum, order) => sum + order.totalAmount,
-          0
+          0,
         ),
       },
     };
   } catch (error) {
-    return { success: false, message: 'Failed to get vote orders' };
+    return { success: false, message: "Failed to get vote orders" };
   }
 }
 
 export async function getPublicContestResults(
-  contestId: string
+  contestId: string,
 ): Promise<ActionResponse<any>> {
   try {
     const contest = await prisma.votingContest.findUnique({
@@ -1318,18 +1318,18 @@ export async function getPublicContestResults(
             },
           },
           orderBy: {
-            contestNumber: 'asc',
+            contestNumber: "asc",
           },
         },
       },
     });
 
     if (!contest) {
-      return { success: false, message: 'Contest not found' };
+      return { success: false, message: "Contest not found" };
     }
 
-    if (contest.event.publishedStatus !== 'PUBLISHED') {
-      return { success: false, message: 'Contest is not published' };
+    if (contest.event.publishedStatus !== "PUBLISHED") {
+      return { success: false, message: "Contest is not published" };
     }
 
     // Only show results if live results are enabled
@@ -1413,7 +1413,7 @@ export async function getPublicContestResults(
       },
     };
   } catch (error) {
-    return { success: false, message: 'Failed to get contest results' };
+    return { success: false, message: "Failed to get contest results" };
   }
 }
 
@@ -1433,7 +1433,7 @@ export async function updateContestant(data: {
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Not authenticated' };
+    return { success: false, message: "Not authenticated" };
   }
 
   try {
@@ -1448,14 +1448,14 @@ export async function updateContestant(data: {
     });
 
     if (!contestant) {
-      return { success: false, message: 'Contestant not found' };
+      return { success: false, message: "Contestant not found" };
     }
 
-    const isAdmin = session.user.role === 'ADMIN';
+    const isAdmin = session.user.role === "ADMIN";
     const isOwner = contestant.contest.event.userId === session.user.id;
 
     if (!isAdmin && !isOwner) {
-      return { success: false, message: 'Not authorized' };
+      return { success: false, message: "Not authorized" };
     }
 
     // Check for duplicate contest numbers (excluding current contestant)
@@ -1468,7 +1468,7 @@ export async function updateContestant(data: {
     });
 
     if (duplicateCheck) {
-      return { success: false, message: 'Contest number already exists' };
+      return { success: false, message: "Contest number already exists" };
     }
 
     // Update contestant
@@ -1488,23 +1488,23 @@ export async function updateContestant(data: {
     revalidatePath(`/dashboard/contests/${data.contestId}`);
     return {
       success: true,
-      message: 'Contestant updated successfully',
+      message: "Contestant updated successfully",
       data: updatedContestant,
     };
   } catch (error) {
-    return { success: false, message: 'Failed to update contestant' };
+    return { success: false, message: "Failed to update contestant" };
   }
 }
 
 // Delete contestant
 export async function deleteContestant(
-  id: string
+  id: string,
 ): Promise<ActionResponse<null>> {
   const headersList = await headers();
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Not authenticated' };
+    return { success: false, message: "Not authenticated" };
   }
 
   try {
@@ -1520,14 +1520,14 @@ export async function deleteContestant(
     });
 
     if (!contestant) {
-      return { success: false, message: 'Contestant not found' };
+      return { success: false, message: "Contestant not found" };
     }
 
-    const isAdmin = session.user.role === 'ADMIN';
+    const isAdmin = session.user.role === "ADMIN";
     const isOwner = contestant.contest.event.userId === session.user.id;
 
     if (!isAdmin && !isOwner) {
-      return { success: false, message: 'Not authorized' };
+      return { success: false, message: "Not authorized" };
     }
 
     // Check if contestant has votes
@@ -1535,7 +1535,7 @@ export async function deleteContestant(
       return {
         success: false,
         message:
-          'Cannot delete contestant with existing votes. Consider disqualifying instead.',
+          "Cannot delete contestant with existing votes. Consider disqualifying instead.",
       };
     }
 
@@ -1547,23 +1547,23 @@ export async function deleteContestant(
     revalidatePath(`/dashboard/contests/${contestant.contestId}`);
     return {
       success: true,
-      message: 'Contestant deleted successfully',
+      message: "Contestant deleted successfully",
     };
   } catch (error) {
-    return { success: false, message: 'Failed to delete contestant' };
+    return { success: false, message: "Failed to delete contestant" };
   }
 }
 
 // Update contestant status (for disqualification, etc.)
 export async function updateContestantStatus(
   id: string,
-  status: ContestantStatus
+  status: ContestantStatus,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Not authenticated' };
+    return { success: false, message: "Not authenticated" };
   }
 
   try {
@@ -1578,14 +1578,14 @@ export async function updateContestantStatus(
     });
 
     if (!contestant) {
-      return { success: false, message: 'Contestant not found' };
+      return { success: false, message: "Contestant not found" };
     }
 
-    const isAdmin = session.user.role === 'ADMIN';
+    const isAdmin = session.user.role === "ADMIN";
     const isOwner = contestant.contest.event.userId === session.user.id;
 
     if (!isAdmin && !isOwner) {
-      return { success: false, message: 'Not authorized' };
+      return { success: false, message: "Not authorized" };
     }
 
     // Update status
@@ -1597,8 +1597,8 @@ export async function updateContestantStatus(
     // Create notification if disqualified
     if (status === ContestantStatus.DISQUALIFIED) {
       await createNotification({
-        type: 'CONTESTANT_DISQUALIFIED',
-        title: 'Contestant Disqualified',
+        type: "CONTESTANT_DISQUALIFIED",
+        title: "Contestant Disqualified",
         message: `${contestant.name} has been disqualified from the contest`,
         userId: contestant.contest.event.userId || undefined,
         metadata: {
@@ -1616,7 +1616,7 @@ export async function updateContestantStatus(
       data: updatedContestant,
     };
   } catch (error) {
-    return { success: false, message: 'Failed to update contestant status' };
+    return { success: false, message: "Failed to update contestant status" };
   }
 }
 
@@ -1635,7 +1635,7 @@ export async function updateVotePackages(data: {
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Not authenticated' };
+    return { success: false, message: "Not authenticated" };
   }
 
   try {
@@ -1646,14 +1646,14 @@ export async function updateVotePackages(data: {
     });
 
     if (!contest) {
-      return { success: false, message: 'Contest not found' };
+      return { success: false, message: "Contest not found" };
     }
 
-    const isAdmin = session.user.role === 'ADMIN';
+    const isAdmin = session.user.role === "ADMIN";
     const isOwner = contest.event.userId === session.user.id;
 
     if (!isAdmin && !isOwner) {
-      return { success: false, message: 'Not authorized' };
+      return { success: false, message: "Not authorized" };
     }
 
     // Check if any vote packages have been purchased
@@ -1662,7 +1662,7 @@ export async function updateVotePackages(data: {
         contestId: data.contestId,
         voteOrders: {
           some: {
-            paymentStatus: 'COMPLETED',
+            paymentStatus: "COMPLETED",
           },
         },
       },
@@ -1671,7 +1671,7 @@ export async function updateVotePackages(data: {
     if (existingPackagesWithOrders.length > 0) {
       return {
         success: false,
-        message: 'Cannot modify vote packages after purchases have been made',
+        message: "Cannot modify vote packages after purchases have been made",
       };
     }
 
@@ -1700,13 +1700,13 @@ export async function updateVotePackages(data: {
       message: `Successfully updated ${data.packages.length} vote packages`,
     };
   } catch (error) {
-    return { success: false, message: 'Failed to update vote packages' };
+    return { success: false, message: "Failed to update vote packages" };
   }
 }
 
 // Get contestants for a contest
 export async function getContestants(
-  contestId: string
+  contestId: string,
 ): Promise<ActionResponse<any[]>> {
   try {
     const contestants = await prisma.contestant.findMany({
@@ -1718,7 +1718,7 @@ export async function getContestants(
           },
         },
       },
-      orderBy: { contestNumber: 'asc' },
+      orderBy: { contestNumber: "asc" },
     });
 
     return {
@@ -1726,13 +1726,13 @@ export async function getContestants(
       data: contestants,
     };
   } catch (error) {
-    return { success: false, message: 'Failed to fetch contestants' };
+    return { success: false, message: "Failed to fetch contestants" };
   }
 }
 
 // Get vote packages for a contest
 export async function getVotePackages(
-  contestId: string
+  contestId: string,
 ): Promise<ActionResponse<any[]>> {
   try {
     const votePackages = await prisma.votePackage.findMany({
@@ -1742,13 +1742,13 @@ export async function getVotePackages(
           select: {
             voteOrders: {
               where: {
-                paymentStatus: 'COMPLETED',
+                paymentStatus: "COMPLETED",
               },
             },
           },
         },
       },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { sortOrder: "asc" },
     });
 
     return {
@@ -1756,7 +1756,7 @@ export async function getVotePackages(
       data: votePackages,
     };
   } catch (error) {
-    return { success: false, message: 'Failed to fetch vote packages' };
+    return { success: false, message: "Failed to fetch vote packages" };
   }
 }
 // Cast a paid vote using purchased votes
@@ -1768,7 +1768,7 @@ export async function castPaidVoteFromOrder(data: {
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Please log in to vote' };
+    return { success: false, message: "Please log in to vote" };
   }
 
   try {
@@ -1789,51 +1789,51 @@ export async function castPaidVoteFromOrder(data: {
     });
 
     if (!voteOrder) {
-      return { success: false, message: 'Vote order not found' };
+      return { success: false, message: "Vote order not found" };
     }
 
     if (!contestant) {
-      return { success: false, message: 'Contestant not found' };
+      return { success: false, message: "Contestant not found" };
     }
 
     // Check if user owns the vote order
     if (voteOrder.userId !== session.user.id) {
-      return { success: false, message: 'Not authorized to use these votes' };
+      return { success: false, message: "Not authorized to use these votes" };
     }
 
     // Check if payment is completed
-    if (voteOrder.paymentStatus !== 'COMPLETED') {
+    if (voteOrder.paymentStatus !== "COMPLETED") {
       return {
         success: false,
-        message: 'Payment not completed for this vote package',
+        message: "Payment not completed for this vote package",
       };
     }
 
     // Check if votes are available
     if (voteOrder.votesRemaining <= 0) {
-      return { success: false, message: 'No votes remaining in this package' };
+      return { success: false, message: "No votes remaining in this package" };
     }
 
     // Check if votes have expired
     if (voteOrder.expiresAt && new Date() > voteOrder.expiresAt) {
-      return { success: false, message: 'Vote package has expired' };
+      return { success: false, message: "Vote package has expired" };
     }
 
     const contest = voteOrder.contest;
 
     // Check if contestant is active
     if (contestant.status !== ContestantStatus.ACTIVE) {
-      return { success: false, message: 'This contestant is not active' };
+      return { success: false, message: "This contestant is not active" };
     }
 
     // Check voting window
     const now = new Date();
     if (contest.votingStartDate && now < contest.votingStartDate) {
-      return { success: false, message: 'Voting has not started yet' };
+      return { success: false, message: "Voting has not started yet" };
     }
 
     if (contest.votingEndDate && now > contest.votingEndDate) {
-      return { success: false, message: 'Voting has ended' };
+      return { success: false, message: "Voting has ended" };
     }
 
     // Check if multiple votes are allowed
@@ -1848,17 +1848,17 @@ export async function castPaidVoteFromOrder(data: {
       if (hasVotedInContest) {
         return {
           success: false,
-          message: 'You can only vote for one contestant in this contest',
+          message: "You can only vote for one contestant in this contest",
         };
       }
     }
 
     // Get user's IP address
-    const forwardedFor = headersList.get('x-forwarded-for');
+    const forwardedFor = headersList.get("x-forwarded-for");
     const ipAddress = forwardedFor
-      ? forwardedFor.split(',')[0]
-      : headersList.get('x-real-ip') || 'unknown';
-    const userAgent = headersList.get('user-agent') || 'unknown';
+      ? forwardedFor.split(",")[0]
+      : headersList.get("x-real-ip") || "unknown";
+    const userAgent = headersList.get("user-agent") || "unknown";
 
     // Cast the vote and update vote order in a transaction
     const result = await prisma.$transaction(async (tx) => {
@@ -1893,8 +1893,8 @@ export async function castPaidVoteFromOrder(data: {
 
     // Create notification for the contest owner
     await createNotification({
-      type: 'VOTE_PURCHASED',
-      title: 'New Paid Vote Cast',
+      type: "VOTE_PURCHASED",
+      title: "New Paid Vote Cast",
       message: `${session.user.name} used a paid vote for ${contestant.name} in ${contest.event.title}`,
       userId: contest.event.userId || undefined,
       metadata: {
@@ -1918,20 +1918,20 @@ export async function castPaidVoteFromOrder(data: {
       },
     };
   } catch (error) {
-    console.error('Error casting paid vote:', error);
-    return { success: false, message: 'Failed to cast vote' };
+    console.error("Error casting paid vote:", error);
+    return { success: false, message: "Failed to cast vote" };
   }
 }
 
 // Get available vote orders for a user in a specific contests
 export async function getUserVoteOrdersForContest(
-  contestId: string
+  contestId: string,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({ headers: headersList });
 
   if (!session) {
-    return { success: false, message: 'Not authenticated' };
+    return { success: false, message: "Not authenticated" };
   }
 
   try {
@@ -1939,7 +1939,7 @@ export async function getUserVoteOrdersForContest(
       where: {
         userId: session.user.id,
         contestId,
-        paymentStatus: 'COMPLETED',
+        paymentStatus: "COMPLETED",
         votesRemaining: {
           gt: 0, // Only orders with remaining votes
         },
@@ -1959,13 +1959,13 @@ export async function getUserVoteOrdersForContest(
         },
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
     });
 
     const totalVotesRemaining = voteOrders.reduce(
       (sum, order) => sum + order.votesRemaining,
-      0
+      0,
     );
 
     return {
@@ -1977,14 +1977,14 @@ export async function getUserVoteOrdersForContest(
       },
     };
   } catch (error) {
-    console.error('Error fetching user vote orders:', error);
-    return { success: false, message: 'Failed to fetch vote orders' };
+    console.error("Error fetching user vote orders:", error);
+    return { success: false, message: "Failed to fetch vote orders" };
   }
 }
 
 // Get contest statistics for display
 export async function getContestStatistics(
-  contestId: string
+  contestId: string,
 ): Promise<ActionResponse<any>> {
   try {
     const contest = await prisma.votingContest.findUnique({
@@ -2007,7 +2007,7 @@ export async function getContestStatistics(
             votes: true,
             VoteOrder: {
               where: {
-                paymentStatus: 'COMPLETED',
+                paymentStatus: "COMPLETED",
               },
             },
           },
@@ -2016,7 +2016,7 @@ export async function getContestStatistics(
     });
 
     if (!contest) {
-      return { success: false, message: 'Contest not found' };
+      return { success: false, message: "Contest not found" };
     }
 
     // Calculate statistics
@@ -2030,7 +2030,7 @@ export async function getContestStatistics(
       const revenueResult = await prisma.voteOrder.aggregate({
         where: {
           contestId,
-          paymentStatus: 'COMPLETED',
+          paymentStatus: "COMPLETED",
         },
         _sum: {
           totalAmount: true,
@@ -2066,15 +2066,15 @@ export async function getContestStatistics(
       },
     };
   } catch (error) {
-    console.error('Error fetching contest statistics:', error);
-    return { success: false, message: 'Failed to fetch contest statistics' };
+    console.error("Error fetching contest statistics:", error);
+    return { success: false, message: "Failed to fetch contest statistics" };
   }
 }
 
 // Check if user can vote (for UI state management)
 export async function checkVotingEligibility(
   contestId: string,
-  contestantId?: string
+  contestantId?: string,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({ headers: headersList });
@@ -2090,7 +2090,7 @@ export async function checkVotingEligibility(
     });
 
     if (!contest) {
-      return { success: false, message: 'Contest not found' };
+      return { success: false, message: "Contest not found" };
     }
 
     // Check if voting is active
@@ -2102,8 +2102,8 @@ export async function checkVotingEligibility(
     if (!isVotingActive) {
       return {
         success: false,
-        message: 'Voting is not currently active',
-        data: { canVote: false, reason: 'voting_inactive' },
+        message: "Voting is not currently active",
+        data: { canVote: false, reason: "voting_inactive" },
       };
     }
 
@@ -2112,8 +2112,8 @@ export async function checkVotingEligibility(
       if (!session && !contest.allowGuestVoting) {
         return {
           success: false,
-          message: 'Login required for voting',
-          data: { canVote: false, reason: 'login_required' },
+          message: "Login required for voting",
+          data: { canVote: false, reason: "login_required" },
         };
       }
 
@@ -2130,8 +2130,8 @@ export async function checkVotingEligibility(
         if (existingVote) {
           return {
             success: false,
-            message: 'You have already voted for this contestant',
-            data: { canVote: false, reason: 'already_voted' },
+            message: "You have already voted for this contestant",
+            data: { canVote: false, reason: "already_voted" },
           };
         }
 
@@ -2149,7 +2149,7 @@ export async function checkVotingEligibility(
             return {
               success: false,
               message: `You have reached the maximum of ${contest.maxVotesPerUser} votes`,
-              data: { canVote: false, reason: 'vote_limit_reached' },
+              data: { canVote: false, reason: "vote_limit_reached" },
             };
           }
         }
@@ -2159,7 +2159,7 @@ export async function checkVotingEligibility(
         success: true,
         data: {
           canVote: true,
-          votingType: 'FREE',
+          votingType: "FREE",
           requiresLogin: !contest.allowGuestVoting && !session,
         },
       };
@@ -2170,8 +2170,8 @@ export async function checkVotingEligibility(
       if (!session) {
         return {
           success: false,
-          message: 'Login required for paid voting',
-          data: { canVote: false, reason: 'login_required' },
+          message: "Login required for paid voting",
+          data: { canVote: false, reason: "login_required" },
         };
       }
 
@@ -2184,7 +2184,7 @@ export async function checkVotingEligibility(
         success: true,
         data: {
           canVote: true,
-          votingType: 'PAID',
+          votingType: "PAID",
           hasAvailableVotes: hasVotes,
           availableVotes: availableVotes.data?.totalVotesRemaining || 0,
         },
@@ -2193,15 +2193,15 @@ export async function checkVotingEligibility(
 
     return {
       success: false,
-      message: 'Unknown voting type',
-      data: { canVote: false, reason: 'unknown_voting_type' },
+      message: "Unknown voting type",
+      data: { canVote: false, reason: "unknown_voting_type" },
     };
   } catch (error) {
-    console.error('Error checking voting eligibility:', error);
+    console.error("Error checking voting eligibility:", error);
     return {
       success: false,
-      message: 'Failed to check voting eligibility',
-      data: { canVote: false, reason: 'system_error' },
+      message: "Failed to check voting eligibility",
+      data: { canVote: false, reason: "system_error" },
     };
   }
 }

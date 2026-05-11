@@ -1,23 +1,23 @@
 // src/app/api/orders/[orderId]/regenerate-tickets/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
-import { PaymentStatus, TicketStatus } from '@/generated/prisma';
-import crypto from 'crypto';
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { PaymentStatus, TicketStatus } from "@/generated/prisma";
+import crypto from "crypto";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
 // Generate unique ticket ID
 const generateTicketId = (orderId: string, idx: number): string => {
   const timestamp = Date.now().toString(36).toUpperCase();
-  const randomBytes = crypto.randomBytes(4).toString('hex').toUpperCase();
+  const randomBytes = crypto.randomBytes(4).toString("hex").toUpperCase();
   return `TKT-${orderId.slice(-6)}-${timestamp}-${randomBytes}-${idx + 1}`;
 };
 
 export async function POST(
   _req: NextRequest,
-  context: { params: Promise<{ orderId: string }> }
+  context: { params: Promise<{ orderId: string }> },
 ) {
   try {
     // Await the params Promise
@@ -27,7 +27,7 @@ export async function POST(
     const session = await auth.api.getSession({ headers: headersList });
 
     if (!session) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
     const order = await prisma.order.findUnique({
@@ -48,44 +48,44 @@ export async function POST(
     });
 
     if (!order) {
-      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
     // Check permissions - Admin or event organizer
     const isAdmin =
-      session.user.role === 'ADMIN' &&
-      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole);
+      session.user.role === "ADMIN" &&
+      ["STAFF", "SUPER_ADMIN"].includes(session.user.subRole);
     const isOrganizerOwner = order.event?.userId === session.user.id;
 
     if (!isAdmin && !isOrganizerOwner) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+      return NextResponse.json({ error: "Not authorized" }, { status: 403 });
     }
 
     // Check if order is completed
     if (order.paymentStatus !== PaymentStatus.COMPLETED) {
       return NextResponse.json(
-        { error: 'Order must be completed to generate tickets' },
-        { status: 400 }
+        { error: "Order must be completed to generate tickets" },
+        { status: 400 },
       );
     }
 
     // Check if tickets already exist
     if (order.tickets && order.tickets.length > 0) {
       return NextResponse.json(
-        { error: 'Tickets already exist for this order' },
-        { status: 400 }
+        { error: "Tickets already exist for this order" },
+        { status: 400 },
       );
     }
 
     // Calculate ticket distribution based on order amount and available ticket types
     const availableTicketTypes = order.event.ticketTypes.filter(
-      (tt) => tt.quantity >= 0
+      (tt) => tt.quantity >= 0,
     );
 
     if (availableTicketTypes.length === 0) {
       return NextResponse.json(
-        { error: 'No ticket types available for this event' },
-        { status: 400 }
+        { error: "No ticket types available for this event" },
+        { status: 400 },
       );
     }
 
@@ -108,7 +108,7 @@ export async function POST(
 
       // Sort ticket types by price (ascending)
       const sortedTypes = [...availableTicketTypes].sort(
-        (a, b) => a.price - b.price
+        (a, b) => a.price - b.price,
       );
 
       for (let i = 0; i < sortedTypes.length; i++) {
@@ -143,14 +143,14 @@ export async function POST(
     // Validate distribution
     const totalDistributed = ticketDistribution.reduce(
       (sum, dist) => sum + dist.quantity,
-      0
+      0,
     );
     if (totalDistributed !== order.quantity) {
       return NextResponse.json(
         {
           error: `Cannot distribute ${order.quantity} tickets across available types`,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -161,13 +161,13 @@ export async function POST(
 
       for (const distribution of ticketDistribution) {
         const ticketType = availableTicketTypes.find(
-          (tt) => tt.id === distribution.ticketTypeId
+          (tt) => tt.id === distribution.ticketTypeId,
         );
 
         for (let i = 0; i < distribution.quantity; i++) {
           const ticketId = generateTicketId(order.id, ticketIndex);
           const qrCodeData = JSON.stringify({
-            type: 'EVENT_TICKET',
+            type: "EVENT_TICKET",
             ticketId,
             eventId: order.event.id,
             userId: order.buyerId,
@@ -203,10 +203,10 @@ export async function POST(
 
     // Send ticket email
     try {
-      const { ticketEmailService } = await import('@/lib/email-service');
-      await ticketEmailService.sendTicketEmail(order, result);
+      const { emailService } = await import("@/lib/email-service");
+      await emailService.sendTicketEmail(order, result);
     } catch (emailError) {
-      console.error('Error sending ticket email:', emailError);
+      console.error("Error sending ticket email:", emailError);
       // Don't fail the entire operation if email fails
     }
 
@@ -219,10 +219,10 @@ export async function POST(
       },
     });
   } catch (error) {
-    console.error('Error regenerating tickets:', error);
+    console.error("Error regenerating tickets:", error);
     return NextResponse.json(
-      { error: 'Failed to regenerate tickets' },
-      { status: 500 }
+      { error: "Failed to regenerate tickets" },
+      { status: 500 },
     );
   }
 }

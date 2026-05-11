@@ -1,35 +1,35 @@
-import type { AuthUser } from './auth-types';
+import type { AuthUser } from "./auth-types";
 
 // Shared utility functions for role checking (can be used on both client and server)
 export function isAdmin(user: AuthUser): boolean {
   return (
-    user.role === 'ADMIN' &&
-    (user.subRole === 'STAFF' || user.subRole === 'SUPER_ADMIN')
+    user.role === "ADMIN" &&
+    (user.subRole === "STAFF" || user.subRole === "SUPER_ADMIN")
   );
 }
 
 export function isOrganizer(user: AuthUser): boolean {
-  return user.role === 'USER' && user.subRole === 'ORGANIZER';
+  return user.role === "USER" && user.subRole === "ORGANIZER";
 }
 
 export function isOrdinaryUser(user: AuthUser): boolean {
-  return user.role === 'USER' && user.subRole === 'ORDINARY';
+  return user.role === "USER" && user.subRole === "ORDINARY";
 }
 
 export function isSuperAdmin(user: AuthUser): boolean {
-  return user.role === 'ADMIN' && user.subRole === 'SUPER_ADMIN';
+  return user.role === "ADMIN" && user.subRole === "SUPER_ADMIN";
 }
 
 export function getDashboardUrl(user: AuthUser): string {
-  return isAdmin(user) ? '/admin/dashboard' : '/dashboard';
+  return isAdmin(user) ? "/admin/dashboard" : "/dashboard";
 }
 
 export function getProfileUrl(user: AuthUser): string {
-  return isAdmin(user) ? '/admin/dashboard/profile' : '/dashboard/profile';
+  return isAdmin(user) ? "/admin/dashboard/profile" : "/dashboard/profile";
 }
 
-export function getSettingsUrl(user: AuthUser): string {
-  return isAdmin(user) ? '/admin/dashboard/settings' : '/dashboard/settings';
+export function getCachedSettingsUrl(user: AuthUser): string {
+  return isAdmin(user) ? "/admin/dashboard/settings" : "/dashboard/settings";
 }
 
 // Helper function to safely convert session user to AuthUser
@@ -54,7 +54,7 @@ export function filterNavigation(
     requiresAuth?: boolean;
     roles?: string[];
   }>,
-  user?: AuthUser
+  user?: AuthUser,
 ) {
   return navigation.filter((item) => {
     if (!item.requiresAuth) return true;

@@ -1,17 +1,17 @@
-import { DashboardLayout } from '@/components/layout/dashboard-layout';
-import { UserTicketsPage } from '@/components/tickets/user-ticket-page';
-import { OrganizerAnalytics } from '@/components/organizer/organizer-analytics';
-import { getServerSideAuth } from '@/lib/auth-server';
-import { getOrganizerStats } from '@/actions/ticket.actions';
-import { Badge } from '@/components/ui/badge';
-import { getPlatformFeePercentage } from '@/actions/platform-settings.actions';
-import { redirect } from 'next/navigation';
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { UserTicketsPage } from "@/components/tickets/user-ticket-page";
+import { OrganizerAnalytics } from "@/components/organizer/organizer-analytics";
+import { getServerSideAuth } from "@/lib/auth-server";
+import { getOrganizerStats } from "@/actions/ticket.actions";
+import { Badge } from "@/components/ui/badge";
+import { getPlatformFee } from "@/actions/platform-settings.actions";
+import { redirect } from "next/navigation";
 
 async function getInitialData() {
   try {
     const [statsResponse, platformFee] = await Promise.all([
       getOrganizerStats(),
-      getPlatformFeePercentage(),
+      getPlatformFee(),
     ]);
 
     return {
@@ -19,7 +19,7 @@ async function getInitialData() {
       platformFee,
     };
   } catch (error) {
-    console.error('Error fetching initial analytics data:', error);
+    console.error("Error fetching initial analytics data:", error);
     return {
       initialStats: null,
       platformFee: 5, // Default fallback
@@ -30,17 +30,17 @@ async function getInitialData() {
 export default async function Dashboard() {
   const { initialStats, platformFee } = await getInitialData();
   const session = await getServerSideAuth({
-    roles: ['USER', 'ADMIN'], // Allow both regular users and admins
+    roles: ["USER", "ADMIN"], // Allow both regular users and admins
   });
 
   if (!session) {
-    console.log('No session found, redirecting to unauthorized');
-    redirect('/unauthorized'); // Redirect to unauthorized page if no session
+    console.log("No session found, redirecting to unauthorized");
+    redirect("/unauthorized"); // Redirect to unauthorized page if no session
   }
 
   // Check user subrole
-  const isOrganizer = session.user.subRole === 'ORGANIZER';
-  const isAdmin = session.user.role === 'ADMIN';
+  const isOrganizer = session.user.subRole === "ORGANIZER";
+  const isAdmin = session.user.role === "ADMIN";
 
   // If user is an organizer, render the organizer dashboard
   if (isOrganizer || isAdmin) {
@@ -52,13 +52,13 @@ export default async function Dashboard() {
         initialStats = statsResponse.data;
       }
     } catch (error) {
-      console.error('Error loading initial stats:', error);
+      console.error("Error loading initial stats:", error);
     }
 
     const initials = session.user.name
-      .split(' ')
+      .split(" ")
       .map((n) => n[0])
-      .join('')
+      .join("")
       .toUpperCase();
 
     return (
@@ -75,8 +75,8 @@ export default async function Dashboard() {
               <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600">
                 {initials}
               </div>
-              <Badge variant={isOrganizer ? 'default' : 'destructive'}>
-                {isAdmin ? 'ADMIN' : 'ORGANIZER'}
+              <Badge variant={isOrganizer ? "default" : "destructive"}>
+                {isAdmin ? "ADMIN" : "ORGANIZER"}
               </Badge>
             </div>
           </div>

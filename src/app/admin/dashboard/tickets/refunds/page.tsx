@@ -1,14 +1,14 @@
 // ===== FILE 1: app/admin/dashboard/tickets/refunds/page.tsx =====
 
-import { Suspense } from 'react';
-import { RefundManagement } from '@/components/admin/refund-management';
-import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
-import { redirect } from 'next/navigation';
-import { processRefund } from '@/actions/platform-settings.actions';
-import { RefundStatus } from '@/generated/prisma';
-import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { Suspense } from "react";
+import { RefundManagement } from "@/components/admin/refund-management";
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { processRefund } from "@/actions/order.actions";
+import { RefundStatus } from "@/generated/prisma";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
 
 // ✅ Updated interface to match actual data - buyer can be null
 interface RefundRequestData {
@@ -32,10 +32,10 @@ async function getRefundRequests(): Promise<RefundRequestData[]> {
   const refundRequests = await prisma.order.findMany({
     where: {
       OR: [
-        { refundStatus: 'INITIATED' },
-        { refundStatus: 'PROCESSED' },
-        { refundStatus: 'REJECTED' },
-        { refundStatus: 'FAILED' },
+        { refundStatus: "INITIATED" },
+        { refundStatus: "PROCESSED" },
+        { refundStatus: "REJECTED" },
+        { refundStatus: "FAILED" },
       ],
     },
     include: {
@@ -53,7 +53,7 @@ async function getRefundRequests(): Promise<RefundRequestData[]> {
       },
     },
     orderBy: {
-      createdAt: 'desc',
+      createdAt: "desc",
     },
   });
 
@@ -78,8 +78,8 @@ async function RefundsPage() {
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
-    redirect('/auth/login');
+  if (!session || session.user.role !== "ADMIN") {
+    redirect("/auth/login");
   }
 
   const refundRequests = await getRefundRequests();
@@ -87,19 +87,19 @@ async function RefundsPage() {
   const handleRefundAction = async (
     orderId: string,
     approve: boolean,
-    notes?: string
+    notes?: string,
   ): Promise<void> => {
-    'use server';
+    "use server";
 
     try {
       const result = await processRefund(orderId, approve, notes);
 
       if (!result.success) {
-        console.error('Refund processing failed:', result.message);
-        throw new Error(result.message || 'Failed to process refund');
+        console.error("Refund processing failed:", result.message);
+        throw new Error(result.message || "Failed to process refund");
       }
     } catch (error) {
-      console.error('Error in handleRefundAction:', error);
+      console.error("Error in handleRefundAction:", error);
       throw error;
     }
   };

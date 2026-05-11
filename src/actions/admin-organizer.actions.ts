@@ -1,13 +1,13 @@
-'use server';
+"use server";
 
-import { revalidatePath } from 'next/cache';
-import type { Prisma } from '@/generated/prisma';
-import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
-import { createNotification } from '@/actions/notification.actions';
-import { VerificationStatus } from '@/generated/prisma';
-import { getPlatformFeePercentage } from '@/actions/platform-settings.actions';
+import { revalidatePath } from "next/cache";
+import type { Prisma } from "@/generated/prisma";
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { createNotification } from "@/actions/notification.actions";
+import { VerificationStatus } from "@/generated/prisma";
+import { getPlatformFee } from "@/actions/platform-settings.actions";
 
 type UserWithOrganizer = Prisma.UserGetPayload<{
   include: { organizerProfile: true };
@@ -20,8 +20,8 @@ interface ActionResponse<T> {
 }
 
 function mapOrganizerProfile(
-  p: UserWithOrganizer['organizerProfile']
-): OrganizerWithAnalytics['organizerProfile'] {
+  p: UserWithOrganizer["organizerProfile"],
+): OrganizerWithAnalytics["organizerProfile"] {
   if (!p) return undefined;
   return {
     id: p.id,
@@ -98,22 +98,22 @@ export async function getOrganizersWithAnalytics(): Promise<
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Admin access required',
+      message: "Admin access required",
     };
   }
 
   try {
     // Get platform fee percentage from settings
-    const platformFeePercentage = await getPlatformFeePercentage();
+    const platformFeePercentage = await getPlatformFee();
     const platformFeeDecimal = platformFeePercentage / 100;
 
     // Get all organizers with their profiles
     const organizers = await prisma.user.findMany({
       where: {
-        subRole: 'ORGANIZER',
+        subRole: "ORGANIZER",
       },
       include: {
         organizerProfile: true,
@@ -126,7 +126,7 @@ export async function getOrganizersWithAnalytics(): Promise<
             },
             orders: {
               where: {
-                paymentStatus: 'COMPLETED',
+                paymentStatus: "COMPLETED",
               },
             },
             ratings: true,
@@ -134,12 +134,12 @@ export async function getOrganizersWithAnalytics(): Promise<
         },
         payouts: {
           orderBy: {
-            createdAt: 'desc',
+            createdAt: "desc",
           },
         },
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
     });
 
@@ -149,26 +149,26 @@ export async function getOrganizersWithAnalytics(): Promise<
         const events = organizer.eventsHosted;
         const now = new Date();
         const thirtyDaysAgo = new Date(
-          now.getTime() - 30 * 24 * 60 * 60 * 1000
+          now.getTime() - 30 * 24 * 60 * 60 * 1000,
         );
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
         // Event statistics
         const totalEvents = events.length;
         const publishedEvents = events.filter(
-          (e) => e.publishedStatus === 'PUBLISHED'
+          (e) => e.publishedStatus === "PUBLISHED",
         ).length;
         const pendingEvents = events.filter(
-          (e) => e.publishedStatus === 'PENDING_REVIEW'
+          (e) => e.publishedStatus === "PENDING_REVIEW",
         ).length;
         const draftEvents = events.filter(
-          (e) => e.publishedStatus === 'DRAFT'
+          (e) => e.publishedStatus === "DRAFT",
         ).length;
         const rejectedEvents = events.filter(
-          (e) => e.publishedStatus === 'REJECTED'
+          (e) => e.publishedStatus === "REJECTED",
         ).length;
         const eventsThisMonth = events.filter(
-          (e) => e.createdAt >= startOfMonth
+          (e) => e.createdAt >= startOfMonth,
         ).length;
 
         // Ticket and revenue statistics
@@ -205,7 +205,7 @@ export async function getOrganizersWithAnalytics(): Promise<
         const lastEventDate =
           events.length > 0
             ? new Date(
-                Math.max(...events.map((e) => e.startDateTime.getTime()))
+                Math.max(...events.map((e) => e.startDateTime.getTime())),
               )
             : undefined;
 
@@ -216,11 +216,11 @@ export async function getOrganizersWithAnalytics(): Promise<
 
         // Payout statistics
         const completedPayouts = organizer.payouts.filter(
-          (p) => p.status === 'COMPLETED'
+          (p) => p.status === "COMPLETED",
         );
         const totalPayouts = completedPayouts.reduce(
           (sum, p) => sum + p.netAmount,
-          0
+          0,
         );
         const pendingPayout = netEarnings - totalPayouts;
         const lastPayoutDate =
@@ -272,7 +272,7 @@ export async function getOrganizersWithAnalytics(): Promise<
           },
           recentEvents,
         };
-      })
+      }),
     );
 
     return {
@@ -280,39 +280,39 @@ export async function getOrganizersWithAnalytics(): Promise<
       data: organizersWithAnalytics,
     };
   } catch (error) {
-    console.error('Error fetching organizers with analytics:', error);
+    console.error("Error fetching organizers with analytics:", error);
     return {
       success: false,
-      message: 'Failed to fetch organizers',
+      message: "Failed to fetch organizers",
     };
   }
 }
 
 // Also update the getOrganizerById function
 export async function getOrganizerById(
-  organizerId: string
+  organizerId: string,
 ): Promise<ActionResponse<OrganizerWithAnalytics>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Admin access required',
+      message: "Admin access required",
     };
   }
 
   try {
     // Get platform fee percentage from settings
-    const platformFeePercentage = await getPlatformFeePercentage();
+    const platformFeePercentage = await getPlatformFee();
     const platformFeeDecimal = platformFeePercentage / 100;
 
     const organizer = await prisma.user.findUnique({
       where: {
         id: organizerId,
-        subRole: 'ORGANIZER',
+        subRole: "ORGANIZER",
       },
       include: {
         organizerProfile: true,
@@ -325,7 +325,7 @@ export async function getOrganizerById(
             },
             orders: {
               where: {
-                paymentStatus: 'COMPLETED',
+                paymentStatus: "COMPLETED",
               },
             },
             ratings: true,
@@ -333,7 +333,7 @@ export async function getOrganizerById(
         },
         payouts: {
           orderBy: {
-            createdAt: 'desc',
+            createdAt: "desc",
           },
         },
       },
@@ -342,7 +342,7 @@ export async function getOrganizerById(
     if (!organizer) {
       return {
         success: false,
-        message: 'Organizer not found',
+        message: "Organizer not found",
       };
     }
 
@@ -354,13 +354,13 @@ export async function getOrganizerById(
 
     const analytics = {
       totalEvents: events.length,
-      publishedEvents: events.filter((e) => e.publishedStatus === 'PUBLISHED')
+      publishedEvents: events.filter((e) => e.publishedStatus === "PUBLISHED")
         .length,
       pendingEvents: events.filter(
-        (e) => e.publishedStatus === 'PENDING_REVIEW'
+        (e) => e.publishedStatus === "PENDING_REVIEW",
       ).length,
-      draftEvents: events.filter((e) => e.publishedStatus === 'DRAFT').length,
-      rejectedEvents: events.filter((e) => e.publishedStatus === 'REJECTED')
+      draftEvents: events.filter((e) => e.publishedStatus === "DRAFT").length,
+      rejectedEvents: events.filter((e) => e.publishedStatus === "REJECTED")
         .length,
       eventsThisMonth: events.filter((e) => e.createdAt >= startOfMonth).length,
       totalTicketsSold: 0,
@@ -405,11 +405,11 @@ export async function getOrganizerById(
     // Use dynamic platform fee
     const platformFees = totalRevenue * platformFeeDecimal;
     const completedPayouts = organizer.payouts.filter(
-      (p) => p.status === 'COMPLETED'
+      (p) => p.status === "COMPLETED",
     );
     const totalPayouts = completedPayouts.reduce(
       (sum, p) => sum + p.netAmount,
-      0
+      0,
     );
 
     const revenue = {
@@ -450,27 +450,27 @@ export async function getOrganizerById(
       data: organizerWithAnalytics,
     };
   } catch (error) {
-    console.error('Error fetching organizer:', error);
+    console.error("Error fetching organizer:", error);
     return {
       success: false,
-      message: 'Failed to fetch organizer',
+      message: "Failed to fetch organizer",
     };
   }
 }
 
 // Verify organizer
 export async function verifyOrganizer(
-  organizerId: string
+  organizerId: string,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Admin access required',
+      message: "Admin access required",
     };
   }
 
@@ -483,14 +483,14 @@ export async function verifyOrganizer(
     if (!organizer || !organizer.organizerProfile) {
       return {
         success: false,
-        message: 'Organizer or profile not found',
+        message: "Organizer or profile not found",
       };
     }
 
-    if (organizer.organizerProfile.verificationStatus === 'VERIFIED') {
+    if (organizer.organizerProfile.verificationStatus === "VERIFIED") {
       return {
         success: false,
-        message: 'Organizer is already verified',
+        message: "Organizer is already verified",
       };
     }
 
@@ -498,17 +498,17 @@ export async function verifyOrganizer(
     await prisma.organizerProfile.update({
       where: { userId: organizerId },
       data: {
-        verificationStatus: 'VERIFIED',
+        verificationStatus: "VERIFIED",
       },
     });
 
     // Create notification for organizer
     await createNotification({
-      type: 'SYSTEM_UPDATE',
-      title: 'Account Verified',
+      type: "SYSTEM_UPDATE",
+      title: "Account Verified",
       message:
-        'Congratulations! Your organizer account has been verified. You now have full access to all platform features.',
-      actionUrl: '/dashboard/profile',
+        "Congratulations! Your organizer account has been verified. You now have full access to all platform features.",
+      actionUrl: "/dashboard/profile",
       userId: organizerId,
       metadata: {
         verifiedBy: session.user.id,
@@ -517,18 +517,18 @@ export async function verifyOrganizer(
       sendEmail: true,
     });
 
-    revalidatePath('/admin/dashboard/organizers');
+    revalidatePath("/admin/dashboard/organizers");
     revalidatePath(`/admin/dashboard/organizers/${organizerId}`);
 
     return {
       success: true,
-      message: 'Organizer verified successfully',
+      message: "Organizer verified successfully",
     };
   } catch (error) {
-    console.error('Error verifying organizer:', error);
+    console.error("Error verifying organizer:", error);
     return {
       success: false,
-      message: 'Failed to verify organizer',
+      message: "Failed to verify organizer",
     };
   }
 }
@@ -536,17 +536,17 @@ export async function verifyOrganizer(
 // Reject organizer verification
 export async function rejectOrganizer(
   organizerId: string,
-  reason?: string
+  reason?: string,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Admin access required',
+      message: "Admin access required",
     };
   }
 
@@ -559,7 +559,7 @@ export async function rejectOrganizer(
     if (!organizer || !organizer.organizerProfile) {
       return {
         success: false,
-        message: 'Organizer or profile not found',
+        message: "Organizer or profile not found",
       };
     }
 
@@ -567,16 +567,16 @@ export async function rejectOrganizer(
     await prisma.organizerProfile.update({
       where: { userId: organizerId },
       data: {
-        verificationStatus: 'REJECTED',
+        verificationStatus: "REJECTED",
       },
     });
 
     // Create notification for organizer
     await createNotification({
-      type: 'SYSTEM_UPDATE',
-      title: 'Verification Rejected',
-      message: `Your organizer account verification has been rejected. ${reason ? `Reason: ${reason}` : 'Please contact support for more information.'}`,
-      actionUrl: '/dashboard/profile',
+      type: "SYSTEM_UPDATE",
+      title: "Verification Rejected",
+      message: `Your organizer account verification has been rejected. ${reason ? `Reason: ${reason}` : "Please contact support for more information."}`,
+      actionUrl: "/dashboard/profile",
       userId: organizerId,
       metadata: {
         rejectedBy: session.user.id,
@@ -586,18 +586,18 @@ export async function rejectOrganizer(
       sendEmail: true,
     });
 
-    revalidatePath('/admin/dashboard/organizers');
+    revalidatePath("/admin/dashboard/organizers");
     revalidatePath(`/admin/dashboard/organizers/${organizerId}`);
 
     return {
       success: true,
-      message: 'Organizer verification rejected',
+      message: "Organizer verification rejected",
     };
   } catch (error) {
-    console.error('Error rejecting organizer:', error);
+    console.error("Error rejecting organizer:", error);
     return {
       success: false,
-      message: 'Failed to reject organizer',
+      message: "Failed to reject organizer",
     };
   }
 }
@@ -605,31 +605,31 @@ export async function rejectOrganizer(
 // Suspend organizer account
 export async function suspendOrganizer(
   organizerId: string,
-  reason?: string
+  reason?: string,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Admin access required',
+      message: "Admin access required",
     };
   }
 
   // Staff cannot suspend other admins
-  if (session.user.subRole === 'STAFF') {
+  if (session.user.subRole === "STAFF") {
     const targetUser = await prisma.user.findUnique({
       where: { id: organizerId },
       select: { role: true, subRole: true },
     });
 
-    if (targetUser?.role === 'ADMIN') {
+    if (targetUser?.role === "ADMIN") {
       return {
         success: false,
-        message: 'Staff cannot suspend admin users',
+        message: "Staff cannot suspend admin users",
       };
     }
   }
@@ -643,7 +643,7 @@ export async function suspendOrganizer(
     if (!organizer) {
       return {
         success: false,
-        message: 'Organizer not found',
+        message: "Organizer not found",
       };
     }
 
@@ -673,10 +673,10 @@ export async function suspendOrganizer(
 
     // Create notification for organizer
     await createNotification({
-      type: 'SYSTEM_UPDATE',
-      title: 'Account Suspended',
-      message: `Your organizer account has been suspended. ${reason ? `Reason: ${reason}` : ''} Please contact support for assistance.`,
-      actionUrl: '/dashboard',
+      type: "SYSTEM_UPDATE",
+      title: "Account Suspended",
+      message: `Your organizer account has been suspended. ${reason ? `Reason: ${reason}` : ""} Please contact support for assistance.`,
+      actionUrl: "/dashboard",
       userId: organizerId,
       metadata: {
         suspendedBy: session.user.id,
@@ -686,35 +686,35 @@ export async function suspendOrganizer(
       sendEmail: true,
     });
 
-    revalidatePath('/admin/dashboard/organizers');
+    revalidatePath("/admin/dashboard/organizers");
     revalidatePath(`/admin/dashboard/organizers/${organizerId}`);
 
     return {
       success: true,
-      message: 'Organizer account suspended successfully',
+      message: "Organizer account suspended successfully",
     };
   } catch (error) {
-    console.error('Error suspending organizer:', error);
+    console.error("Error suspending organizer:", error);
     return {
       success: false,
-      message: 'Failed to suspend organizer',
+      message: "Failed to suspend organizer",
     };
   }
 }
 
 // Unsuspend organizer account
 export async function unsuspendOrganizer(
-  organizerId: string
+  organizerId: string,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Admin access required',
+      message: "Admin access required",
     };
   }
 
@@ -726,7 +726,7 @@ export async function unsuspendOrganizer(
     if (!organizer) {
       return {
         success: false,
-        message: 'Organizer not found',
+        message: "Organizer not found",
       };
     }
 
@@ -742,11 +742,11 @@ export async function unsuspendOrganizer(
 
     // Create notification for organizer
     await createNotification({
-      type: 'SYSTEM_UPDATE',
-      title: 'Account Restored',
+      type: "SYSTEM_UPDATE",
+      title: "Account Restored",
       message:
-        'Your organizer account has been restored. You can now create and manage events again.',
-      actionUrl: '/dashboard',
+        "Your organizer account has been restored. You can now create and manage events again.",
+      actionUrl: "/dashboard",
       userId: organizerId,
       metadata: {
         restoredBy: session.user.id,
@@ -755,18 +755,18 @@ export async function unsuspendOrganizer(
       sendEmail: true,
     });
 
-    revalidatePath('/admin/dashboard/organizers');
+    revalidatePath("/admin/dashboard/organizers");
     revalidatePath(`/admin/dashboard/organizers/${organizerId}`);
 
     return {
       success: true,
-      message: 'Organizer account restored successfully',
+      message: "Organizer account restored successfully",
     };
   } catch (error) {
-    console.error('Error unsuspending organizer:', error);
+    console.error("Error unsuspending organizer:", error);
     return {
       success: false,
-      message: 'Failed to restore organizer account',
+      message: "Failed to restore organizer account",
     };
   }
 }
@@ -776,17 +776,17 @@ export async function sendMessageToOrganizer(
   organizerId: string,
   title: string,
   message: string,
-  actionUrl?: string
+  actionUrl?: string,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Admin access required',
+      message: "Admin access required",
     };
   }
 
@@ -799,13 +799,13 @@ export async function sendMessageToOrganizer(
     if (!organizer) {
       return {
         success: false,
-        message: 'Organizer not found',
+        message: "Organizer not found",
       };
     }
 
     // Create notification
     await createNotification({
-      type: 'SYSTEM_UPDATE',
+      type: "SYSTEM_UPDATE",
       title,
       message,
       actionUrl,
@@ -821,13 +821,13 @@ export async function sendMessageToOrganizer(
 
     return {
       success: true,
-      message: 'Message sent successfully',
+      message: "Message sent successfully",
     };
   } catch (error) {
-    console.error('Error sending message:', error);
+    console.error("Error sending message:", error);
     return {
       success: false,
-      message: 'Failed to send message',
+      message: "Failed to send message",
     };
   }
 }
@@ -839,10 +839,10 @@ export async function getOrganizerSummaryStats(): Promise<ActionResponse<any>> {
     headers: headersList,
   });
 
-  if (!session || session.user.role !== 'ADMIN') {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       success: false,
-      message: 'Admin access required',
+      message: "Admin access required",
     };
   }
 
@@ -854,22 +854,22 @@ export async function getOrganizerSummaryStats(): Promise<ActionResponse<any>> {
       totalRevenue,
     ] = await Promise.all([
       prisma.user.count({
-        where: { subRole: 'ORGANIZER' },
+        where: { subRole: "ORGANIZER" },
       }),
       prisma.organizerProfile.count({
-        where: { verificationStatus: 'VERIFIED' },
+        where: { verificationStatus: "VERIFIED" },
       }),
       prisma.organizerProfile.count({
-        where: { verificationStatus: 'PENDING' },
+        where: { verificationStatus: "PENDING" },
       }),
       prisma.order.aggregate({
-        where: { paymentStatus: 'COMPLETED' },
+        where: { paymentStatus: "COMPLETED" },
         _sum: { totalAmount: true },
       }),
     ]);
 
     const rejectedOrganizers = await prisma.organizerProfile.count({
-      where: { verificationStatus: 'REJECTED' },
+      where: { verificationStatus: "REJECTED" },
     });
 
     return {
@@ -883,10 +883,10 @@ export async function getOrganizerSummaryStats(): Promise<ActionResponse<any>> {
       },
     };
   } catch (error) {
-    console.error('Error fetching organizer summary stats:', error);
+    console.error("Error fetching organizer summary stats:", error);
     return {
       success: false,
-      message: 'Failed to fetch summary statistics',
+      message: "Failed to fetch summary statistics",
     };
   }
 }

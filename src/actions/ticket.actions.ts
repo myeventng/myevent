@@ -1,11 +1,11 @@
 // src/actions/ticket.actions.ts
-'use server';
+"use server";
 
-import { revalidatePath } from 'next/cache';
-import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
-import { getCachedSetting } from '@/lib/platform-settings';
+import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { getCachedSetting } from "@/lib/platform-settings";
 interface TicketTypeInput {
   name: string;
   price: number;
@@ -60,16 +60,16 @@ function extractGuestInfo(order: any) {
       };
     }
   } catch (error) {
-    console.error('Failed to parse guest info:', error);
+    console.error("Failed to parse guest info:", error);
   }
 
   return null;
 }
 
 // Helper function to get platform fee percentage
-async function getPlatformFeePercentage(): Promise<number> {
+async function getPlatformFee(): Promise<number> {
   const defaultFee = await getCachedSetting(
-    'financial.defaultPlatformFeePercentage'
+    "financial.defaultPlatformFeePercentage",
   );
   return defaultFee || 5; // Default 5% if not set
 }
@@ -87,18 +87,18 @@ async function getOrganizerPlatformFee(organizerId: string): Promise<number> {
     }
 
     // Fall back to default platform fee
-    return await getPlatformFeePercentage();
+    return await getPlatformFee();
   } catch (error) {
-    console.error('Error fetching organizer platform fee:', error);
-    return await getPlatformFeePercentage();
+    console.error("Error fetching organizer platform fee:", error);
+    return await getPlatformFee();
   }
 }
 
 // Helper function to get validation window settings
 async function getValidationWindows() {
   const [earlyEntry, lateEntry] = await Promise.all([
-    getCachedSetting('events.earlyEntryHours'),
-    getCachedSetting('events.lateEntryHours'),
+    getCachedSetting("events.earlyEntryHours"),
+    getCachedSetting("events.lateEntryHours"),
   ]);
 
   return {
@@ -110,7 +110,7 @@ async function getValidationWindows() {
 // Validate ticket for event entry
 export async function validateTicket(
   ticketId: string,
-  eventId: string
+  eventId: string,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
@@ -120,7 +120,7 @@ export async function validateTicket(
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
@@ -136,19 +136,19 @@ export async function validateTicket(
     if (!event) {
       return {
         success: false,
-        message: 'Event not found',
+        message: "Event not found",
       };
     }
 
     // Only event organizer or admin can validate tickets
     const isOwner = event.userId === session.user.id;
-    const isAdmin = session.user.role === 'ADMIN';
+    const isAdmin = session.user.role === "ADMIN";
 
     if (!isOwner && !isAdmin) {
       return {
         success: false,
         message:
-          'You do not have permission to validate tickets for this event',
+          "You do not have permission to validate tickets for this event",
       };
     }
 
@@ -187,12 +187,12 @@ export async function validateTicket(
     if (!ticket) {
       return {
         success: false,
-        message: 'Ticket not found or does not belong to this event',
+        message: "Ticket not found or does not belong to this event",
       };
     }
 
     // Check if ticket is valid status
-    if (ticket.status === 'CANCELLED' || ticket.status === 'REFUNDED') {
+    if (ticket.status === "CANCELLED" || ticket.status === "REFUNDED") {
       return {
         success: false,
         message: `Ticket is ${ticket.status.toLowerCase()} and cannot be used`,
@@ -205,7 +205,7 @@ export async function validateTicket(
     // Check if event has started (allow entry from configured hours before start time)
     const eventStart = new Date(ticket.ticketType.event.startDateTime);
     const earlyEntryTime = new Date(
-      eventStart.getTime() - earlyEntryHours * 60 * 60 * 1000
+      eventStart.getTime() - earlyEntryHours * 60 * 60 * 1000,
     );
     const now = new Date();
 
@@ -219,7 +219,7 @@ export async function validateTicket(
     // Check if event has ended (allow entry until configured hours after end time)
     const eventEnd = new Date(ticket.ticketType.event.endDateTime);
     const lateEntryTime = new Date(
-      eventEnd.getTime() + lateEntryHours * 60 * 60 * 1000
+      eventEnd.getTime() + lateEntryHours * 60 * 60 * 1000,
     );
 
     if (now > lateEntryTime) {
@@ -229,14 +229,14 @@ export async function validateTicket(
       };
     }
 
-    const wasAlreadyUsed = ticket.status === 'USED';
+    const wasAlreadyUsed = ticket.status === "USED";
 
     // Mark ticket as used if not already used
     if (!wasAlreadyUsed) {
       await prisma.ticket.update({
         where: { id: ticket.id },
         data: {
-          status: 'USED',
+          status: "USED",
           usedAt: new Date(),
         },
       });
@@ -252,19 +252,19 @@ export async function validateTicket(
       });
     }
 
-    revalidatePath('/dashboard/scanner');
-    revalidatePath('/admin/dashboard/events');
+    revalidatePath("/dashboard/scanner");
+    revalidatePath("/admin/dashboard/events");
 
     return {
       success: true,
       message: wasAlreadyUsed
-        ? 'Ticket was already used but entry is allowed'
-        : 'Ticket validated successfully',
+        ? "Ticket was already used but entry is allowed"
+        : "Ticket validated successfully",
       alreadyUsed: wasAlreadyUsed,
       data: {
         id: ticket.id,
         ticketId: ticket.ticketId,
-        status: 'USED',
+        status: "USED",
         user: ticket.user,
         ticketType: {
           name: ticket.ticketType.name,
@@ -276,10 +276,10 @@ export async function validateTicket(
       },
     };
   } catch (error) {
-    console.error('Error validating ticket:', error);
+    console.error("Error validating ticket:", error);
     return {
       success: false,
-      message: 'Failed to validate ticket',
+      message: "Failed to validate ticket",
     };
   }
 }
@@ -288,7 +288,7 @@ export async function validateTicket(
 export async function getTicketValidations(
   eventId: string,
   page: number = 1,
-  limit: number = 50
+  limit: number = 50,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
@@ -298,7 +298,7 @@ export async function getTicketValidations(
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
@@ -311,18 +311,18 @@ export async function getTicketValidations(
     if (!event) {
       return {
         success: false,
-        message: 'Event not found',
+        message: "Event not found",
       };
     }
 
     const isOwner = event.userId === session.user.id;
-    const isAdmin = session.user.role === 'ADMIN';
+    const isAdmin = session.user.role === "ADMIN";
 
     if (!isOwner && !isAdmin) {
       return {
         success: false,
         message:
-          'You do not have permission to view validations for this event',
+          "You do not have permission to view validations for this event",
       };
     }
 
@@ -357,7 +357,7 @@ export async function getTicketValidations(
             },
           },
         },
-        orderBy: { validatedAt: 'desc' },
+        orderBy: { validatedAt: "desc" },
         skip,
         take: limit,
       }),
@@ -379,17 +379,17 @@ export async function getTicketValidations(
       },
     };
   } catch (error) {
-    console.error('Error fetching ticket validations:', error);
+    console.error("Error fetching ticket validations:", error);
     return {
       success: false,
-      message: 'Failed to fetch validations',
+      message: "Failed to fetch validations",
     };
   }
 }
 
 // Get ticket statistics for an event
 export async function getEventTicketStats(
-  eventId: string
+  eventId: string,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
@@ -399,7 +399,7 @@ export async function getEventTicketStats(
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
@@ -416,23 +416,23 @@ export async function getEventTicketStats(
     if (!event) {
       return {
         success: false,
-        message: 'Event not found',
+        message: "Event not found",
       };
     }
 
     const isOwner = event.userId === session.user.id;
-    const isAdmin = session.user.role === 'ADMIN';
+    const isAdmin = session.user.role === "ADMIN";
 
     if (!isOwner && !isAdmin) {
       return {
         success: false,
-        message: 'You do not have permission to view stats for this event',
+        message: "You do not have permission to view stats for this event",
       };
     }
 
     // Get ticket statistics
     const ticketStats = await prisma.ticket.groupBy({
-      by: ['status'],
+      by: ["status"],
       where: {
         ticketType: {
           eventId,
@@ -443,7 +443,7 @@ export async function getEventTicketStats(
 
     // Get orders statistics
     const orderStats = await prisma.order.groupBy({
-      by: ['paymentStatus'],
+      by: ["paymentStatus"],
       where: { eventId },
       _count: true,
       _sum: {
@@ -453,7 +453,7 @@ export async function getEventTicketStats(
 
     // Get refund statistics
     const refundStats = await prisma.order.groupBy({
-      by: ['refundStatus'],
+      by: ["refundStatus"],
       where: {
         eventId,
         refundStatus: { not: null },
@@ -467,21 +467,21 @@ export async function getEventTicketStats(
     // Calculate totals
     const totalTickets = ticketStats.reduce(
       (sum, stat) => sum + stat._count,
-      0
+      0,
     );
     const usedTickets =
-      ticketStats.find((s) => s.status === 'USED')?._count || 0;
+      ticketStats.find((s) => s.status === "USED")?._count || 0;
     const unusedTickets =
-      ticketStats.find((s) => s.status === 'UNUSED')?._count || 0;
+      ticketStats.find((s) => s.status === "UNUSED")?._count || 0;
     const refundedTickets =
-      ticketStats.find((s) => s.status === 'REFUNDED')?._count || 0;
+      ticketStats.find((s) => s.status === "REFUNDED")?._count || 0;
 
     const totalRevenue = orderStats
-      .filter((s) => s.paymentStatus === 'COMPLETED')
+      .filter((s) => s.paymentStatus === "COMPLETED")
       .reduce((sum, stat) => sum + (stat._sum.totalAmount || 0), 0);
 
     const totalRefunded = refundStats
-      .filter((s) => s.refundStatus === 'PROCESSED')
+      .filter((s) => s.refundStatus === "PROCESSED")
       .reduce((sum, stat) => sum + (stat._sum.totalAmount || 0), 0);
 
     const netRevenue = totalRevenue - totalRefunded;
@@ -489,7 +489,7 @@ export async function getEventTicketStats(
     // Get platform fee from settings (either custom for organizer or default)
     const platformFeePercentage = event.userId
       ? await getOrganizerPlatformFee(event.userId)
-      : await getPlatformFeePercentage();
+      : await getPlatformFee();
 
     const platformFee = Math.round(netRevenue * (platformFeePercentage / 100));
     const organizerRevenue = netRevenue - platformFee;
@@ -500,14 +500,14 @@ export async function getEventTicketStats(
         const sold = await prisma.ticket.count({
           where: {
             ticketTypeId: ticketType.id,
-            status: { in: ['UNUSED', 'USED'] },
+            status: { in: ["UNUSED", "USED"] },
           },
         });
 
         const used = await prisma.ticket.count({
           where: {
             ticketTypeId: ticketType.id,
-            status: 'USED',
+            status: "USED",
           },
         });
 
@@ -515,7 +515,7 @@ export async function getEventTicketStats(
           (await prisma.ticket.count({
             where: {
               ticketTypeId: ticketType.id,
-              status: { in: ['UNUSED', 'USED'] },
+              status: { in: ["UNUSED", "USED"] },
             },
           })) * ticketType.price;
 
@@ -529,7 +529,7 @@ export async function getEventTicketStats(
           remaining: ticketType.quantity,
           revenue,
         };
-      })
+      }),
     );
 
     return {
@@ -565,10 +565,10 @@ export async function getEventTicketStats(
       },
     };
   } catch (error) {
-    console.error('Error fetching event ticket stats:', error);
+    console.error("Error fetching event ticket stats:", error);
     return {
       success: false,
-      message: 'Failed to fetch ticket statistics',
+      message: "Failed to fetch ticket statistics",
     };
   }
 }
@@ -583,7 +583,7 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
@@ -593,7 +593,7 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
       where: { userId: session.user.id },
       include: {
         orders: {
-          where: { paymentStatus: 'COMPLETED' },
+          where: { paymentStatus: "COMPLETED" },
         },
         ticketTypes: {
           include: {
@@ -605,7 +605,7 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
 
     // Get organizer's custom platform fee or default
     const platformFeePercentage = await getOrganizerPlatformFee(
-      session.user.id
+      session.user.id,
     );
 
     // Calculate overall statistics
@@ -618,11 +618,11 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
     const eventStats = events.map((event) => {
       const eventRevenue = event.orders.reduce(
         (sum, order) => sum + order.totalAmount,
-        0
+        0,
       );
       const ticketsSold = event.ticketTypes.reduce(
         (sum, tt) => sum + tt.tickets.length,
-        0
+        0,
       );
 
       totalRevenue += eventRevenue;
@@ -646,14 +646,14 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
     const refunds = await prisma.order.findMany({
       where: {
         event: { userId: session.user.id },
-        refundStatus: 'PROCESSED',
+        refundStatus: "PROCESSED",
       },
       select: { totalAmount: true },
     });
 
     totalRefunded = refunds.reduce(
       (sum, refund) => sum + refund.totalAmount,
-      0
+      0,
     );
 
     const netRevenue = totalRevenue - totalRefunded;
@@ -677,16 +677,16 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
         events: eventStats.sort(
           (a, b) =>
             new Date(b.startDateTime).getTime() -
-            new Date(a.startDateTime).getTime()
+            new Date(a.startDateTime).getTime(),
         ),
         monthlyRevenue: [], // TODO: Calculate monthly breakdown
       },
     };
   } catch (error) {
-    console.error('Error fetching organizer stats:', error);
+    console.error("Error fetching organizer stats:", error);
     return {
       success: false,
-      message: 'Failed to fetch organizer statistics',
+      message: "Failed to fetch organizer statistics",
     };
   }
 }
@@ -701,14 +701,14 @@ const validateUserPermission = async (eventId: string) => {
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
   const { role, subRole, id: userId } = session.user;
 
   // Admin with STAFF or SUPER_ADMIN subRole can always manage tickets
-  if (role === 'ADMIN' && ['STAFF', 'SUPER_ADMIN'].includes(subRole)) {
+  if (role === "ADMIN" && ["STAFF", "SUPER_ADMIN"].includes(subRole)) {
     return {
       success: true,
       data: {
@@ -726,12 +726,12 @@ const validateUserPermission = async (eventId: string) => {
   if (!event) {
     return {
       success: false,
-      message: 'Event not found',
+      message: "Event not found",
     };
   }
 
   // If user is an organizer and owns the event
-  if (subRole === 'ORGANIZER' && event.userId === userId) {
+  if (subRole === "ORGANIZER" && event.userId === userId) {
     return {
       success: true,
       data: {
@@ -743,17 +743,17 @@ const validateUserPermission = async (eventId: string) => {
 
   return {
     success: false,
-    message: 'You do not have permission to manage tickets for this event',
+    message: "You do not have permission to manage tickets for this event",
   };
 };
 
 export async function getTicketTypesByEvent(
-  eventId: string
+  eventId: string,
 ): Promise<ActionResponse<any[]>> {
   try {
     const ticketTypes = await prisma.ticketType.findMany({
       where: { eventId },
-      orderBy: { price: 'asc' },
+      orderBy: { price: "asc" },
     });
 
     return {
@@ -764,13 +764,13 @@ export async function getTicketTypesByEvent(
     console.error(`Error fetching ticket types for event ${eventId}:`, error);
     return {
       success: false,
-      message: 'Failed to fetch ticket types',
+      message: "Failed to fetch ticket types",
     };
   }
 }
 
 export async function getTicketTypeById(
-  id: string
+  id: string,
 ): Promise<ActionResponse<any>> {
   try {
     const ticketType = await prisma.ticketType.findUnique({
@@ -783,7 +783,7 @@ export async function getTicketTypeById(
     if (!ticketType) {
       return {
         success: false,
-        message: 'Ticket type not found',
+        message: "Ticket type not found",
       };
     }
 
@@ -795,13 +795,13 @@ export async function getTicketTypeById(
     console.error(`Error fetching ticket type with ID ${id}:`, error);
     return {
       success: false,
-      message: 'Failed to fetch ticket type',
+      message: "Failed to fetch ticket type",
     };
   }
 }
 
 export async function createTicketType(
-  data: TicketTypeInput
+  data: TicketTypeInput,
 ): Promise<ActionResponse<any>> {
   // Validate user permission
   const permissionCheck = await validateUserPermission(data.eventId);
@@ -821,7 +821,7 @@ export async function createTicketType(
     if (!event) {
       return {
         success: false,
-        message: 'Event not found',
+        message: "Event not found",
       };
     }
 
@@ -841,20 +841,20 @@ export async function createTicketType(
 
     return {
       success: true,
-      message: 'Ticket type created successfully',
+      message: "Ticket type created successfully",
       data: newTicketType,
     };
   } catch (error) {
-    console.error('Error creating ticket type:', error);
+    console.error("Error creating ticket type:", error);
     return {
       success: false,
-      message: 'Failed to create ticket type',
+      message: "Failed to create ticket type",
     };
   }
 }
 
 export async function updateTicketType(
-  data: UpdateTicketTypeInput
+  data: UpdateTicketTypeInput,
 ): Promise<ActionResponse<any>> {
   try {
     // Check if ticket type exists
@@ -868,7 +868,7 @@ export async function updateTicketType(
     if (!ticketType) {
       return {
         success: false,
-        message: 'Ticket type not found',
+        message: "Ticket type not found",
       };
     }
 
@@ -898,20 +898,20 @@ export async function updateTicketType(
 
     return {
       success: true,
-      message: 'Ticket type updated successfully',
+      message: "Ticket type updated successfully",
       data: updatedTicketType,
     };
   } catch (error) {
-    console.error('Error updating ticket type:', error);
+    console.error("Error updating ticket type:", error);
     return {
       success: false,
-      message: 'Failed to update ticket type',
+      message: "Failed to update ticket type",
     };
   }
 }
 
 export async function deleteTicketType(
-  id: string
+  id: string,
 ): Promise<ActionResponse<null>> {
   try {
     // Check if ticket type exists
@@ -926,7 +926,7 @@ export async function deleteTicketType(
     if (!ticketType) {
       return {
         success: false,
-        message: 'Ticket type not found',
+        message: "Ticket type not found",
       };
     }
 
@@ -944,7 +944,7 @@ export async function deleteTicketType(
     if (ticketType.tickets.length > 0) {
       return {
         success: false,
-        message: 'Cannot delete ticket type with sold tickets',
+        message: "Cannot delete ticket type with sold tickets",
       };
     }
 
@@ -959,13 +959,13 @@ export async function deleteTicketType(
 
     return {
       success: true,
-      message: 'Ticket type deleted successfully',
+      message: "Ticket type deleted successfully",
     };
   } catch (error) {
-    console.error('Error deleting ticket type:', error);
+    console.error("Error deleting ticket type:", error);
     return {
       success: false,
-      message: 'Failed to delete ticket type',
+      message: "Failed to delete ticket type",
     };
   }
 }
@@ -980,7 +980,7 @@ export async function getUserTickets(): Promise<ActionResponse<any[]>> {
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
@@ -1001,7 +1001,7 @@ export async function getUserTickets(): Promise<ActionResponse<any[]>> {
         },
       },
       orderBy: {
-        purchasedAt: 'desc',
+        purchasedAt: "desc",
       },
     });
 
@@ -1010,10 +1010,10 @@ export async function getUserTickets(): Promise<ActionResponse<any[]>> {
       data: tickets,
     };
   } catch (error) {
-    console.error('Error fetching user tickets:', error);
+    console.error("Error fetching user tickets:", error);
     return {
       success: false,
-      message: 'Failed to fetch tickets',
+      message: "Failed to fetch tickets",
     };
   }
 }
@@ -1027,7 +1027,7 @@ export async function getTicketById(id: string): Promise<ActionResponse<any>> {
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
@@ -1052,15 +1052,15 @@ export async function getTicketById(id: string): Promise<ActionResponse<any>> {
     if (!ticket) {
       return {
         success: false,
-        message: 'Ticket not found',
+        message: "Ticket not found",
       };
     }
 
     // Admin can view any ticket, but regular users can only view their own tickets
-    if (session.user.role !== 'ADMIN' && ticket.userId !== session.user.id) {
+    if (session.user.role !== "ADMIN" && ticket.userId !== session.user.id) {
       return {
         success: false,
-        message: 'You do not have permission to view this ticket',
+        message: "You do not have permission to view this ticket",
       };
     }
 
@@ -1072,7 +1072,7 @@ export async function getTicketById(id: string): Promise<ActionResponse<any>> {
     console.error(`Error fetching ticket with ID ${id}:`, error);
     return {
       success: false,
-      message: 'Failed to fetch ticket',
+      message: "Failed to fetch ticket",
     };
   }
 }
@@ -1086,16 +1086,16 @@ export async function getAdminTickets(): Promise<ActionResponse<any[]>> {
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
   // Check if user is admin with proper permissions
   const { role, subRole } = session.user;
-  if (role !== 'ADMIN' || !['STAFF', 'SUPER_ADMIN'].includes(subRole)) {
+  if (role !== "ADMIN" || !["STAFF", "SUPER_ADMIN"].includes(subRole)) {
     return {
       success: false,
-      message: 'You do not have permission to view admin tickets',
+      message: "You do not have permission to view admin tickets",
     };
   }
 
@@ -1147,7 +1147,7 @@ export async function getAdminTickets(): Promise<ActionResponse<any[]>> {
         },
       },
       orderBy: {
-        purchasedAt: 'desc',
+        purchasedAt: "desc",
       },
     });
 
@@ -1170,10 +1170,10 @@ export async function getAdminTickets(): Promise<ActionResponse<any[]>> {
       data: ticketsWithGuestInfo,
     };
   } catch (error) {
-    console.error('Error fetching admin tickets:', error);
+    console.error("Error fetching admin tickets:", error);
     return {
       success: false,
-      message: 'Failed to fetch tickets',
+      message: "Failed to fetch tickets",
     };
   }
 }
@@ -1190,7 +1190,7 @@ export async function getFilteredAdminTickets(
     dateFrom?: string;
     dateTo?: string;
     isGuest?: boolean; // NEW: Filter for guest purchases
-  }
+  },
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
@@ -1200,16 +1200,16 @@ export async function getFilteredAdminTickets(
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
   // Check permissions
   const { role, subRole } = session.user;
-  if (role !== 'ADMIN' || !['STAFF', 'SUPER_ADMIN'].includes(subRole)) {
+  if (role !== "ADMIN" || !["STAFF", "SUPER_ADMIN"].includes(subRole)) {
     return {
       success: false,
-      message: 'You do not have permission to view admin tickets',
+      message: "You do not have permission to view admin tickets",
     };
   }
 
@@ -1219,7 +1219,7 @@ export async function getFilteredAdminTickets(
     // Build where clause based on filters
     const whereClause: any = {};
 
-    if (filters?.status && filters.status !== 'all') {
+    if (filters?.status && filters.status !== "all") {
       whereClause.status = filters.status;
     }
 
@@ -1370,11 +1370,11 @@ export async function getFilteredAdminTickets(
           stats: {
             total: totalCount,
             // Calculate stats from filtered results
-            unused: filteredTickets.filter((t) => t.status === 'UNUSED').length,
-            used: filteredTickets.filter((t) => t.status === 'USED').length,
-            refunded: filteredTickets.filter((t) => t.status === 'REFUNDED')
+            unused: filteredTickets.filter((t) => t.status === "UNUSED").length,
+            used: filteredTickets.filter((t) => t.status === "USED").length,
+            refunded: filteredTickets.filter((t) => t.status === "REFUNDED")
               .length,
-            cancelled: filteredTickets.filter((t) => t.status === 'CANCELLED')
+            cancelled: filteredTickets.filter((t) => t.status === "CANCELLED")
               .length,
           },
         },
@@ -1431,7 +1431,7 @@ export async function getFilteredAdminTickets(
           },
         },
         orderBy: {
-          purchasedAt: 'desc',
+          purchasedAt: "desc",
         },
         skip,
         take: limit,
@@ -1456,17 +1456,17 @@ export async function getFilteredAdminTickets(
 
     // Calculate summary statistics for current filter
     const statusStats = await prisma.ticket.groupBy({
-      by: ['status'],
+      by: ["status"],
       where: whereClause,
       _count: true,
     });
 
     const stats = {
       total: totalCount,
-      unused: statusStats.find((s) => s.status === 'UNUSED')?._count || 0,
-      used: statusStats.find((s) => s.status === 'USED')?._count || 0,
-      refunded: statusStats.find((s) => s.status === 'REFUNDED')?._count || 0,
-      cancelled: statusStats.find((s) => s.status === 'CANCELLED')?._count || 0,
+      unused: statusStats.find((s) => s.status === "UNUSED")?._count || 0,
+      used: statusStats.find((s) => s.status === "USED")?._count || 0,
+      refunded: statusStats.find((s) => s.status === "REFUNDED")?._count || 0,
+      cancelled: statusStats.find((s) => s.status === "CANCELLED")?._count || 0,
     };
 
     return {
@@ -1484,17 +1484,17 @@ export async function getFilteredAdminTickets(
       },
     };
   } catch (error) {
-    console.error('Error fetching filtered admin tickets:', error);
+    console.error("Error fetching filtered admin tickets:", error);
     return {
       success: false,
-      message: 'Failed to fetch tickets',
+      message: "Failed to fetch tickets",
     };
   }
 }
 
 // Get ticket details with guest info
 export async function getTicketDetails(
-  ticketId: string
+  ticketId: string,
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
@@ -1504,7 +1504,7 @@ export async function getTicketDetails(
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
@@ -1550,7 +1550,7 @@ export async function getTicketDetails(
             },
           },
           orderBy: {
-            validatedAt: 'desc',
+            validatedAt: "desc",
           },
         },
       },
@@ -1559,21 +1559,21 @@ export async function getTicketDetails(
     if (!ticket) {
       return {
         success: false,
-        message: 'Ticket not found',
+        message: "Ticket not found",
       };
     }
 
     // Check permissions
     const isAdmin =
-      session.user.role === 'ADMIN' &&
-      ['STAFF', 'SUPER_ADMIN'].includes(session.user.subRole);
+      session.user.role === "ADMIN" &&
+      ["STAFF", "SUPER_ADMIN"].includes(session.user.subRole);
     const isEventOwner = ticket.ticketType.event.userId === session.user.id;
     const isTicketOwner = ticket.userId === session.user.id;
 
     if (!isAdmin && !isEventOwner && !isTicketOwner) {
       return {
         success: false,
-        message: 'You do not have permission to view this ticket',
+        message: "You do not have permission to view this ticket",
       };
     }
 
@@ -1591,10 +1591,10 @@ export async function getTicketDetails(
       data: ticketWithGuestInfo,
     };
   } catch (error) {
-    console.error('Error fetching ticket details:', error);
+    console.error("Error fetching ticket details:", error);
     return {
       success: false,
-      message: 'Failed to fetch ticket details',
+      message: "Failed to fetch ticket details",
     };
   }
 }
@@ -1609,33 +1609,33 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
   // Check permissions
   const { role, subRole } = session.user;
-  if (role !== 'ADMIN' || !['STAFF', 'SUPER_ADMIN'].includes(subRole)) {
+  if (role !== "ADMIN" || !["STAFF", "SUPER_ADMIN"].includes(subRole)) {
     return {
       success: false,
-      message: 'You do not have permission to view admin statistics',
+      message: "You do not have permission to view admin statistics",
     };
   }
 
   try {
     // Get platform fee percentage from settings
-    const platformFeePercentage = await getPlatformFeePercentage();
+    const platformFeePercentage = await getPlatformFee();
 
     // Get ticket status breakdown
     const ticketStats = await prisma.ticket.groupBy({
-      by: ['status'],
+      by: ["status"],
       _count: true,
     });
 
     // Get total revenue from completed orders
     const revenueStats = await prisma.order.aggregate({
       where: {
-        paymentStatus: 'COMPLETED',
+        paymentStatus: "COMPLETED",
       },
       _sum: {
         totalAmount: true,
@@ -1646,7 +1646,7 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
     // Get refund statistics
     const refundStats = await prisma.order.aggregate({
       where: {
-        refundStatus: 'PROCESSED',
+        refundStatus: "PROCESSED",
       },
       _sum: {
         totalAmount: true,
@@ -1662,7 +1662,7 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
 
     // Get recent activity from settings (default to 30 days)
     const activityDays =
-      (await getCachedSetting('analytics.recentActivityDays')) || 30;
+      (await getCachedSetting("analytics.recentActivityDays")) || 30;
     const recentActivityDate = new Date();
     recentActivityDate.setDate(recentActivityDate.getDate() - activityDays);
 
@@ -1681,7 +1681,7 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
           include: {
             tickets: {
               where: {
-                status: { in: ['UNUSED', 'USED'] },
+                status: { in: ["UNUSED", "USED"] },
               },
             },
           },
@@ -1704,11 +1704,11 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
       .map((event) => {
         const ticketsSold = event.ticketTypes.reduce(
           (sum, tt) => sum + tt.tickets.length,
-          0
+          0,
         );
         const revenue = event.ticketTypes.reduce(
           (sum, tt) => sum + tt.tickets.length * tt.price,
-          0
+          0,
         );
 
         return {
@@ -1725,7 +1725,7 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
 
     const totalTickets = ticketStats.reduce(
       (sum, stat) => sum + stat._count,
-      0
+      0,
     );
 
     return {
@@ -1746,7 +1746,7 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
             acc[stat.status.toLowerCase()] = stat._count;
             return acc;
           },
-          {} as Record<string, number>
+          {} as Record<string, number>,
         ),
         topEvents: eventStats,
         orders: {
@@ -1756,17 +1756,17 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
       },
     };
   } catch (error) {
-    console.error('Error fetching admin ticket statistics:', error);
+    console.error("Error fetching admin ticket statistics:", error);
     return {
       success: false,
-      message: 'Failed to fetch statistics',
+      message: "Failed to fetch statistics",
     };
   }
 }
 
 // Get ticket types with sold count for editing
 export async function getTicketTypesWithSalesData(
-  eventId: string
+  eventId: string,
 ): Promise<ActionResponse<any[]>> {
   try {
     const ticketTypes = await prisma.ticketType.findMany({
@@ -1776,14 +1776,14 @@ export async function getTicketTypesWithSalesData(
           select: {
             tickets: {
               where: {
-                status: { in: ['UNUSED', 'USED'] }, // Only count sold tickets
+                status: { in: ["UNUSED", "USED"] }, // Only count sold tickets
               },
             },
           },
         },
         tickets: {
           where: {
-            status: { in: ['UNUSED', 'USED'] },
+            status: { in: ["UNUSED", "USED"] },
           },
           select: {
             id: true,
@@ -1791,7 +1791,7 @@ export async function getTicketTypesWithSalesData(
           },
         },
       },
-      orderBy: { price: 'asc' },
+      orderBy: { price: "asc" },
     });
 
     // Transform the data to include sold count and deletion capability
@@ -1817,18 +1817,18 @@ export async function getTicketTypesWithSalesData(
   } catch (error) {
     console.error(
       `Error fetching ticket types with sales data for event ${eventId}:`,
-      error
+      error,
     );
     return {
       success: false,
-      message: 'Failed to fetch ticket types with sales data',
+      message: "Failed to fetch ticket types with sales data",
     };
   }
 }
 
 // Delete ticket - SUPER_ADMIN only
 export async function deleteTicket(
-  ticketId: string
+  ticketId: string,
 ): Promise<ActionResponse<null>> {
   const headersList = await headers();
   const session = await auth.api.getSession({
@@ -1838,18 +1838,18 @@ export async function deleteTicket(
   if (!session) {
     return {
       success: false,
-      message: 'Not authenticated',
+      message: "Not authenticated",
     };
   }
 
   // Only SUPER_ADMIN can delete tickets
   const isSuperAdmin =
-    session.user.role === 'ADMIN' && session.user.subRole === 'SUPER_ADMIN';
+    session.user.role === "ADMIN" && session.user.subRole === "SUPER_ADMIN";
 
   if (!isSuperAdmin) {
     return {
       success: false,
-      message: 'Only Super Admins can delete tickets',
+      message: "Only Super Admins can delete tickets",
     };
   }
 
@@ -1887,15 +1887,15 @@ export async function deleteTicket(
     if (!ticket) {
       return {
         success: false,
-        message: 'Ticket not found',
+        message: "Ticket not found",
       };
     }
 
     // Check if ticket has been used
-    if (ticket.status === 'USED') {
+    if (ticket.status === "USED") {
       return {
         success: false,
-        message: 'Cannot delete a ticket that has been used',
+        message: "Cannot delete a ticket that has been used",
       };
     }
 
@@ -1913,14 +1913,14 @@ export async function deleteTicket(
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
-        action: 'DELETE_TICKET',
-        entity: 'TICKET',
+        action: "DELETE_TICKET",
+        entity: "TICKET",
         entityId: ticketId,
         oldValues: {
           ticketId: ticket.ticketId,
           status: ticket.status,
           eventTitle: ticket.ticketType.event.title,
-          customerName: ticket.user?.name || 'Guest User',
+          customerName: ticket.user?.name || "Guest User",
           customerEmail: ticket.user?.email || null,
         },
       },
@@ -1931,10 +1931,10 @@ export async function deleteTicket(
       message: `Ticket ${ticket.ticketId} deleted successfully`,
     };
   } catch (error) {
-    console.error('Error deleting ticket:', error);
+    console.error("Error deleting ticket:", error);
     return {
       success: false,
-      message: 'Failed to delete ticket due to an unexpected error',
+      message: "Failed to delete ticket due to an unexpected error",
     };
   }
 }
