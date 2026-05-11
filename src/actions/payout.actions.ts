@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createNotification } from "@/actions/notification.actions";
-import { getCachedSetting } from "@/actions/platform-settings.actions";
+import { getCachedSetting } from "@/lib/platform-settings";
 
 interface ActionResponse<T> {
   success: boolean;
