@@ -1,33 +1,23 @@
-// src/components/admin/admin-revenue-analytics.tsx
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { format } from 'date-fns';
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { toast } from 'sonner';
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import {
   DollarSign,
   TrendingUp,
@@ -38,32 +28,28 @@ import {
   BarChart3,
   Download,
   RefreshCw,
-  Eye,
-} from 'lucide-react';
-import { getRevenueAnalytics } from '@/actions/analytics.actions';
-import { getPublicPlatformSettings } from '@/actions/platform-settings.actions';
-import Link from 'next/link';
+} from "lucide-react";
+import { getRevenueAnalytics } from "@/actions/analytics.actions";
+import { getPlatformFee } from "@/lib/platform-settings";
+import Link from "next/link";
 
 export function AdminRevenueAnalytics() {
   const [analytics, setAnalytics] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState('30'); // days
-  const [platformFeePercentage, setPlatformFeePercentage] = useState<number>(5); // Default 5%
+  const [timeRange, setTimeRange] = useState("30");
+  const [platformFeePercentage, setPlatformFeePercentage] = useState<number>(5);
 
-  // Fetch platform fee percentage
+  // Load platform fee from lib (no auth required)
   const fetchPlatformFee = async () => {
     try {
-      const response = await getPublicPlatformSettings();
-      if (response.success && response.data) {
-        setPlatformFeePercentage(response.data.defaultPlatformFeePercentage);
-      }
+      const fee = await getPlatformFee();
+      setPlatformFeePercentage(fee);
     } catch (error) {
-      console.error('Error fetching platform fee:', error);
+      console.error("Error fetching platform fee:", error);
       // Keep default 5% if fetch fails
     }
   };
 
-  // Fetch analytics data
   const fetchAnalytics = async () => {
     setIsLoading(true);
     try {
@@ -72,14 +58,13 @@ export function AdminRevenueAnalytics() {
         setAnalytics(response.data);
       }
     } catch (error) {
-      console.error('Error fetching revenue analytics:', error);
-      toast.error('Failed to fetch revenue analytics');
+      console.error("Error fetching revenue analytics:", error);
+      toast.error("Failed to fetch revenue analytics");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Fetch both platform fee and analytics on mount
   useEffect(() => {
     const fetchData = async () => {
       await fetchPlatformFee();
@@ -88,7 +73,6 @@ export function AdminRevenueAnalytics() {
     fetchData();
   }, []);
 
-  // Calculate platform fee from revenue
   const calculatePlatformFee = (revenue: number) => {
     return (revenue * platformFeePercentage) / 100;
   };
@@ -108,7 +92,8 @@ export function AdminRevenueAnalytics() {
         <div>
           <h1 className="text-2xl font-bold">Revenue Analytics</h1>
           <p className="text-muted-foreground">
-            Platform revenue, fees ({platformFeePercentage}%), and financial performance overview
+            Platform revenue, fees ({platformFeePercentage}%), and financial
+            performance overview
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -129,7 +114,7 @@ export function AdminRevenueAnalytics() {
             disabled={isLoading}
           >
             <RefreshCw
-              className={`w-4 h-4 mr-1 ${isLoading ? 'animate-spin' : ''}`}
+              className={`w-4 h-4 mr-1 ${isLoading ? "animate-spin" : ""}`}
             />
             Refresh
           </Button>
@@ -153,7 +138,7 @@ export function AdminRevenueAnalytics() {
                   Total Revenue
                 </p>
                 <p className="text-2xl font-bold">
-                  ₦{analytics?.totalRevenue?.toLocaleString() || '0'}
+                  ₦{analytics?.totalRevenue?.toLocaleString() || "0"}
                 </p>
                 <div className="flex items-center text-xs text-green-600">
                   <TrendingUp className="w-3 h-3 mr-1" />
@@ -175,7 +160,7 @@ export function AdminRevenueAnalytics() {
                   Platform Fees
                 </p>
                 <p className="text-2xl font-bold">
-                  ₦{analytics?.platformFees?.toLocaleString() || '0'}
+                  ₦{analytics?.platformFees?.toLocaleString() || "0"}
                 </p>
                 <div className="flex items-center text-xs text-blue-600">
                   <TrendingUp className="w-3 h-3 mr-1" />
@@ -197,7 +182,7 @@ export function AdminRevenueAnalytics() {
                   Organizer Earnings
                 </p>
                 <p className="text-2xl font-bold">
-                  ₦{analytics?.organizerEarnings?.toLocaleString() || '0'}
+                  ₦{analytics?.organizerEarnings?.toLocaleString() || "0"}
                 </p>
                 <div className="flex items-center text-xs text-purple-600">
                   <TrendingUp className="w-3 h-3 mr-1" />
@@ -219,7 +204,7 @@ export function AdminRevenueAnalytics() {
                   Refunded Amount
                 </p>
                 <p className="text-2xl font-bold">
-                  ₦{analytics?.refundedAmount?.toLocaleString() || '0'}
+                  ₦{analytics?.refundedAmount?.toLocaleString() || "0"}
                 </p>
                 <div className="flex items-center text-xs text-red-600">
                   <TrendingDown className="w-3 h-3 mr-1" />
@@ -241,7 +226,8 @@ export function AdminRevenueAnalytics() {
               Monthly Revenue Trend
             </CardTitle>
             <CardDescription>
-              Revenue and platform fees ({platformFeePercentage}%) over the last 12 months
+              Revenue and platform fees ({platformFeePercentage}%) over the last
+              12 months
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -254,29 +240,30 @@ export function AdminRevenueAnalytics() {
                   <div>
                     <p className="font-medium">{item.month}</p>
                     <p className="text-sm text-muted-foreground">
-                      Platform Fee: ₦{item.fees?.toLocaleString() || '0'}
+                      Platform Fee: ₦{item.fees?.toLocaleString() || "0"}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="font-bold">
-                      ₦{item.revenue?.toLocaleString() || '0'}
+                      ₦{item.revenue?.toLocaleString() || "0"}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {item.revenue > 0
                         ? ((item.fees / item.revenue) * 100).toFixed(1)
-                        : platformFeePercentage.toFixed(1)}% fee rate
+                        : platformFeePercentage.toFixed(1)}
+                      % fee rate
                     </p>
                   </div>
                 </div>
               )) || (
-                  <div className="text-center py-8">
-                    <BarChart3 className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-lg font-medium">No revenue data</p>
-                    <p className="text-muted-foreground">
-                      Revenue data will appear here as events are sold
-                    </p>
-                  </div>
-                )}
+                <div className="text-center py-8">
+                  <BarChart3 className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-lg font-medium">No revenue data</p>
+                  <p className="text-muted-foreground">
+                    Revenue data will appear here as events are sold
+                  </p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -306,14 +293,17 @@ export function AdminRevenueAnalytics() {
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <span>{event.tickets} tickets</span>
                         <span>
-                          ₦{calculatePlatformFee(event.revenue || 0).toLocaleString()}{' '}
+                          ₦
+                          {calculatePlatformFee(
+                            event.revenue || 0,
+                          ).toLocaleString()}{" "}
                           platform fee
                         </span>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="font-bold">
-                        ₦{event.revenue?.toLocaleString() || '0'}
+                        ₦{event.revenue?.toLocaleString() || "0"}
                       </p>
                       <Badge variant="outline" className="text-xs">
                         #{index + 1}
@@ -321,58 +311,18 @@ export function AdminRevenueAnalytics() {
                     </div>
                   </div>
                 )) || (
-                  <div className="text-center py-8">
-                    <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-lg font-medium">No event data</p>
-                    <p className="text-muted-foreground">
-                      Top events will appear here based on revenue
-                    </p>
-                  </div>
-                )}
+                <div className="text-center py-8">
+                  <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-lg font-medium">No event data</p>
+                  <p className="text-muted-foreground">
+                    Top events will appear here based on revenue
+                  </p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
-
-      {/* Detailed Revenue Breakdown */}
-      {/* <Card>
-        <CardHeader>
-          <CardTitle>Revenue by Event Category</CardTitle>
-          <CardDescription>
-            Platform fee collection and organizer payouts by event type
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="flex items-center justify-between mb-2">
-                <p className="font-medium text-blue-800">Tech Events</p>
-                <Badge className="bg-blue-100 text-blue-800">35%</Badge>
-              </div>
-              <p className="text-2xl font-bold text-blue-800">₦2,450,000</p>
-              <p className="text-sm text-blue-600">Platform Fee: ₦122,500</p>
-            </div>
-
-            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-              <div className="flex items-center justify-between mb-2">
-                <p className="font-medium text-green-800">Entertainment</p>
-                <Badge className="bg-green-100 text-green-800">28%</Badge>
-              </div>
-              <p className="text-2xl font-bold text-green-800">₦1,960,000</p>
-              <p className="text-sm text-green-600">Platform Fee: ₦98,000</p>
-            </div>
-
-            <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-              <div className="flex items-center justify-between mb-2">
-                <p className="font-medium text-purple-800">Business</p>
-                <Badge className="bg-purple-100 text-purple-800">22%</Badge>
-              </div>
-              <p className="text-2xl font-bold text-purple-800">₦1,540,000</p>
-              <p className="text-sm text-purple-600">Platform Fee: ₦77,000</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card> */}
 
       {/* Quick Actions */}
       <Card>

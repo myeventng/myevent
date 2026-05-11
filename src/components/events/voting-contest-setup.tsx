@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
-import { Button } from '@/components/ui/button';
+import { useState, useEffect } from "react";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -13,17 +13,17 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Vote,
   DollarSign,
@@ -35,12 +35,11 @@ import {
   Edit2,
   Trash2,
   UserCheck,
-  UserX,
   Info,
-} from 'lucide-react';
-import { VotingType } from '@/generated/prisma';
-import { DatePicker } from '@/components/layout/date-picker';
-import { format } from 'date-fns';
+} from "lucide-react";
+import { VotingType } from "@/generated/prisma";
+import { DatePicker } from "@/components/layout/date-picker";
+import { format } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -48,7 +47,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,17 +57,17 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { getPublicPlatformSettings } from '@/actions/platform-settings.actions';
-import { toast } from 'sonner';
+} from "@/components/ui/alert-dialog";
+import { getPlatformFee } from "@/lib/platform-settings";
+import { toast } from "sonner";
 
 // Schema for vote package
 const votePackageSchema = z.object({
   id: z.string().optional(),
-  name: z.string().min(2, 'Package name must be at least 2 characters'),
+  name: z.string().min(2, "Package name must be at least 2 characters"),
   description: z.string().optional(),
-  voteCount: z.coerce.number().int().min(1, 'Vote count must be at least 1'),
-  price: z.coerce.number().min(0, 'Price must be 0 or greater'),
+  voteCount: z.coerce.number().int().min(1, "Vote count must be at least 1"),
+  price: z.coerce.number().min(0, "Price must be 0 or greater"),
   sortOrder: z.coerce.number().int(),
 });
 
@@ -79,7 +78,7 @@ const formSchema = z
     votePackagesEnabled: z.boolean(),
     defaultVotePrice: z.coerce
       .number()
-      .min(0, 'Price must be 0 or greater')
+      .min(0, "Price must be 0 or greater")
       .optional(),
     allowGuestVoting: z.boolean(),
     maxVotesPerUser: z.coerce.number().int().optional(),
@@ -98,9 +97,9 @@ const formSchema = z
     },
     {
       message:
-        'Default vote price is required for paid voting when packages are not enabled',
-      path: ['defaultVotePrice'],
-    }
+        "Default vote price is required for paid voting when packages are not enabled",
+      path: ["defaultVotePrice"],
+    },
   );
 
 type FormValues = z.infer<typeof formSchema>;
@@ -119,7 +118,6 @@ export function VotingContestSetup({
   onNext,
   onPrevious,
 }: VotingContestSetupProps) {
-  // Initialize vote packages from form data with proper fallback
   const [votePackages, setVotePackages] = useState<VotePackageValues[]>(() => {
     const contestData = formData.votingContest || {};
     return contestData.votePackages || [];
@@ -132,7 +130,6 @@ export function VotingContestSetup({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [platformFeePercentage, setPlatformFeePercentage] = useState(10);
 
-  // Initialize form with proper defaults
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -156,51 +153,43 @@ export function VotingContestSetup({
   const packageForm = useForm<VotePackageValues>({
     resolver: zodResolver(votePackageSchema),
     defaultValues: {
-      name: '',
-      description: '',
+      name: "",
+      description: "",
       voteCount: 1,
       price: 0,
       sortOrder: 0,
     },
   });
 
+  // Load platform fee from lib (no auth required)
   useEffect(() => {
     const loadPlatformFee = async () => {
       try {
-        const result = await getPublicPlatformSettings();
-        if (result.success && result.data) {
-          setPlatformFeePercentage(result.data.defaultPlatformFeePercentage);
-        } else {
-          setPlatformFeePercentage(10);
-        }
+        const fee = await getPlatformFee();
+        setPlatformFeePercentage(fee);
       } catch (error) {
-        console.error('Error loading platform fee:', error);
+        console.error("Error loading platform fee:", error);
         setPlatformFeePercentage(10);
       }
     };
-
     loadPlatformFee();
   }, []);
 
-  const votingType = form.watch('votingType');
-  const votePackagesEnabled = form.watch('votePackagesEnabled');
-  const allowGuestVoting = form.watch('allowGuestVoting');
-  const defaultVotePrice = form.watch('defaultVotePrice');
+  const votingType = form.watch("votingType");
+  const votePackagesEnabled = form.watch("votePackagesEnabled");
+  const allowGuestVoting = form.watch("allowGuestVoting");
 
-  // Calculate platform fee for a given amount
   const calculatePlatformFee = (amount: number) => {
     return (amount * platformFeePercentage) / 100;
   };
 
-  // Format price as currency
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-NG', {
-      style: 'currency',
-      currency: 'NGN',
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
     }).format(price);
   };
 
-  // Handle vote package submission
   const onSubmitVotePackage = (values: VotePackageValues) => {
     try {
       if (!values.id) {
@@ -211,16 +200,16 @@ export function VotingContestSetup({
         const updatedPackages = [...votePackages];
         updatedPackages[editIndex] = values;
         setVotePackages(updatedPackages);
-        toast.success('Vote package updated successfully');
+        toast.success("Vote package updated successfully");
       } else {
         setVotePackages([...votePackages, values]);
-        toast.success('Vote package added successfully');
+        toast.success("Vote package added successfully");
       }
 
       setIsPackageDialogOpen(false);
       packageForm.reset({
-        name: '',
-        description: '',
+        name: "",
+        description: "",
         voteCount: 1,
         price: 0,
         sortOrder: 0,
@@ -228,12 +217,11 @@ export function VotingContestSetup({
       setIsEditMode(false);
       setEditIndex(null);
     } catch (error) {
-      console.error('Error submitting vote package:', error);
-      toast.error('Failed to save vote package');
+      console.error("Error submitting vote package:", error);
+      toast.error("Failed to save vote package");
     }
   };
 
-  // Handle vote package deletion
   const handleDeleteVotePackage = () => {
     if (deleteIndex !== null) {
       const updatedPackages = [...votePackages];
@@ -241,23 +229,20 @@ export function VotingContestSetup({
       setVotePackages(updatedPackages);
       setIsDeleteDialogOpen(false);
       setDeleteIndex(null);
-      toast.success('Vote package removed');
+      toast.success("Vote package removed");
     }
   };
 
-  // Handle main form submission - FIXED to properly structure data
   const onSubmit = (values: FormValues) => {
-    // Validate packages if enabled
     if (values.votingType === VotingType.PAID && values.votePackagesEnabled) {
       if (votePackages.length === 0) {
         toast.error(
-          'Please add at least one vote package or disable vote packages to use default pricing.'
+          "Please add at least one vote package or disable vote packages to use default pricing.",
         );
         return;
       }
     }
 
-    // Construct voting contest data with proper structure
     const votingContestData = {
       votingType: values.votingType,
       votePackagesEnabled: values.votePackagesEnabled,
@@ -272,15 +257,10 @@ export function VotingContestSetup({
       votePackages: values.votePackagesEnabled ? votePackages : [],
     };
 
-    // Update form data with the complete voting contest structure
-    updateFormData({
-      votingContest: votingContestData,
-    });
-
+    updateFormData({ votingContest: votingContestData });
     onNext();
   };
 
-  // Sync vote packages when they change
   useEffect(() => {
     if (
       formData.votingContest?.votePackages &&
@@ -290,11 +270,10 @@ export function VotingContestSetup({
     }
   }, [formData.votingContest?.votePackages]);
 
-  // Auto-disable certain features when guest voting is enabled
   useEffect(() => {
     if (allowGuestVoting) {
-      form.setValue('allowMultipleVotes', false);
-      form.setValue('showVoterNames', false);
+      form.setValue("allowMultipleVotes", false);
+      form.setValue("showVoterNames", false);
     }
   }, [allowGuestVoting, form]);
 
@@ -328,14 +307,13 @@ export function VotingContestSetup({
                       <Card
                         className={`cursor-pointer transition-all ${
                           field.value === VotingType.FREE
-                            ? 'ring-2 ring-primary'
-                            : ''
+                            ? "ring-2 ring-primary"
+                            : ""
                         }`}
                         onClick={() => {
                           field.onChange(VotingType.FREE);
-                          // Reset paid voting specific fields
-                          form.setValue('votePackagesEnabled', false);
-                          form.setValue('defaultVotePrice', undefined);
+                          form.setValue("votePackagesEnabled", false);
+                          form.setValue("defaultVotePrice", undefined);
                           setVotePackages([]);
                         }}
                       >
@@ -356,8 +334,8 @@ export function VotingContestSetup({
                       <Card
                         className={`cursor-pointer transition-all ${
                           field.value === VotingType.PAID
-                            ? 'ring-2 ring-primary'
-                            : ''
+                            ? "ring-2 ring-primary"
+                            : ""
                         }`}
                         onClick={() => field.onChange(VotingType.PAID)}
                       >
@@ -392,7 +370,7 @@ export function VotingContestSetup({
                   <FormItem>
                     <FormLabel className="font-semibold flex items-center gap-2">
                       <DollarSign className="h-4 w-4" />
-                      Default Vote Price (NGN){' '}
+                      Default Vote Price (NGN){" "}
                       {!votePackagesEnabled && (
                         <span className="text-red-500">*</span>
                       )}
@@ -407,35 +385,35 @@ export function VotingContestSetup({
                         onChange={(e) => {
                           const value = e.target.value;
                           field.onChange(
-                            value === '' ? undefined : parseFloat(value)
+                            value === "" ? undefined : parseFloat(value),
                           );
                         }}
-                        value={field.value === undefined ? '' : field.value}
+                        value={field.value === undefined ? "" : field.value}
                       />
                     </FormControl>
                     <FormDescription>
-                      Price for a single vote.{' '}
+                      Price for a single vote.{" "}
                       {votePackagesEnabled
-                        ? 'This will be used as fallback when vote packages are not available.'
-                        : 'This is required when vote packages are not enabled.'}
+                        ? "This will be used as fallback when vote packages are not available."
+                        : "This is required when vote packages are not enabled."}
                     </FormDescription>
                     {field.value && field.value > 0 && (
                       <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                         <div className="text-sm text-blue-800 space-y-1">
                           <p>
-                            <strong>Vote Price:</strong>{' '}
+                            <strong>Vote Price:</strong>{" "}
                             {formatPrice(field.value)}
                           </p>
                           <p>
                             <strong>
                               Platform Fee ({platformFeePercentage}%):
-                            </strong>{' '}
+                            </strong>{" "}
                             {formatPrice(calculatePlatformFee(field.value))}
                           </p>
                           <p>
-                            <strong>Your Earnings:</strong>{' '}
+                            <strong>Your Earnings:</strong>{" "}
                             {formatPrice(
-                              field.value - calculatePlatformFee(field.value)
+                              field.value - calculatePlatformFee(field.value),
                             )}
                           </p>
                         </div>
@@ -487,8 +465,8 @@ export function VotingContestSetup({
                         setIsEditMode(false);
                         setIsPackageDialogOpen(true);
                         packageForm.reset({
-                          name: '',
-                          description: '',
+                          name: "",
+                          description: "",
                           voteCount: 1,
                           price: 0,
                           sortOrder: votePackages.length,
@@ -527,13 +505,13 @@ export function VotingContestSetup({
                               {pkg.voteCount} votes
                             </p>
                             <p className="text-xs text-blue-600">
-                              Platform fee:{' '}
+                              Platform fee:{" "}
                               {formatPrice(calculatePlatformFee(pkg.price))}
                             </p>
                             <p className="text-xs text-green-600">
-                              Your earnings:{' '}
+                              Your earnings:{" "}
                               {formatPrice(
-                                pkg.price - calculatePlatformFee(pkg.price)
+                                pkg.price - calculatePlatformFee(pkg.price),
                               )}
                             </p>
                             {pkg.description && (
@@ -605,7 +583,7 @@ export function VotingContestSetup({
                       Allow users to vote without creating an account. Guest
                       voters will be identified by IP address.
                       {votingType === VotingType.PAID &&
-                        ' Note: Guest voting is not recommended for paid contests due to payment verification requirements.'}
+                        " Note: Guest voting is not recommended for paid contests due to payment verification requirements."}
                     </FormDescription>
                   </div>
                 </FormItem>
@@ -661,10 +639,10 @@ export function VotingContestSetup({
                           onChange={(e) => {
                             const value = e.target.value;
                             field.onChange(
-                              value === '' ? undefined : parseInt(value, 10)
+                              value === "" ? undefined : parseInt(value, 10),
                             );
                           }}
-                          value={field.value === undefined ? '' : field.value}
+                          value={field.value === undefined ? "" : field.value}
                         />
                       </FormControl>
                       <FormDescription>
@@ -681,7 +659,7 @@ export function VotingContestSetup({
                 name="allowMultipleVotes"
                 render={({ field }) => (
                   <FormItem
-                    className={`flex flex-row items-start space-x-3 space-y-0 ${allowGuestVoting ? 'pt-0' : 'pt-8'}`}
+                    className={`flex flex-row items-start space-x-3 space-y-0 ${allowGuestVoting ? "pt-0" : "pt-8"}`}
                   >
                     <FormControl>
                       <Checkbox
@@ -693,15 +671,15 @@ export function VotingContestSetup({
                     <div className="space-y-1 leading-none">
                       <FormLabel
                         className={
-                          allowGuestVoting ? 'text-muted-foreground' : ''
+                          allowGuestVoting ? "text-muted-foreground" : ""
                         }
                       >
                         Allow Multiple Votes
                       </FormLabel>
                       <FormDescription>
                         {allowGuestVoting
-                          ? 'Disabled when guest voting is enabled'
-                          : 'Allow users to vote for multiple contestants.'}
+                          ? "Disabled when guest voting is enabled"
+                          : "Allow users to vote for multiple contestants."}
                       </FormDescription>
                     </div>
                   </FormItem>
@@ -762,12 +740,12 @@ export function VotingContestSetup({
               />
             </div>
 
-            {form.watch('votingStartDate') && form.watch('votingEndDate') && (
+            {form.watch("votingStartDate") && form.watch("votingEndDate") && (
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  <strong>Voting Period:</strong>{' '}
-                  {format(form.watch('votingStartDate')!, 'PPP')}
-                  {' to '} {format(form.watch('votingEndDate')!, 'PPP')}
+                  <strong>Voting Period:</strong>{" "}
+                  {format(form.watch("votingStartDate")!, "PPP")}
+                  {" to "} {format(form.watch("votingEndDate")!, "PPP")}
                 </p>
               </div>
             )}
@@ -817,15 +795,15 @@ export function VotingContestSetup({
                     <div className="space-y-1 leading-none">
                       <FormLabel
                         className={
-                          allowGuestVoting ? 'text-muted-foreground' : ''
+                          allowGuestVoting ? "text-muted-foreground" : ""
                         }
                       >
                         Show Voter Names
                       </FormLabel>
                       <FormDescription>
                         {allowGuestVoting
-                          ? 'Disabled when guest voting is enabled (privacy protection)'
-                          : 'Display the names of people who voted (for transparency).'}
+                          ? "Disabled when guest voting is enabled (privacy protection)"
+                          : "Display the names of people who voted (for transparency)."}
                       </FormDescription>
                     </div>
                   </FormItem>
@@ -848,7 +826,7 @@ export function VotingContestSetup({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {isEditMode ? 'Edit Vote Package' : 'Add Vote Package'}
+              {isEditMode ? "Edit Vote Package" : "Add Vote Package"}
             </DialogTitle>
             <DialogDescription>
               Create packages with different vote quantities and prices.
@@ -893,7 +871,7 @@ export function VotingContestSetup({
                           onChange={(e) => {
                             const value = e.target.value;
                             field.onChange(
-                              value === '' ? 1 : parseInt(value, 10)
+                              value === "" ? 1 : parseInt(value, 10),
                             );
                           }}
                           value={field.value || 1}
@@ -920,7 +898,7 @@ export function VotingContestSetup({
                           onChange={(e) => {
                             const value = e.target.value;
                             field.onChange(
-                              value === '' ? 0 : parseFloat(value)
+                              value === "" ? 0 : parseFloat(value),
                             );
                           }}
                           value={field.value || 0}
@@ -929,13 +907,13 @@ export function VotingContestSetup({
                       {field.value && field.value > 0 && (
                         <FormDescription className="space-y-1">
                           <div className="text-blue-600">
-                            Platform fee ({platformFeePercentage}%):{' '}
+                            Platform fee ({platformFeePercentage}%):{" "}
                             {formatPrice(calculatePlatformFee(field.value))}
                           </div>
                           <div className="text-green-600">
-                            Your earnings:{' '}
+                            Your earnings:{" "}
                             {formatPrice(
-                              field.value - calculatePlatformFee(field.value)
+                              field.value - calculatePlatformFee(field.value),
                             )}
                           </div>
                         </FormDescription>
@@ -960,7 +938,7 @@ export function VotingContestSetup({
                           onChange={(e) => {
                             const value = e.target.value;
                             field.onChange(
-                              value === '' ? 0 : parseInt(value, 10)
+                              value === "" ? 0 : parseInt(value, 10),
                             );
                           }}
                           value={field.value || 0}
@@ -1001,7 +979,7 @@ export function VotingContestSetup({
                   Cancel
                 </Button>
                 <Button type="submit">
-                  {isEditMode ? 'Update' : 'Add'} Package
+                  {isEditMode ? "Update" : "Add"} Package
                 </Button>
               </DialogFooter>
             </form>
