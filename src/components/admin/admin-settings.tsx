@@ -1,14 +1,15 @@
-'use client';
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+"use client";
+import React, { useState, useEffect } from "react";
+import { EmailSettingsTab, type EmailSettings } from "./email-settings-tab";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Settings,
   DollarSign,
@@ -22,7 +23,7 @@ import {
   CheckCircle,
   Eye,
   EyeOff,
-} from 'lucide-react';
+} from "lucide-react";
 
 interface AdminSettingsProps {
   session: any;
@@ -45,6 +46,23 @@ interface PlatformSettings {
     paystackPublicKey: string;
     paystackSecretKey: string;
   };
+  email: {
+    activeProvider: "gmail" | "ses";
+    fromName: string;
+    gmail: {
+      host: string;
+      port: number;
+      secure: boolean;
+      user: string;
+      password: string;
+    };
+    ses: {
+      region: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+      fromAddress: string;
+    };
+  };
 }
 
 export function AdminSettings({
@@ -53,38 +71,55 @@ export function AdminSettings({
 }: AdminSettingsProps) {
   const [settings, setSettings] = useState<PlatformSettings>({
     general: {
-      platformName: 'MyEvent.com.ng',
+      platformName: "MyEvent.com.ng",
       platformDescription: "Nigeria's premier event management platform",
-      supportEmail: 'support@myevent.com.ng',
+      supportEmail: "support@myevent.com.ng",
       maintenanceMode: false,
       allowRegistrations: true,
     },
     financial: {
-      defaultPlatformFeePercentage: 5,
+      defaultPlatformFeePercentage: 10,
       minimumWithdrawal: 1000,
       maximumRefundDays: 30,
       autoApproveRefunds: false,
-      paystackPublicKey: '',
-      paystackSecretKey: '',
+      paystackPublicKey: "",
+      paystackSecretKey: "",
+    },
+    email: {
+      activeProvider: "gmail",
+      fromName: "MyEvent.com.ng",
+      gmail: {
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        user: "",
+        password: "",
+      },
+      ses: {
+        region: "us-east-1",
+        accessKeyId: "",
+        secretAccessKey: "",
+        fromAddress: "noreply@myevent.com.ng",
+      },
     },
   });
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState('general');
+  const [activeTab, setActiveTab] = useState("general");
   const [showSecrets, setShowSecrets] = useState({
     paystackPublic: false,
     paystackSecret: false,
   });
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>(
-    'idle'
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">(
+    "idle",
   );
 
   // Load settings from API
   const loadSettings = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/admin/settings');
+      const response = await fetch("/api/admin/settings");
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
@@ -92,7 +127,7 @@ export function AdminSettings({
         }
       }
     } catch (error) {
-      console.error('Failed to load settings:', error);
+      console.error("Failed to load settings:", error);
     } finally {
       setIsLoading(false);
     }
@@ -101,13 +136,13 @@ export function AdminSettings({
   // Save settings to API
   const saveSettings = async () => {
     setIsSaving(true);
-    setSaveStatus('idle');
+    setSaveStatus("idle");
 
     try {
-      const response = await fetch('/api/admin/settings', {
-        method: 'POST',
+      const response = await fetch("/api/admin/settings", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(settings),
       });
@@ -115,16 +150,16 @@ export function AdminSettings({
       const data = await response.json();
 
       if (data.success) {
-        setSaveStatus('success');
-        setTimeout(() => setSaveStatus('idle'), 3000);
+        setSaveStatus("success");
+        setTimeout(() => setSaveStatus("idle"), 3000);
       } else {
-        setSaveStatus('error');
-        setTimeout(() => setSaveStatus('idle'), 5000);
+        setSaveStatus("error");
+        setTimeout(() => setSaveStatus("idle"), 5000);
       }
     } catch (error) {
-      console.error('Failed to save settings:', error);
-      setSaveStatus('error');
-      setTimeout(() => setSaveStatus('idle'), 5000);
+      console.error("Failed to save settings:", error);
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 5000);
     } finally {
       setIsSaving(false);
     }
@@ -134,7 +169,7 @@ export function AdminSettings({
   const updateSetting = (
     section: keyof PlatformSettings,
     key: string,
-    value: any
+    value: any,
   ) => {
     setSettings((prev) => ({
       ...prev,
@@ -150,7 +185,7 @@ export function AdminSettings({
   }, []);
 
   const toggleSecretVisibility = (
-    field: 'paystackPublic' | 'paystackSecret'
+    field: "paystackPublic" | "paystackSecret",
   ) => {
     setShowSecrets((prev) => ({
       ...prev,
@@ -183,30 +218,30 @@ export function AdminSettings({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant={isUserSuperAdmin ? 'destructive' : 'secondary'}>
+          <Badge variant={isUserSuperAdmin ? "destructive" : "secondary"}>
             {session.user.subRole}
           </Badge>
           <Button
             onClick={saveSettings}
             disabled={isSaving}
             className={
-              saveStatus === 'success' ? 'bg-green-600 hover:bg-green-700' : ''
+              saveStatus === "success" ? "bg-green-600 hover:bg-green-700" : ""
             }
           >
             {isSaving ? (
               <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-            ) : saveStatus === 'success' ? (
+            ) : saveStatus === "success" ? (
               <CheckCircle className="h-4 w-4 mr-2" />
             ) : (
               <Save className="h-4 w-4 mr-2" />
             )}
-            {saveStatus === 'success' ? 'Saved!' : 'Save Changes'}
+            {saveStatus === "success" ? "Saved!" : "Save Changes"}
           </Button>
         </div>
       </div>
 
       {/* Save Status Alert */}
-      {saveStatus === 'error' && (
+      {saveStatus === "error" && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
@@ -231,6 +266,7 @@ export function AdminSettings({
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="financial">Financial</TabsTrigger>
+          <TabsTrigger value="email">Email</TabsTrigger>
         </TabsList>
 
         {/* General Settings */}
@@ -250,7 +286,7 @@ export function AdminSettings({
                     id="platformName"
                     value={settings.general.platformName}
                     onChange={(e) =>
-                      updateSetting('general', 'platformName', e.target.value)
+                      updateSetting("general", "platformName", e.target.value)
                     }
                     placeholder="MyEvent.com.ng"
                   />
@@ -262,7 +298,7 @@ export function AdminSettings({
                     type="email"
                     value={settings.general.supportEmail}
                     onChange={(e) =>
-                      updateSetting('general', 'supportEmail', e.target.value)
+                      updateSetting("general", "supportEmail", e.target.value)
                     }
                     placeholder="support@myevent.com.ng"
                   />
@@ -277,9 +313,9 @@ export function AdminSettings({
                   value={settings.general.platformDescription}
                   onChange={(e) =>
                     updateSetting(
-                      'general',
-                      'platformDescription',
-                      e.target.value
+                      "general",
+                      "platformDescription",
+                      e.target.value,
                     )
                   }
                   placeholder="Describe your platform..."
@@ -316,7 +352,7 @@ export function AdminSettings({
                 <Switch
                   checked={settings.general.maintenanceMode}
                   onCheckedChange={(checked) =>
-                    updateSetting('general', 'maintenanceMode', checked)
+                    updateSetting("general", "maintenanceMode", checked)
                   }
                   disabled={!isUserSuperAdmin}
                 />
@@ -331,7 +367,7 @@ export function AdminSettings({
                 <Switch
                   checked={settings.general.allowRegistrations}
                   onCheckedChange={(checked) =>
-                    updateSetting('general', 'allowRegistrations', checked)
+                    updateSetting("general", "allowRegistrations", checked)
                   }
                 />
               </div>
@@ -361,9 +397,9 @@ export function AdminSettings({
                     value={settings.financial.defaultPlatformFeePercentage}
                     onChange={(e) =>
                       updateSetting(
-                        'financial',
-                        'defaultPlatformFeePercentage',
-                        parseFloat(e.target.value) || 0
+                        "financial",
+                        "defaultPlatformFeePercentage",
+                        parseFloat(e.target.value) || 0,
                       )
                     }
                     disabled={!isUserSuperAdmin}
@@ -381,9 +417,9 @@ export function AdminSettings({
                     value={settings.financial.minimumWithdrawal}
                     onChange={(e) =>
                       updateSetting(
-                        'financial',
-                        'minimumWithdrawal',
-                        parseInt(e.target.value) || 0
+                        "financial",
+                        "minimumWithdrawal",
+                        parseInt(e.target.value) || 0,
                       )
                     }
                   />
@@ -400,9 +436,9 @@ export function AdminSettings({
                     value={settings.financial.maximumRefundDays}
                     onChange={(e) =>
                       updateSetting(
-                        'financial',
-                        'maximumRefundDays',
-                        parseInt(e.target.value) || 0
+                        "financial",
+                        "maximumRefundDays",
+                        parseInt(e.target.value) || 0,
                       )
                     }
                   />
@@ -420,7 +456,7 @@ export function AdminSettings({
                   <Switch
                     checked={settings.financial.autoApproveRefunds}
                     onCheckedChange={(checked) =>
-                      updateSetting('financial', 'autoApproveRefunds', checked)
+                      updateSetting("financial", "autoApproveRefunds", checked)
                     }
                     disabled={!isUserSuperAdmin}
                   />
@@ -451,13 +487,13 @@ export function AdminSettings({
                   <div className="relative">
                     <Input
                       id="paystackPublic"
-                      type={showSecrets.paystackPublic ? 'text' : 'password'}
+                      type={showSecrets.paystackPublic ? "text" : "password"}
                       value={settings.financial.paystackPublicKey}
                       onChange={(e) =>
                         updateSetting(
-                          'financial',
-                          'paystackPublicKey',
-                          e.target.value
+                          "financial",
+                          "paystackPublicKey",
+                          e.target.value,
                         )
                       }
                       placeholder="pk_..."
@@ -468,7 +504,7 @@ export function AdminSettings({
                       variant="ghost"
                       size="sm"
                       className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                      onClick={() => toggleSecretVisibility('paystackPublic')}
+                      onClick={() => toggleSecretVisibility("paystackPublic")}
                       disabled={!isUserSuperAdmin}
                     >
                       {showSecrets.paystackPublic ? (
@@ -484,13 +520,13 @@ export function AdminSettings({
                   <div className="relative">
                     <Input
                       id="paystackSecret"
-                      type={showSecrets.paystackSecret ? 'text' : 'password'}
+                      type={showSecrets.paystackSecret ? "text" : "password"}
                       value={settings.financial.paystackSecretKey}
                       onChange={(e) =>
                         updateSetting(
-                          'financial',
-                          'paystackSecretKey',
-                          e.target.value
+                          "financial",
+                          "paystackSecretKey",
+                          e.target.value,
                         )
                       }
                       placeholder="sk_..."
@@ -501,7 +537,7 @@ export function AdminSettings({
                       variant="ghost"
                       size="sm"
                       className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                      onClick={() => toggleSecretVisibility('paystackSecret')}
+                      onClick={() => toggleSecretVisibility("paystackSecret")}
                       disabled={!isUserSuperAdmin}
                     >
                       {showSecrets.paystackSecret ? (
@@ -582,6 +618,21 @@ export function AdminSettings({
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Email Settings */}
+        <TabsContent value="email" className="space-y-6">
+          <div>
+            <h3 className="text-lg font-medium">Email Provider</h3>
+            <p className="text-sm text-muted-foreground">
+              Configure how MyEvent sends transactional emails. Switch between
+              Gmail and Amazon SES without redeploying the app.
+            </p>
+          </div>
+          <EmailSettingsTab
+            settings={settings.email}
+            onChange={(email) => setSettings((prev) => ({ ...prev, email }))}
+          />
+        </TabsContent>
       </Tabs>
 
       {/* Security Notice */}
@@ -605,7 +656,7 @@ export function AdminSettings({
       <div className="flex items-center justify-end gap-2 pt-4 border-t">
         <Button variant="outline" onClick={loadSettings} disabled={isLoading}>
           <RefreshCw
-            className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`}
+            className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
           />
           Reset Changes
         </Button>
@@ -613,19 +664,19 @@ export function AdminSettings({
           onClick={saveSettings}
           disabled={isSaving}
           className={
-            saveStatus === 'success' ? 'bg-green-600 hover:bg-green-700' : ''
+            saveStatus === "success" ? "bg-green-600 hover:bg-green-700" : ""
           }
         >
           {isSaving ? (
             <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-          ) : saveStatus === 'success' ? (
+          ) : saveStatus === "success" ? (
             <CheckCircle className="h-4 w-4 mr-2" />
           ) : (
             <CheckCircle className="h-4 w-4 mr-2" />
           )}
-          {saveStatus === 'success'
-            ? 'All Settings Saved!'
-            : 'Save All Settings'}
+          {saveStatus === "success"
+            ? "All Settings Saved!"
+            : "Save All Settings"}
         </Button>
       </div>
     </div>

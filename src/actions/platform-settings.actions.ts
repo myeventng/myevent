@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
+import { testEmailProvider, type EmailProviderType } from '@/lib/email/email-provider';
 
 interface ActionResponse<T> {
   success: boolean;
@@ -29,384 +30,219 @@ interface PlatformSettings {
     paystackPublicKey: string;
     paystackSecretKey: string;
   };
+  // ── NEW ──────────────────────────────────────────────────────────────
+  email: {
+    activeProvider: EmailProviderType; // 'gmail' | 'ses'
+    fromName: string;
+    // Gmail / SMTP
+    gmail: {
+      host: string;
+      port: number;
+      secure: boolean;
+      user: string;
+      password: string; // stored encrypted in DB (never returned to client)
+    };
+    // Amazon SES
+    ses: {
+      region: string;
+      accessKeyId: string;
+      secretAccessKey: string; // stored encrypted (never returned to client)
+      fromAddress: string;
+    };
+  };
 }
 
-// Validate admin permission
+// ─── Auth helper ──────────────────────────────────────────────────────────────
+
 const validateAdminPermission = async () => {
   const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
-
+  const session = await auth.api.getSession({ headers: headersList });
   if (!session || session.user.role !== 'ADMIN') {
     throw new Error('Unauthorized: Admin access required');
   }
-
   return session;
 };
 
-// Get platform settings
-export async function getPlatformSettings(): Promise<
-  ActionResponse<PlatformSettings>
-> {
+// ─── Default structures ───────────────────────────────────────────────────────
+
+const defaultSettings: PlatformSettings = {
+  general: {
+    platformName: 'MyEvent.com.ng',
+    platformDescription: "Nigeria's premier event management platform",
+    supportEmail: 'support@myevent.com.ng',
+    maintenanceMode: false,
+    allowRegistrations: true,
+  },
+  financial: {
+    defaultPlatformFeePercentage: 5,
+    minimumWithdrawal: 1000,
+    maximumRefundDays: 30,
+    autoApproveRefunds: false,
+    paystackPublicKey: '',
+    paystackSecretKey: '',
+  },
+  email: {
+    activeProvider: 'gmail',
+    fromName: 'MyEvent.com.ng',
+    gmail: {
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      user: '',
+      password: '',
+    },
+    ses: {
+      region: 'us-east-1',
+      accessKeyId: '',
+      secretAccessKey: '',
+      fromAddress: '',
+    },
+  },
+};
+
+// ─── Flat key helpers ─────────────────────────────────────────────────────────
+
+function buildFlatSettings(settings: PlatformSettings) {
+  return [
+    // General
+    { key: 'general.platformName', value: settings.general.platformName },
+    { key: 'general.platformDescription', value: settings.general.platformDescription },
+    { key: 'general.supportEmail', value: settings.general.supportEmail },
+    { key: 'general.maintenanceMode', value: settings.general.maintenanceMode },
+    { key: 'general.allowRegistrations', value: settings.general.allowRegistrations },
+    // Financial
+    { key: 'financial.defaultPlatformFeePercentage', value: settings.financial.defaultPlatformFeePercentage },
+    { key: 'financial.minimumWithdrawal', value: settings.financial.minimumWithdrawal },
+    { key: 'financial.maximumRefundDays', value: settings.financial.maximumRefundDays },
+    { key: 'financial.autoApproveRefunds', value: settings.financial.autoApproveRefunds },
+    { key: 'financial.paystackPublicKey', value: settings.financial.paystackPublicKey },
+    { key: 'financial.paystackSecretKey', value: settings.financial.paystackSecretKey },
+    // Email — provider selection & shared
+    { key: 'email.activeProvider', value: settings.email.activeProvider },
+    { key: 'email.fromName', value: settings.email.fromName },
+    // Gmail
+    { key: 'email.gmail.host', value: settings.email.gmail.host },
+    { key: 'email.gmail.port', value: settings.email.gmail.port },
+    { key: 'email.gmail.secure', value: settings.email.gmail.secure },
+    { key: 'email.gmail.user', value: settings.email.gmail.user },
+    ...(settings.email.gmail.password
+      ? [{ key: 'email.gmail.password', value: settings.email.gmail.password }]
+      : []),
+    // SES
+    { key: 'email.ses.region', value: settings.email.ses.region },
+    { key: 'email.ses.fromAddress', value: settings.email.ses.fromAddress },
+    { key: 'email.ses.accessKeyId', value: settings.email.ses.accessKeyId },
+    ...(settings.email.ses.secretAccessKey
+      ? [{ key: 'email.ses.secretAccessKey', value: settings.email.ses.secretAccessKey }]
+      : []),
+  ];
+}
+
+function populateFromDb(
+  rows: Array<{ key: string; value: unknown }>,
+  structured: PlatformSettings
+): PlatformSettings {
+  const s = JSON.parse(JSON.stringify(structured)) as PlatformSettings; // deep clone
+
+  rows.forEach(({ key, value }) => {
+    const parts = key.split('.');
+    // Handle up to 3-level nesting: section.subsection.field
+    if (parts.length === 2) {
+      const [section, field] = parts;
+      if (section in s) {
+        (s as any)[section][field] = value;
+      }
+    } else if (parts.length === 3) {
+      const [section, subsection, field] = parts;
+      if (section in s && subsection in (s as any)[section]) {
+        (s as any)[section][subsection][field] = value;
+      }
+    }
+  });
+
+  return s;
+}
+
+// Scrub secrets before sending to the client
+function scrubSecrets(settings: PlatformSettings): PlatformSettings {
+  const s = JSON.parse(JSON.stringify(settings)) as PlatformSettings;
+  if (s.email.gmail.password) s.email.gmail.password = '••••••••';
+  if (s.email.ses.secretAccessKey) s.email.ses.secretAccessKey = '••••••••';
+  if (s.financial.paystackSecretKey) s.financial.paystackSecretKey = '••••••••';
+  return s;
+}
+
+// ─── Actions ──────────────────────────────────────────────────────────────────
+
+export async function getPlatformSettings(): Promise<ActionResponse<PlatformSettings>> {
   try {
     await validateAdminPermission();
 
-    // Get all settings from database
-    const settings = await prisma.platformSettings.findMany();
+    const rows = await prisma.platformSettings.findMany();
+    const structured = populateFromDb(rows, defaultSettings);
 
-    // Convert to structured format
-    const structuredSettings: PlatformSettings = {
-      general: {
-        platformName: 'MyEvent.com.ng',
-        platformDescription: "Nigeria's premier event management platform",
-        supportEmail: 'support@myevent.com.ng',
-        maintenanceMode: false,
-        allowRegistrations: true,
-      },
-      financial: {
-        defaultPlatformFeePercentage: 5,
-        minimumWithdrawal: 1000,
-        maximumRefundDays: 30,
-        autoApproveRefunds: false,
-        paystackPublicKey: '',
-        paystackSecretKey: '',
-      },
-    };
-
-    // Populate with actual settings from database
-    settings.forEach((setting) => {
-      const keys = setting.key.split('.');
-      if (keys.length === 2) {
-        const section = keys[0] as keyof PlatformSettings;
-        const key = keys[1];
-        if (structuredSettings[section] && key in structuredSettings[section]) {
-          (structuredSettings[section] as any)[key] = setting.value;
-        }
-      }
-    });
-
-    return {
-      success: true,
-      data: structuredSettings,
-    };
+    return { success: true, data: scrubSecrets(structured) };
   } catch (error) {
     console.error('Error fetching platform settings:', error);
-    return {
-      success: false,
-      message: 'Failed to fetch platform settings',
-    };
+    return { success: false, message: 'Failed to fetch platform settings' };
   }
 }
 
-// Update platform settings
 export async function updatePlatformSettings(
   settings: PlatformSettings
 ): Promise<ActionResponse<PlatformSettings>> {
   try {
     const session = await validateAdminPermission();
+    const flatSettings = buildFlatSettings(settings);
 
-    // Flatten settings for database storage
-    const flatSettings = [
-      { key: 'general.platformName', value: settings.general.platformName },
-      {
-        key: 'general.platformDescription',
-        value: settings.general.platformDescription,
-      },
-      { key: 'general.supportEmail', value: settings.general.supportEmail },
-      {
-        key: 'general.maintenanceMode',
-        value: settings.general.maintenanceMode,
-      },
-      {
-        key: 'general.allowRegistrations',
-        value: settings.general.allowRegistrations,
-      },
-      {
-        key: 'financial.defaultPlatformFeePercentage',
-        value: settings.financial.defaultPlatformFeePercentage,
-      },
-      {
-        key: 'financial.minimumWithdrawal',
-        value: settings.financial.minimumWithdrawal,
-      },
-      {
-        key: 'financial.maximumRefundDays',
-        value: settings.financial.maximumRefundDays,
-      },
-      {
-        key: 'financial.autoApproveRefunds',
-        value: settings.financial.autoApproveRefunds,
-      },
-      {
-        key: 'financial.paystackPublicKey',
-        value: settings.financial.paystackPublicKey,
-      },
-      {
-        key: 'financial.paystackSecretKey',
-        value: settings.financial.paystackSecretKey,
-      },
-    ];
-
-    // Update or create settings in database
-    await Promise.all(
-      flatSettings.map(async (setting) => {
-        await prisma.platformSettings.upsert({
-          where: { key: setting.key },
-          update: { value: setting.value },
-          create: setting,
-        });
-      })
+    await prisma.$transaction(
+      flatSettings.map(({ key, value }) =>
+        prisma.platformSettings.upsert({
+          where: { key },
+          update: { value: value as any },
+          create: { key, value: value as any },
+        })
+      )
     );
 
-    // Create audit log
+    // Audit log
     await prisma.auditLog.create({
       data: {
         userId: session.user.id,
         action: 'UPDATE',
         entity: 'PLATFORM_SETTINGS',
-        newValues: JSON.stringify(settings),
-        ipAddress: null,
-        userAgent: null,
+        newValues: {
+          updatedSections: Object.keys(settings),
+          emailProvider: settings.email.activeProvider,
+        },
       },
     });
 
-    revalidatePath('/admin/settings');
-    revalidatePath('/');
+    revalidatePath('/admin/dashboard/settings');
 
-    return {
-      success: true,
-      message: 'Platform settings updated successfully',
-      data: settings,
-    };
+    return { success: true, message: 'Settings updated successfully' };
   } catch (error) {
     console.error('Error updating platform settings:', error);
-    return {
-      success: false,
-      message: 'Failed to update platform settings',
-    };
+    return { success: false, message: 'Failed to update platform settings' };
   }
 }
 
-// Get specific setting value
-export async function getSetting(key: string): Promise<any> {
+/**
+ * Called by the admin "Test Connection" button.
+ * Does NOT require saving settings first — tests whatever is currently in DB.
+ */
+export async function testEmailProviderAction(
+  provider: EmailProviderType
+): Promise<ActionResponse<{ message: string }>> {
   try {
-    const setting = await prisma.platformSettings.findUnique({
-      where: { key },
-    });
-
-    return setting?.value || null;
-  } catch (error) {
-    console.error(`Error fetching setting ${key}:`, error);
-    return null;
-  }
-}
-
-// Check if maintenance mode is enabled
-export async function isMaintenanceModeEnabled(): Promise<boolean> {
-  try {
-    const maintenanceMode = await getSetting('general.maintenanceMode');
-    return maintenanceMode === true;
-  } catch (error) {
-    console.error('Error checking maintenance mode:', error);
-    return false;
-  }
-}
-
-// Get platform fee percentage
-export async function getPlatformFeePercentage(): Promise<number> {
-  try {
-    const feePercentage = await getSetting(
-      'financial.defaultPlatformFeePercentage'
-    );
-    return feePercentage;
-  } catch (error) {
-    console.error('Error fetching platform fee percentage:', error);
-    return 5;
-  }
-}
-
-// Get platform settings for client use (no admin permission required)
-export async function getPublicPlatformSettings(): Promise<
-  ActionResponse<{
-    defaultPlatformFeePercentage: number;
-    maintenanceMode: boolean;
-    allowRegistrations: boolean;
-    paystackPublicKey: string;
-  }>
-> {
-  try {
-    // Get public settings that clients can access
-    const settings = await prisma.platformSettings.findMany({
-      where: {
-        key: {
-          in: [
-            'financial.defaultPlatformFeePercentage',
-            'general.maintenanceMode',
-            'general.allowRegistrations',
-            'financial.paystackPublicKey',
-          ],
-        },
-      },
-    });
-
-    // Convert to object
-    const settingsObj: any = {};
-    settings.forEach((setting) => {
-      settingsObj[setting.key] = setting.value;
-    });
-
+    await validateAdminPermission();
+    const result = await testEmailProvider(provider);
     return {
-      success: true,
-      data: {
-        defaultPlatformFeePercentage:
-          settingsObj['financial.defaultPlatformFeePercentage'] || 5,
-        maintenanceMode: settingsObj['general.maintenanceMode'] || false,
-        allowRegistrations: settingsObj['general.allowRegistrations'] !== false,
-        paystackPublicKey: settingsObj['financial.paystackPublicKey'] || '',
-      },
+      success: result.success,
+      message: result.message,
+      data: { message: result.message },
     };
-  } catch (error) {
-    console.error('Error fetching public platform settings:', error);
-    return {
-      success: false,
-      message: 'Failed to fetch platform settings',
-      data: {
-        defaultPlatformFeePercentage: 5,
-        maintenanceMode: false,
-        allowRegistrations: true,
-        paystackPublicKey: '',
-      },
-    };
-  }
-}
-
-// Process refund (approve/reject)
-export async function processRefund(
-  orderId: string,
-  approve: boolean,
-  adminNotes?: string
-): Promise<ActionResponse<any>> {
-  try {
-    const session = await validateAdminPermission();
-
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        event: true,
-        buyer: true,
-      },
-    });
-
-    if (!order) {
-      return {
-        success: false,
-        message: 'Order not found',
-      };
-    }
-
-    if (!approve) {
-      // Reject refund
-      await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          refundStatus: null,
-        },
-      });
-
-      return {
-        success: true,
-        message: 'Refund request rejected',
-      };
-    }
-
-    // Process refund with Paystack if not a free event
-    let paystackRefundSuccess = true;
-
-    if (!order.event.isFree && order.totalAmount > 0) {
-      const paystackSecretKey = await getSetting('financial.paystackSecretKey');
-
-      if (!paystackSecretKey) {
-        return {
-          success: false,
-          message: 'Paystack configuration not found',
-        };
-      }
-
-      const refundResponse = await fetch('https://api.paystack.co/refund', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${paystackSecretKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          transaction: order.paystackId,
-          amount: order.totalAmount * 100, // Convert to kobo
-        }),
-      });
-
-      const refundData = await refundResponse.json();
-      paystackRefundSuccess = refundData.status;
-
-      if (!paystackRefundSuccess) {
-        return {
-          success: false,
-          message: 'Failed to process refund with payment provider',
-        };
-      }
-    }
-
-    // Update order and tickets in transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Update order status
-      const updatedOrder = await tx.order.update({
-        where: { id: orderId },
-        data: {
-          paymentStatus: 'REFUNDED',
-          refundStatus: 'PROCESSED',
-        },
-      });
-
-      // Mark all related tickets as refunded
-      await tx.ticket.updateMany({
-        where: {
-          orderId: orderId,
-        },
-        data: {
-          status: 'REFUNDED',
-        },
-      });
-
-      return updatedOrder;
-    });
-
-    // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: 'PROCESS_REFUND',
-        entity: 'ORDER',
-        entityId: orderId,
-        newValues: {
-          approved: approve,
-          adminNotes,
-        },
-      },
-    });
-
-    revalidatePath('/admin/dashboard/refunds');
-    revalidatePath('/dashboard/tickets');
-
-    return {
-      success: true,
-      message: 'Refund processed successfully',
-      data: result,
-    };
-  } catch (error) {
-    console.error('Error processing refund:', error);
-    return {
-      success: false,
-      message: 'Failed to process refund',
-    };
+  } catch (error: any) {
+    return { success: false, message: error?.message || 'Test failed' };
   }
 }

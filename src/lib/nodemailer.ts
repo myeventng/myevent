@@ -1,4 +1,6 @@
-// lib/nodemailer.ts
+// src/lib/nodemailer.ts
+// Legacy shim — kept so existing imports don't break.
+// All NEW code should import from @/lib/email/email-provider instead.
 import nodemailer from 'nodemailer';
 
 const transporter = nodemailer.createTransport({

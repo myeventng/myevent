@@ -11,6 +11,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@aws-sdk/client-ses": "^3.1045.0",
     "@hookform/resolvers": "^5.0.1",
     "@node-rs/argon2": "^2.0.2",
     "@prisma/client": "^6.7.0",

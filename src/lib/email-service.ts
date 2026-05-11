@@ -1,9 +1,10 @@
-// lib/email-service.ts -
-import nodemailer from 'nodemailer';
-import QRCode from 'qrcode';
-import { TicketEmailTemplate } from '@/components/email/ticket-template';
-import { EventNotificationTemplate } from '@/components/email/event-notification-template';
-import { render } from '@react-email/render';
+// src/lib/email-service.ts
+// Ticket + event-notification emails routed through the universal provider.
+
+import QRCode from "qrcode";
+import { TicketEmailTemplate } from "@/components/email/ticket-template";
+import { EventNotificationTemplate } from "@/components/email/event-notification-template";
+import { render } from "@react-email/render";
 import {
   EventApprovalEmail,
   EventRejectionEmail,
@@ -12,537 +13,249 @@ import {
   EventCancellationEmail,
   WaitingListEmail,
   PayoutEmail,
-} from './notification-template';
-import { PDFTicketGenerator } from '@/utils/pdf-ticket-generator';
+} from "./notification-template";
+import { sendEmail } from "./email/email-provider";
 
-// Create nodemailer transporter
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.NODEMAILER_USER,
-    pass: process.env.NODEMAILER_APP_PASSWORD,
-  },
-});
-
-interface EmailOptions {
-  to: string;
-  subject: string;
-  html: string | Promise<string>;
-}
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface EmailService {
   sendTicketEmail: (order: any, tickets: any[]) => Promise<void>;
   sendEventNotification: (
     recipient: string,
     event: any,
-    type: string
+    type: "approved" | "rejected" | "cancelled" | "tickets_available",
   ) => Promise<void>;
   sendWaitingListNotification: (recipient: string, event: any) => Promise<void>;
   sendRefundNotification: (recipient: string, order: any) => Promise<void>;
 }
 
-class NodemailerEmailService implements EmailService {
-  private transporter: nodemailer.Transporter;
+// ─── Implementation ───────────────────────────────────────────────────────────
 
-  constructor() {
-    this.transporter = transporter;
-  }
-
+class UniversalEmailService implements EmailService {
   async sendTicketEmail(order: any, tickets: any[]): Promise<void> {
-    try {
-      // Validate inputs
-      if (!order || !tickets || tickets.length === 0) {
-        throw new Error('Invalid order or tickets data for email');
-      }
-
-      const event = order.event || tickets[0]?.ticketType?.event;
-      const venue = event?.venue;
-
-      if (!event || !venue) {
-        throw new Error('Missing event or venue information for ticket email');
-      }
-
-      // Determine buyer information (handle guest vs authenticated)
-      let buyerName: string;
-      let buyerEmail: string;
-
-      if (order.buyer) {
-        // Authenticated purchase
-        buyerName = order.buyer.name;
-        buyerEmail = order.buyer.email;
-      } else {
-        // Guest purchase - extract from purchaseNotes
-        try {
-          const notes = JSON.parse(order.purchaseNotes || '{}');
-          if (notes.isGuestPurchase && notes.guestEmail && notes.guestName) {
-            buyerName = notes.guestName;
-            buyerEmail = notes.guestEmail;
-          } else {
-            throw new Error('Guest purchase info missing');
-          }
-        } catch (e) {
-          console.error('Failed to parse guest info:', e);
-          throw new Error('Unable to determine recipient for ticket email');
-        }
-      }
-
-      console.log(
-        `📧 Preparing ticket email for: ${buyerEmail} (${buyerName})`
-      );
-
-      // Generate QR codes and prepare attachments
-      const ticketsWithQR = [];
-      const attachments = [];
-
-      for (const ticket of tickets) {
-        let qrCodeData;
-
-        if (ticket.qrCodeData) {
-          qrCodeData = ticket.qrCodeData;
-        } else {
-          qrCodeData = JSON.stringify({
-            type: 'EVENT_TICKET',
-            ticketId: ticket.ticketId,
-            eventId: event.id,
-            userId: ticket.userId,
-            orderId: order.id,
-            timestamp: Date.now(),
-          });
-        }
-
-        // Generate QR code as buffer
-        const qrCodeBuffer = await QRCode.toBuffer(qrCodeData, {
-          width: 200,
-          margin: 2,
-          color: {
-            dark: '#000000',
-            light: '#FFFFFF',
-          },
-          errorCorrectionLevel: 'H',
-        });
-
-        const qrCodeCid = `qr-code-${ticket.ticketId}`;
-
-        // Add QR code as inline attachment
-        attachments.push({
-          filename: `qr-${ticket.ticketId}.png`,
-          content: qrCodeBuffer,
-          cid: qrCodeCid,
-          contentType: 'image/png',
-          contentDisposition: 'inline',
-        });
-
-        // Generate PDF ticket
-        const pdfGenerator = new PDFTicketGenerator();
-        const ticketData = {
-          ticketId: ticket.ticketId,
-          eventTitle: event.title,
-          eventDate: new Date(event.startDateTime).toLocaleString('en-NG', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-          venue: `${venue.name}${venue.city ? `, ${venue.city.name}` : ''}`,
-          ticketType: ticket.ticketType.name,
-          price: new Intl.NumberFormat('en-NG', {
-            style: 'currency',
-            currency: 'NGN',
-          }).format(ticket.ticketType.price),
-          customerName: buyerName, // Use extracted buyer name
-          customerEmail: buyerEmail, // Use extracted buyer email
-          purchaseDate: new Date(ticket.purchasedAt).toLocaleDateString(
-            'en-NG'
-          ),
-          status: ticket.status || 'VALID',
-          qrCode: qrCodeData,
-          orderId: order.id,
-          quantity: order.quantity,
-          eventId: event.id,
-        };
-
-        await pdfGenerator.generateTicket(ticketData);
-
-        let pdfBuffer: Buffer;
-        try {
-          pdfBuffer = pdfGenerator.getBuffer();
-        } catch {
-          const arrayBuffer = pdfGenerator.getArrayBuffer();
-          pdfBuffer = Buffer.from(arrayBuffer);
-        }
-
-        // Add PDF as attachment
-        attachments.push({
-          filename: `ticket-${ticket.ticketId}.pdf`,
-          content: pdfBuffer,
-          contentType: 'application/pdf',
-        });
-
-        ticketsWithQR.push({
-          ...ticket,
-          qrCodeCid,
-          qrCodeData: qrCodeData,
-          // Override user info for display
-          user: {
-            id: ticket.userId,
-            name: buyerName,
-            email: buyerEmail,
-          },
-        });
-      }
-
-      // Render the email template
-      const emailHtml = await render(
-        TicketEmailTemplate({
-          order: {
-            ...order,
-            buyer: {
-              id: order.buyer?.id || null,
-              name: buyerName,
-              email: buyerEmail,
-            },
-          },
-          event,
-          venue,
-          tickets: ticketsWithQR,
-          supportEmail: process.env.SUPPORT_EMAIL || 'support@myevent.com.ng',
-          platformName: process.env.PLATFORM_NAME || 'MyEvent.com.ng',
-          appUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://myevent.com.ng',
-        })
-      );
-
-      // Send email
-      const mailOptions: any = {
-        from: `"${process.env.PLATFORM_NAME || 'MyEvent.com.ng'}" <${process.env.NODEMAILER_USER}>`,
-        to: buyerEmail,
-        subject: `Your tickets for ${event.title}`,
-        html: emailHtml,
-        attachments,
-        headers: {
-          'X-Entity-Ref-ID': order.id,
-        },
-      };
-
-      await this.transporter.sendMail(mailOptions);
-
-      console.log(
-        `✅ Ticket email sent to ${buyerEmail} for order ${order.id} with ${tickets.length} PDF tickets`
-      );
-    } catch (error) {
-      console.error('❌ Error sending ticket email:', error);
-      throw new Error(
-        `Failed to send ticket email: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+    if (!order || !tickets || tickets.length === 0) {
+      throw new Error("Invalid order or tickets data for email");
     }
+
+    const event = order.event || tickets[0]?.ticketType?.event;
+    const venue = event?.venue;
+    if (!event || !venue)
+      throw new Error("Missing event or venue information for ticket email");
+
+    let buyerName: string;
+    let buyerEmail: string;
+
+    if (order.buyer) {
+      buyerName = order.buyer.name;
+      buyerEmail = order.buyer.email;
+    } else {
+      const notes = JSON.parse(order.purchaseNotes || "{}");
+      if (notes.isGuestPurchase && notes.guestEmail && notes.guestName) {
+        buyerName = notes.guestName;
+        buyerEmail = notes.guestEmail;
+      } else {
+        throw new Error("Unable to determine recipient for ticket email");
+      }
+    }
+
+    console.log(`📧 Preparing ticket email for: ${buyerEmail} (${buyerName})`);
+
+    // Generate QR codes for each ticket
+    const ticketsWithQR = [];
+    for (const ticket of tickets) {
+      const qrCodeData = await QRCode.toDataURL(
+        JSON.stringify({
+          ticketId: ticket.id,
+          eventId: event.id,
+          ticketCode: ticket.ticketCode,
+        }),
+      );
+      ticketsWithQR.push({ ...ticket, qrCodeData });
+    }
+
+    // TicketEmailTemplate expects: order, event, venue, tickets, supportEmail, platformName, appUrl
+    const html = await render(
+      TicketEmailTemplate({
+        order,
+        tickets: ticketsWithQR,
+        event,
+        venue,
+        supportEmail: process.env.SUPPORT_EMAIL || "support@myevent.com.ng",
+        platformName: "MyEvent.com.ng",
+        appUrl: process.env.NEXT_PUBLIC_APP_URL || "https://myevent.com.ng",
+      }),
+    );
+
+    await sendEmail({
+      to: buyerEmail,
+      subject: `🎟️ Your tickets for ${event.title}`,
+      html: typeof html === "string" ? html : await html,
+    });
+
+    console.log(`✅ Ticket email sent to ${buyerEmail}`);
   }
 
+  // EventNotificationTemplate expects: event, type (union), appUrl, platformName
   async sendEventNotification(
     recipient: string,
     event: any,
-    type: string
+    type: "approved" | "rejected" | "cancelled" | "tickets_available",
   ): Promise<void> {
-    try {
-      let subject = '';
-      let notificationType:
-        | 'approved'
-        | 'rejected'
-        | 'cancelled'
-        | 'tickets_available';
-
-      switch (type) {
-        case 'EVENT_APPROVED':
-          subject = `🎉 Event Approved: ${event.title}`;
-          notificationType = 'approved';
-          break;
-        case 'EVENT_REJECTED':
-          subject = `❌ Event Rejected: ${event.title}`;
-          notificationType = 'rejected';
-          break;
-        case 'EVENT_CANCELLED':
-          subject = `⚠️ Event Cancelled: ${event.title}`;
-          notificationType = 'cancelled';
-          break;
-        default:
-          return;
-      }
-
-      const emailHtml = await render(
-        EventNotificationTemplate({
-          event,
-          type: notificationType,
-          appUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://myevent.com.ng',
-          platformName: process.env.PLATFORM_NAME || 'MyEvent.com.ng',
-        })
-      );
-
-      await this.transporter.sendMail({
-        from: `"${process.env.PLATFORM_NAME}" <${process.env.NODEMAILER_USER}>`,
-        to: recipient,
-        subject,
-        html: emailHtml,
-        headers: {
-          'X-Entity-Ref-ID': event.id,
-        },
-      });
-
-      console.log(
-        `Event notification sent to ${recipient} for event ${event.id}`
-      );
-    } catch (error) {
-      console.error('Error sending event notification:', error);
-      throw error;
-    }
+    const html = await render(
+      EventNotificationTemplate({
+        event,
+        type,
+        appUrl: process.env.NEXT_PUBLIC_APP_URL || "https://myevent.com.ng",
+        platformName: "MyEvent.com.ng",
+      }),
+    );
+    await sendEmail({
+      to: recipient,
+      subject: `Event Update: ${event.title}`,
+      html: typeof html === "string" ? html : await html,
+    });
   }
 
+  // WaitingListEmail expects: userName, eventTitle, eventDate, eventUrl, expiresIn
   async sendWaitingListNotification(
     recipient: string,
-    event: any
+    event: any,
   ): Promise<void> {
-    try {
-      const subject = `Tickets Available: ${event.title}`;
-
-      const emailHtml = await render(
-        EventNotificationTemplate({
-          event,
-          type: 'tickets_available',
-          appUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://myevent.com.ng',
-          platformName: process.env.PLATFORM_NAME || 'MyEvent.com.ng',
-        })
-      );
-
-      await this.transporter.sendMail({
-        from: `"${process.env.PLATFORM_NAME}" <${process.env.NODEMAILER_USER}>`,
-        to: recipient,
-        subject,
-        html: emailHtml,
-        headers: {
-          'X-Entity-Ref-ID': event.id,
-        },
-      });
-
-      console.log(
-        `Waiting list notification sent to ${recipient} for event ${event.id}`
-      );
-    } catch (error) {
-      console.error('Error sending waiting list notification:', error);
-      throw error;
-    }
+    const html = await render(
+      WaitingListEmail({
+        userName: recipient,
+        eventTitle: event.title,
+        eventDate: event.startDateTime,
+        eventUrl: `${process.env.NEXT_PUBLIC_APP_URL || "https://myevent.com.ng"}/events/${event.slug}`,
+        expiresIn: "24 hours",
+      }),
+    );
+    await sendEmail({
+      to: recipient,
+      subject: `🎫 Tickets available for ${event.title}`,
+      html: typeof html === "string" ? html : await html,
+    });
   }
 
+  // RefundProcessedEmail expects: buyerName, eventTitle, refundAmount, orderId, accountUrl
   async sendRefundNotification(recipient: string, order: any): Promise<void> {
-    try {
-      const subject = `💰 Refund Processed for ${order.event.title}`;
-
-      const emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: #10b981; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-            <h1>Refund Processed</h1>
-          </div>
-          
-          <div style="background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 8px 8px;">
-            <p>Your refund has been successfully processed for the following order:</p>
-            
-            <div style="background: white; padding: 15px; margin: 15px 0; border-radius: 5px; border: 1px solid #e5e7eb;">
-              <h3>${order.event.title}</h3>
-              <p><strong>Order ID:</strong> ${order.id}</p>
-              <p><strong>Refund Amount:</strong> ₦${order.totalAmount.toLocaleString()}</p>
-              <p><strong>Original Purchase Date:</strong> ${new Date(
-                order.createdAt
-              ).toLocaleDateString()}</p>
-            </div>
-            
-            <p>The refund amount will be credited back to your original payment method within 5-10 business days.</p>
-            
-            <p>If you have any questions, please contact our support team at ${
-              process.env.SUPPORT_EMAIL
-            }.</p>
-            
-            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;">
-              <p>Best regards,<br>The ${process.env.PLATFORM_NAME} Team</p>
-            </div>
-          </div>
-        </div>
-      `;
-
-      await this.transporter.sendMail({
-        from: `"${process.env.PLATFORM_NAME}" <${process.env.NODEMAILER_USER}>`,
-        to: recipient,
-        subject,
-        html: emailHtml,
-        headers: {
-          'X-Entity-Ref-ID': order.id,
-        },
-      });
-
-      console.log(
-        `Refund notification sent to ${recipient} for order ${order.id}`
-      );
-    } catch (error) {
-      console.error('Error sending refund notification:', error);
-      throw error;
-    }
-  }
-}
-
-class NotificationEmailService {
-  private async sendEmail({ to, subject, html }: EmailOptions) {
-    try {
-      const resolvedHtml = await html;
-      const result = await transporter.sendMail({
-        from: `"${process.env.PLATFORM_NAME}" <${process.env.NODEMAILER_USER}>`,
-        to,
-        subject,
-        html: resolvedHtml,
-      });
-
-      console.log('✅ Email sent successfully:', result);
-      return { success: true, messageId: result.messageId };
-    } catch (error) {
-      console.error('❌ Failed to send email:', error);
-      return { success: false, error };
-    }
+    const html = await render(
+      RefundProcessedEmail({
+        buyerName: order.buyer?.name || "Customer",
+        eventTitle: order.event?.title || "Event",
+        refundAmount: order.totalAmount,
+        orderId: order.id,
+        accountUrl: `${process.env.NEXT_PUBLIC_APP_URL || "https://myevent.com.ng"}/dashboard/tickets`,
+      }),
+    );
+    await sendEmail({
+      to: recipient,
+      subject: "💸 Your refund has been processed",
+      html: typeof html === "string" ? html : await html,
+    });
   }
 
+  // ── Notification helpers ───────────────────────────────────────────────────
+
+  // EventApprovalEmail expects: eventTitle, eventDate, eventUrl, organizerName
   async sendEventApproval(email: string, event: any) {
-    const html = render(
+    const html = await render(
       EventApprovalEmail({
         eventTitle: event.title,
         eventDate: event.startDateTime,
         eventUrl: `${process.env.NEXT_PUBLIC_APP_URL}/events/${event.slug}`,
         organizerName: event.user.name,
-      })
+      }),
     );
-
-    return this.sendEmail({
+    return sendEmail({
       to: email,
       subject: `🎉 Your event "${event.title}" has been approved!`,
-      html,
+      html: typeof html === "string" ? html : await html,
     });
   }
 
+  // EventRejectionEmail expects: eventTitle, organizerName, rejectionReason, editUrl
   async sendEventRejection(email: string, event: any, rejectionReason: string) {
-    const html = render(
+    const html = await render(
       EventRejectionEmail({
         eventTitle: event.title,
         organizerName: event.user.name,
         rejectionReason,
         editUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/events/${event.id}/edit`,
-      })
+      }),
     );
-
-    return this.sendEmail({
+    return sendEmail({
       to: email,
-      subject: `📝 Action required: Your event "${event.title}" needs updates`,
-      html,
+      subject: `Event "${event.title}" was not approved`,
+      html: typeof html === "string" ? html : await html,
     });
   }
 
-  async sendTicketPurchase(email: string, order: any) {
-    const html = render(
+  // TicketPurchaseEmail expects: buyerName, eventTitle, eventDate, eventLocation, quantity, totalAmount, orderId, ticketsUrl
+  async sendTicketPurchaseConfirmation(email: string, order: any) {
+    const html = await render(
       TicketPurchaseEmail({
-        buyerName: order.buyer.name,
-        eventTitle: order.event.title,
-        eventDate: order.event.startDateTime,
-        eventLocation: `${order.event.venue.name}, ${order.event.venue.city.name}`,
-        quantity: order.quantity,
+        buyerName: order.buyer?.name || "Customer",
+        eventTitle: order.event?.title || "Event",
+        eventDate: order.event?.startDateTime || "",
+        eventLocation: order.event?.venue?.name || "",
+        quantity: order.quantity || 1,
         totalAmount: order.totalAmount,
         orderId: order.id,
         ticketsUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/tickets`,
-      })
+      }),
     );
-
-    return this.sendEmail({
+    return sendEmail({
       to: email,
-      subject: `🎟️ Your tickets for "${order.event.title}" are confirmed!`,
-      html,
+      subject: "🎟️ Purchase Confirmed!",
+      html: typeof html === "string" ? html : await html,
     });
   }
 
-  async sendRefundProcessed(email: string, order: any) {
-    const html = render(
-      RefundProcessedEmail({
-        buyerName: order.buyer.name,
-        eventTitle: order.event.title,
-        refundAmount: order.totalAmount,
-        orderId: order.id,
-        accountUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/tickets`,
-      })
+  // PayoutEmail expects: organizerName, payoutAmount, periodStart, periodEnd, dashboardUrl, eventsSold, ticketsSold
+  async sendPayoutNotification(email: string, payout: any) {
+    const html = await render(
+      PayoutEmail({
+        organizerName: payout.organizer?.name || "Organizer",
+        payoutAmount: payout.netAmount,
+        periodStart: payout.periodStart,
+        periodEnd: payout.periodEnd,
+        dashboardUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`,
+        eventsSold: payout.eventsSold || 0,
+        ticketsSold: payout.ticketsSold || 0,
+      }),
     );
-
-    return this.sendEmail({
+    return sendEmail({
       to: email,
-      subject: `💰 Your refund of ₦${order.totalAmount.toLocaleString()} has been processed`,
-      html,
+      subject: "💰 Payout Processed",
+      html: typeof html === "string" ? html : await html,
     });
   }
 
+  // EventCancellationEmail expects: attendeeName, eventTitle, eventDate, cancellationReason?, refundAmount, supportUrl
   async sendEventCancellation(
     email: string,
     event: any,
-    order: any,
-    reason?: string
+    attendeeName?: string,
+    refundAmount?: number,
   ) {
-    const html = render(
+    const html = await render(
       EventCancellationEmail({
-        attendeeName: order.buyer.name,
+        attendeeName: attendeeName || "Attendee",
         eventTitle: event.title,
         eventDate: event.startDateTime,
-        cancellationReason: reason,
-        refundAmount: order.totalAmount,
+        cancellationReason: event.cancellationReason,
+        refundAmount: refundAmount || 0,
         supportUrl: `${process.env.NEXT_PUBLIC_APP_URL}/support`,
-      })
+      }),
     );
-
-    return this.sendEmail({
+    return sendEmail({
       to: email,
-      subject: `⚠️ Important: "${event.title}" has been cancelled`,
-      html,
-    });
-  }
-
-  async sendWaitingListNotification(email: string, event: any) {
-    const html = render(
-      WaitingListEmail({
-        userName: 'Valued Customer',
-        eventTitle: event.title,
-        eventDate: event.startDateTime,
-        eventUrl: `${process.env.NEXT_PUBLIC_APP_URL}/events/${event.slug}`,
-        expiresIn: '24 hours',
-      })
-    );
-
-    return this.sendEmail({
-      to: email,
-      subject: `🎫 Tickets now available for "${event.title}"!`,
-      html,
-    });
-  }
-
-  async sendPayoutNotification(email: string, organizer: any, payoutData: any) {
-    const html = render(
-      PayoutEmail({
-        organizerName: organizer.name,
-        payoutAmount: payoutData.amount,
-        periodStart: payoutData.periodStart,
-        periodEnd: payoutData.periodEnd,
-        dashboardUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/analytics`,
-        eventsSold: payoutData.eventsSold,
-        ticketsSold: payoutData.ticketsSold,
-      })
-    );
-
-    return this.sendEmail({
-      to: email,
-      subject: `💰 Your payout of ₦${payoutData.amount.toLocaleString()} has been processed`,
-      html,
+      subject: `Event Cancelled: ${event.title}`,
+      html: typeof html === "string" ? html : await html,
     });
   }
 }
 
-export const ticketEmailService = new NodemailerEmailService();
-export const notificationEmailService = new NotificationEmailService();
-export { transporter };
+export const emailService = new UniversalEmailService();
+export default emailService;

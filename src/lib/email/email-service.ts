@@ -1,5 +1,8 @@
-// lib/email/email-service.ts
-import transporter from './nodemailer';
+// src/lib/email/email-service.ts
+// Now routes through the universal provider (Gmail or SES) based on admin settings.
+// Drop-in replacement — the external signature is unchanged.
+
+import { sendEmail as sendViaProvider } from './email-provider';
 
 interface EmailOptions {
   to: string;
@@ -9,19 +12,5 @@ interface EmailOptions {
 }
 
 export async function sendEmail({ to, subject, html, text }: EmailOptions) {
-  try {
-    const info = await transporter.sendMail({
-      from: `"${process.env.EMAIL_FROM_NAME || 'Event Platform'}" <${process.env.NODEMAILER_USER}>`,
-      to,
-      subject,
-      html,
-      text: text || '',
-    });
-
-    console.log('Email sent:', info.messageId);
-    return { success: true, messageId: info.messageId };
-  } catch (error) {
-    console.error('Error sending email:', error);
-    return { success: false, error };
-  }
+  return sendViaProvider({ to, subject, html, text });
 }
