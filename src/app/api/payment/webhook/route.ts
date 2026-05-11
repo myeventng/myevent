@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { completeOrder } from "@/actions/order.actions";
 import { verifyVotePayment } from "@/actions/voting-contest.actions";
-import { getCachedSetting } from "@/actions/platform-settings.actions";
+import { getCachedSetting } from "@/lib/platform-settings";
 import crypto from "crypto";
 
 export async function POST(request: NextRequest) {
