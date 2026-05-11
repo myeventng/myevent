@@ -46,7 +46,7 @@ import {
   getOrganizerStats,
   getEventTicketStats,
 } from "@/actions/ticket.actions";
-import { getPlatformFee } from "@/actions/platform-settings.actions";
+import { getPlatformFee } from "@/lib/platform-settings";
 import {
   getOrganizerRevenueAnalytics,
   requestPayout,

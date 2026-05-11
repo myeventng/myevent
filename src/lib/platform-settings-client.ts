@@ -7,32 +7,32 @@ export function getPlatformFee(): number {
 
 export function getDefaultPaystackConfig() {
   return {
-    publicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || '',
+    publicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || "",
   };
 }
 
 // If you need actual database values, create server actions
 export async function fetchPlatformSettings() {
   try {
-    const response = await fetch('/api/platform-settings', {
-      method: 'GET',
+    const response = await fetch("/api/platform-settings", {
+      method: "GET",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
     });
 
     if (!response.ok) {
-      throw new Error('Failed to fetch platform settings');
+      throw new Error("Failed to fetch platform settings");
     }
 
     return await response.json();
   } catch (error) {
-    console.error('Error fetching platform settings:', error);
+    console.error("Error fetching platform settings:", error);
     return {
       defaultPlatformFeePercentage: 10,
       maintenanceMode: false,
-      paystackPublicKey: '',
-      paystackSecretKey: '',
+      paystackPublicKey: "",
+      paystackSecretKey: "",
       minimumWithdrawal: 1000,
       maximumRefundDays: 30,
       autoApproveRefunds: false,

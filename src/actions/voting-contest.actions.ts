@@ -7,7 +7,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { VotingType, ContestantStatus, EventType } from "@/generated/prisma";
 import { createNotification } from "@/actions/notification.actions";
-import { getPlatformFee } from "@/actions/platform-settings.actions";
+import { getPlatformFee } from "@/lib/platform-settings";
 
 interface ActionResponse<T> {
   success: boolean;

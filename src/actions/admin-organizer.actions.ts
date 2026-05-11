@@ -7,7 +7,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { createNotification } from "@/actions/notification.actions";
 import { VerificationStatus } from "@/generated/prisma";
-import { getPlatformFee } from "@/actions/platform-settings.actions";
+import { getPlatformFee } from "@/lib/platform-settings";
 
 type UserWithOrganizer = Prisma.UserGetPayload<{
   include: { organizerProfile: true };

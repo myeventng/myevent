@@ -4,7 +4,7 @@ import { OrganizerAnalytics } from "@/components/organizer/organizer-analytics";
 import { getServerSideAuth } from "@/lib/auth-server";
 import { getOrganizerStats } from "@/actions/ticket.actions";
 import { Badge } from "@/components/ui/badge";
-import { getPlatformFee } from "@/actions/platform-settings.actions";
+import { getPlatformFee } from "@/lib/platform-settings";
 import { redirect } from "next/navigation";
 
 async function getInitialData() {
