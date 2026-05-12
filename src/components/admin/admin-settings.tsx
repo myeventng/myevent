@@ -263,7 +263,7 @@ export function AdminSettings({
 
       {/* Settings Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="financial">Financial</TabsTrigger>
           <TabsTrigger value="email">Email</TabsTrigger>
@@ -620,7 +620,7 @@ export function AdminSettings({
         </TabsContent>
 
         {/* Email Settings */}
-        <TabsContent value="email" className="space-y-6">
+        <TabsContent value="email" className="space-y-4">
           <div>
             <h3 className="text-lg font-medium">Email Provider</h3>
             <p className="text-sm text-muted-foreground">
