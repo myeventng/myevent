@@ -2,28 +2,28 @@ import {
   createLowInventoryNotification,
   checkAndAlertLowInventory,
   createNotification,
-} from '@/actions/notification.actions';
-import { prisma } from '@/lib/prisma';
-import { notificationEmailService as emailService } from '@/lib/email-service';
+} from "@/actions/notification.actions";
+import { prisma } from "@/lib/prisma";
+import { emailService } from "@/lib/email-service";
 
 export class NotificationScheduler {
   // Check inventory every hour
   static async runInventoryCheck() {
-    console.log('🔄 Running inventory check...');
+    console.log("🔄 Running inventory check...");
 
     try {
       const result = await checkAndAlertLowInventory();
       console.log(`✅ Inventory check completed: ${result.message}`);
       return result;
     } catch (error) {
-      console.error('❌ Inventory check failed:', error);
-      return { success: false, message: 'Inventory check failed' };
+      console.error("❌ Inventory check failed:", error);
+      return { success: false, message: "Inventory check failed" };
     }
   }
 
   // Send event reminders
   static async sendEventReminders() {
-    console.log('🔄 Sending event reminders...');
+    console.log("🔄 Sending event reminders...");
 
     try {
       // Get events happening in 24 hours
@@ -40,13 +40,13 @@ export class NotificationScheduler {
             gte: tomorrow,
             lt: dayAfterTomorrow,
           },
-          publishedStatus: 'PUBLISHED',
+          publishedStatus: "PUBLISHED",
           isCancelled: false,
         },
         include: {
           orders: {
             where: {
-              paymentStatus: 'COMPLETED',
+              paymentStatus: "COMPLETED",
             },
             include: {
               buyer: true,
@@ -81,8 +81,8 @@ export class NotificationScheduler {
           try {
             // Create notification
             await createNotification({
-              type: 'SYSTEM_UPDATE',
-              title: 'Event Reminder 📅',
+              type: "SYSTEM_UPDATE",
+              title: "Event Reminder 📅",
               message: `Don't forget! "${event.title}" is happening tomorrow at ${new Date(event.startDateTime).toLocaleTimeString()}.`,
               actionUrl: `/events/${event.slug}`,
               userId: buyer.id,
@@ -90,7 +90,7 @@ export class NotificationScheduler {
                 eventId: event.id,
                 eventTitle: event.title,
                 eventDate: event.startDateTime,
-                reminderType: '24hour',
+                reminderType: "24hour",
               },
               sendEmail: true,
             });
@@ -99,7 +99,7 @@ export class NotificationScheduler {
           } catch (error) {
             console.error(
               `❌ Failed to send reminder to ${buyer.email}:`,
-              error
+              error,
             );
           }
         }
@@ -110,12 +110,12 @@ export class NotificationScheduler {
         for (const guestOrder of guestOrders) {
           try {
             // Parse guest info from purchaseNotes
-            const purchaseData = JSON.parse(guestOrder.purchaseNotes || '{}');
+            const purchaseData = JSON.parse(guestOrder.purchaseNotes || "{}");
             if (purchaseData.isGuestPurchase && purchaseData.guestEmail) {
               // Send email reminder directly to guest
               // Note: You might want to create a separate email service method for this
               console.log(
-                `📧 Sending reminder email to guest: ${purchaseData.guestEmail}`
+                `📧 Sending reminder email to guest: ${purchaseData.guestEmail}`,
               );
 
               // If you have an email service method for guest reminders, call it here:
@@ -126,25 +126,25 @@ export class NotificationScheduler {
           } catch (error) {
             console.error(
               `❌ Failed to send reminder to guest order ${guestOrder.id}:`,
-              error
+              error,
             );
           }
         }
       }
 
       console.log(
-        `✅ Event reminders sent: ${remindersSent} notifications for ${upcomingEvents.length} events`
+        `✅ Event reminders sent: ${remindersSent} notifications for ${upcomingEvents.length} events`,
       );
       return { success: true, count: remindersSent };
     } catch (error) {
-      console.error('❌ Event reminder sending failed:', error);
+      console.error("❌ Event reminder sending failed:", error);
       return { success: false, count: 0 };
     }
   }
 
   // Clean up old notifications (older than 30 days)
   static async cleanupOldNotifications() {
-    console.log('🔄 Cleaning up old notifications...');
+    console.log("🔄 Cleaning up old notifications...");
 
     try {
       const thirtyDaysAgo = new Date();
@@ -155,14 +155,14 @@ export class NotificationScheduler {
           createdAt: {
             lt: thirtyDaysAgo,
           },
-          status: 'READ',
+          status: "READ",
         },
       });
 
       console.log(`✅ Cleaned up ${result.count} old notifications`);
       return { success: true, count: result.count };
     } catch (error) {
-      console.error('❌ Notification cleanup failed:', error);
+      console.error("❌ Notification cleanup failed:", error);
       return { success: false, count: 0 };
     }
   }
