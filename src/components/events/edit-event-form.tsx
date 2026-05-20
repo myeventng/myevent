@@ -666,7 +666,9 @@ export function EditEventForm({
             <EventTickets
               formData={formData}
               ticketTypes={ticketTypes}
-              setTicketTypes={(tickets) => handleTicketTypeChange(tickets)}
+              setTicketTypes={(tickets, deleted) =>
+                handleTicketTypeChange(tickets, deleted)
+              }
               onNext={handleNext}
               onPrevious={handlePrevious}
             />
