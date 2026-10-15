@@ -26,7 +26,9 @@ export const ResendVerificationButton = ({ email }: { email: string }) => {
       fetchOptions: {
         onRequest: () => setIsPending(true),
         onResponse: () => setIsPending(false),
-        onError: (ctx) => toast.error(ctx.error.message),
+        onError: (ctx) => {
+          toast.error(ctx.error.message);
+        },
         onSuccess: () => {
           toast.success('Verification email sent again.');
           setSecondsLeft(COOLDOWN_SECONDS);
