@@ -10,7 +10,7 @@ import {
 } from 'better-auth/plugins';
 import { prisma } from '@/lib/prisma';
 import { hashPassword, verifyPassword } from '@/lib/bcrypt';
-import { normalizeName, VALID_DOMAINS } from '@/lib/utils';
+import { normalizeName } from '@/lib/utils';
 import { ac, roles } from '@/lib/permissions';
 import { sendEmailAction } from '@/actions/send-email.action';
 
@@ -26,15 +26,25 @@ const options = {
       const link = new URL(url);
       link.searchParams.set('callbackURL', '/auth/verify');
 
-      await sendEmailAction({
+      const result = await sendEmailAction({
         to: user.email,
         subject: 'Verify your email address',
         meta: {
+          recipientName: user.name,
           description:
-            'Please verify your email address to complete the registration process.',
+            'Welcome to MyEvent.com.ng! Please confirm your email address to finish creating your account and start discovering events.',
+          buttonText: 'Verify Email Address',
+          footerNote: 'This link expires in 1 hour.',
           link: String(link),
         },
       });
+
+      if (!result.success) {
+        console.error(
+          '[Auth] Failed to send verification email to',
+          user.email
+        );
+      }
     },
   },
   emailAndPassword: {
@@ -51,7 +61,10 @@ const options = {
         to: user.email,
         subject: 'Reset your password',
         meta: {
-          description: 'Please click the link below to reset your password.',
+          description:
+            'We received a request to reset your password. Click the button below to choose a new one.',
+          buttonText: 'Reset Password',
+          footerNote: 'This link expires in 1 hour.',
           link: String(url),
         },
       });
@@ -60,15 +73,6 @@ const options = {
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       if (ctx.path === '/sign-up/email') {
-        const email = String(ctx.body.email);
-        const domain = email.split('@')[1].toLowerCase();
-
-        if (!VALID_DOMAINS().includes(domain)) {
-          throw new APIError('BAD_REQUEST', {
-            message: 'Invalid domain. Please use a valid email.',
-          });
-        }
-
         const name = normalizeName(ctx.body.name);
 
         return {
@@ -163,7 +167,9 @@ const options = {
           to: email,
           subject: 'Magic Link Login',
           meta: {
-            description: 'Please click the link below to log in.',
+            description:
+              'Click the button below to log in to your MyEvent.com.ng account. No password needed.',
+            buttonText: 'Log In',
             link: String(url),
           },
         });

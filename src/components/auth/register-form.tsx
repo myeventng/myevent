@@ -28,14 +28,16 @@ export const RegisterForm = () => {
 
     const formData = new FormData(evt.currentTarget);
 
-    const { error } = await signUpEmailAction(formData);
+    const { error, email } = await signUpEmailAction(formData);
 
     if (error) {
       toast.error(error);
       setIsPending(false);
     } else {
-      toast.success("Registration complete. You're all set.");
-      router.push('/auth/register/success');
+      toast.success('Account created. Check your email to verify it.');
+      router.push(
+        `/auth/register/success?email=${encodeURIComponent(email ?? '')}`
+      );
     }
   }
 

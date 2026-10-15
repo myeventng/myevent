@@ -79,20 +79,19 @@ export function AuthModal({
     const formData = new FormData(evt.currentTarget);
 
     try {
-      const { error } = await signUpEmailAction(formData);
+      const { error, email } = await signUpEmailAction(formData);
 
       if (error) {
         toast.error(error);
       } else {
-        toast.success("Registration complete. You're all set.");
+        toast.success('Account created. Check your email to verify it.');
 
-        // Close modal first
+        // The user is NOT signed in yet: they must verify their email first,
+        // so send them to the "check your inbox" page instead of onSuccess().
         onOpenChange(false);
-
-        // Wait a bit for the auth state to settle, then call success
-        setTimeout(() => {
-          onSuccess?.();
-        }, 500);
+        router.push(
+          `/auth/register/success?email=${encodeURIComponent(email ?? '')}`
+        );
       }
     } catch (error) {
       toast.error('An unexpected error occurred');

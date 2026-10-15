@@ -1,14 +1,13 @@
-'use server';
+// NOTE: intentionally NOT a "use server" file. It is only called from server
+// code (better-auth callbacks, admin actions). Marking it "use server" would
+// expose it as a public endpoint that anyone could use to send arbitrary
+// emails (with arbitrary links) from the platform's mail account.
 
 import transporter from '@/lib/nodemailer';
-
-const styles = {
-  container:
-    'max-width:500px;margin:20px auto;padding:20px;border:1px solid #ddd;border-radius:6px;',
-  heading: 'font-size:20px;color:#333;',
-  paragraph: 'font-size:16px;',
-  link: 'display:inline-block;margin-top:15px;padding:10px 15px;background:#007bff;color:#fff;text-decoration:none;border-radius:4px;',
-};
+import {
+  getAuthEmailHtml,
+  getAuthEmailText,
+} from '@/lib/email/templates/auth-email';
 
 export async function sendEmailAction({
   to,
@@ -20,19 +19,31 @@ export async function sendEmailAction({
   meta: {
     description: string;
     link: string;
+    /** Button label, e.g. "Verify Email Address". Defaults to "Continue". */
+    buttonText?: string;
+    /** Recipient's name for the greeting */
+    recipientName?: string;
+    /** Small print under the button, e.g. link expiry */
+    footerNote?: string;
   };
 }) {
+  const template = {
+    heading: subject,
+    description: meta.description,
+    link: meta.link,
+    buttonText: meta.buttonText,
+    recipientName: meta.recipientName,
+    footerNote: meta.footerNote,
+  };
+
   const mailOptions = {
-    from: process.env.NODEMAILER_USER,
+    from: process.env.NODEMAILER_USER
+      ? `"MyEvent.com.ng" <${process.env.NODEMAILER_USER}>`
+      : undefined,
     to,
     subject: `MyEvent.com.ng - ${subject}`,
-    html: `
-    <div style="${styles.container}">
-      <h1 style="${styles.heading}">${subject}</h1>
-      <p style="${styles.paragraph}">${meta.description}</p>
-      <a href="${meta.link}" style="${styles.link}">Click Here</a>
-    </div>
-    `,
+    html: getAuthEmailHtml(template),
+    text: getAuthEmailText(template),
   };
 
   try {

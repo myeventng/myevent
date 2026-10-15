@@ -7,7 +7,9 @@ export async function signUpEmailAction(formData: FormData) {
   const name = String(formData.get("name"));
   if (!name) return { error: "Please enter your name" };
 
-  const email = String(formData.get("email"));
+  // Any valid email address is accepted. Ownership is proven by the
+  // verification link sent after sign-up (requireEmailVerification).
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
   if (!email) return { error: "Please enter your email" };
 
   const password = String(formData.get("password"));
@@ -22,7 +24,7 @@ export async function signUpEmailAction(formData: FormData) {
       },
     });
 
-    return { error: null };
+    return { error: null, email };
   } catch (err) {
     if (err instanceof APIError) {
       const errCode = err.body ? (err.body.code as ErrorCode) : "UNKNOWN";
