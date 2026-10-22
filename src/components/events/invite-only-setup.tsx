@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { toDateTimeLocalValue, toValidDate } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -220,20 +221,12 @@ export function InviteOnlySetup({
               <Input
                 id="rsvpDeadline"
                 type="datetime-local"
-                value={
-                  inviteOnly.rsvpDeadline
-                    ? new Date(inviteOnly.rsvpDeadline)
-                      .toISOString()
-                      .slice(0, 16)
-                    : ''
-                }
+                value={toDateTimeLocalValue(inviteOnly.rsvpDeadline)}
                 onChange={(e) =>
                   updateFormData({
                     inviteOnly: {
                       ...inviteOnly,
-                      rsvpDeadline: e.target.value
-                        ? new Date(e.target.value)
-                        : undefined,
+                      rsvpDeadline: toValidDate(e.target.value),
                     },
                   })
                 }

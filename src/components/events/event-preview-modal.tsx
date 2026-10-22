@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { safeFormat } from '@/lib/date-utils';
 import Image from 'next/image';
-import { format } from 'date-fns';
 import {
   MapPin,
   Calendar,
@@ -95,7 +95,7 @@ export function EventPreviewModal({
 
   // Format date and time
   const formatDateTime = (date: string | Date) => {
-    return format(new Date(date), 'PPP p');
+    return safeFormat(date, 'PPP p', '—');
   };
 
   // Calculate total tickets available (for standard events)

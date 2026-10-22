@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { safeFormat } from "@/lib/date-utils";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -39,7 +40,6 @@ import {
 } from "lucide-react";
 import { VotingType } from "@/generated/prisma";
 import { DatePicker } from "@/components/layout/date-picker";
-import { format } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -744,8 +744,8 @@ export function VotingContestSetup({
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-800">
                   <strong>Voting Period:</strong>{" "}
-                  {format(form.watch("votingStartDate")!, "PPP")}
-                  {" to "} {format(form.watch("votingEndDate")!, "PPP")}
+                  {safeFormat(form.watch("votingStartDate"), "PPP", "—")}
+                  {" to "} {safeFormat(form.watch("votingEndDate"), "PPP", "—")}
                 </p>
               </div>
             )}

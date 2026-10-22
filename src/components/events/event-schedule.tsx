@@ -15,16 +15,24 @@ import {
 } from '@/components/ui/form';
 import { DatePicker } from '@/components/layout/date-picker';
 import { Input } from '@/components/ui/input';
-import { format, addHours, startOfDay, addDays } from 'date-fns';
+import { addHours, startOfDay, addDays } from 'date-fns';
+import {
+  applyTimeString,
+  isValidDate,
+  safeFormat,
+  toValidDate,
+} from '@/lib/date-utils';
 
 // Form schema for this step
 const formSchema = z
   .object({
     startDateTime: z.date({
       required_error: 'Start date and time is required',
+      invalid_type_error: 'Enter a valid start date and time',
     }),
     endDateTime: z.date({
       required_error: 'End date and time is required',
+      invalid_type_error: 'Enter a valid end date and time',
     }),
     lateEntry: z.date().optional(),
   })
@@ -79,9 +87,9 @@ export function EventSchedule({
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      startDateTime: formData.startDateTime || defaultStart,
-      endDateTime: formData.endDateTime || defaultEnd,
-      lateEntry: formData.lateEntry || undefined,
+      startDateTime: toValidDate(formData.startDateTime) || defaultStart,
+      endDateTime: toValidDate(formData.endDateTime) || defaultEnd,
+      lateEntry: toValidDate(formData.lateEntry),
     },
   });
 
@@ -94,15 +102,17 @@ export function EventSchedule({
   // Handle date and time changes with proper form integration
   const handleStartDateChange = (date: Date | undefined) => {
     if (date) {
-      const currentStart = form.getValues('startDateTime');
+      const currentStart = toValidDate(form.getValues('startDateTime'));
       const newStart = new Date(date);
       // Preserve the time from current start
-      newStart.setHours(currentStart.getHours(), currentStart.getMinutes());
+      if (currentStart) {
+        newStart.setHours(currentStart.getHours(), currentStart.getMinutes());
+      }
       form.setValue('startDateTime', newStart, { shouldValidate: true });
 
       // If end date is before the new start date, update it
-      const endDate = form.getValues('endDateTime');
-      if (endDate < newStart) {
+      const endDate = toValidDate(form.getValues('endDateTime'));
+      if (!endDate || endDate < newStart) {
         const newEnd = addHours(newStart, 3);
         form.setValue('endDateTime', newEnd, { shouldValidate: true });
       }
@@ -111,17 +121,19 @@ export function EventSchedule({
 
   const handleEndDateChange = (date: Date | undefined) => {
     if (date) {
-      const currentEnd = form.getValues('endDateTime');
+      const currentEnd = toValidDate(form.getValues('endDateTime'));
       const newEnd = new Date(date);
       // Preserve the time from current end
-      newEnd.setHours(currentEnd.getHours(), currentEnd.getMinutes());
+      if (currentEnd) {
+        newEnd.setHours(currentEnd.getHours(), currentEnd.getMinutes());
+      }
       form.setValue('endDateTime', newEnd, { shouldValidate: true });
     }
   };
 
   const handleLateEntryDateChange = (date: Date | undefined) => {
     if (date) {
-      const currentLateEntry = form.getValues('lateEntry');
+      const currentLateEntry = toValidDate(form.getValues('lateEntry'));
       const newLateEntry = new Date(date);
       if (currentLateEntry) {
         // Preserve the time from current late entry
@@ -131,8 +143,10 @@ export function EventSchedule({
         );
       } else {
         // Use start time as default
-        const startTime = form.getValues('startDateTime');
-        newLateEntry.setHours(startTime.getHours(), startTime.getMinutes());
+        const startTime = toValidDate(form.getValues('startDateTime'));
+        if (startTime) {
+          newLateEntry.setHours(startTime.getHours(), startTime.getMinutes());
+        }
       }
       form.setValue('lateEntry', newLateEntry, { shouldValidate: true });
     } else {
@@ -142,6 +156,7 @@ export function EventSchedule({
 
   //Calculate duration correctly
   const calculateDuration = (startDate: Date, endDate: Date) => {
+    if (!isValidDate(startDate) || !isValidDate(endDate)) return '—';
     const diffInMs = endDate.getTime() - startDate.getTime();
     const diffInHours = diffInMs / (1000 * 60 * 60);
 
@@ -210,18 +225,21 @@ export function EventSchedule({
                     <FormControl>
                       <Input
                         type="time"
-                        value={format(field.value, 'HH:mm')}
+                        value={safeFormat(field.value, 'HH:mm')}
                         onChange={(e) => {
-                          const [hours, minutes] = e.target.value
-                            .split(':')
-                            .map(Number);
-                          const newStart = new Date(field.value);
-                          newStart.setHours(hours, minutes);
+                          // Empty/partial value while typing -> ignore, keep last valid date
+                          const newStart = applyTimeString(
+                            field.value,
+                            e.target.value
+                          );
+                          if (!newStart) return;
                           field.onChange(newStart);
 
                           // If end date is before the new start date, update it
-                          const endDate = form.getValues('endDateTime');
-                          if (endDate < newStart) {
+                          const endDate = toValidDate(
+                            form.getValues('endDateTime')
+                          );
+                          if (!endDate || endDate < newStart) {
                             const newEnd = addHours(newStart, 3);
                             form.setValue('endDateTime', newEnd, {
                               shouldValidate: true,
@@ -268,13 +286,13 @@ export function EventSchedule({
                     <FormControl>
                       <Input
                         type="time"
-                        value={format(field.value, 'HH:mm')}
+                        value={safeFormat(field.value, 'HH:mm')}
                         onChange={(e) => {
-                          const [hours, minutes] = e.target.value
-                            .split(':')
-                            .map(Number);
-                          const newEnd = new Date(field.value);
-                          newEnd.setHours(hours, minutes);
+                          const newEnd = applyTimeString(
+                            field.value,
+                            e.target.value
+                          );
+                          if (!newEnd) return;
                           field.onChange(newEnd);
                         }}
                       />
@@ -321,16 +339,13 @@ export function EventSchedule({
                     <FormControl>
                       <Input
                         type="time"
-                        value={field.value ? format(field.value, 'HH:mm') : ''}
+                        value={safeFormat(field.value, 'HH:mm')}
                         onChange={(e) => {
-                          if (field.value && e.target.value) {
-                            const [hours, minutes] = e.target.value
-                              .split(':')
-                              .map(Number);
-                            const newLateEntry = new Date(field.value);
-                            newLateEntry.setHours(hours, minutes);
-                            field.onChange(newLateEntry);
-                          }
+                          const newLateEntry = applyTimeString(
+                            field.value,
+                            e.target.value
+                          );
+                          if (newLateEntry) field.onChange(newLateEntry);
                         }}
                       />
                     </FormControl>
@@ -349,16 +364,16 @@ export function EventSchedule({
             <div className="space-y-1 text-sm">
               <p>
                 <strong>Start:</strong>{' '}
-                {format(form.watch('startDateTime'), 'PPP p')}
+                {safeFormat(form.watch('startDateTime'), 'PPP p', '—')}
               </p>
               <p>
                 <strong>End:</strong>{' '}
-                {format(form.watch('endDateTime'), 'PPP p')}
+                {safeFormat(form.watch('endDateTime'), 'PPP p', '—')}
               </p>
               {form.watch('lateEntry') && (
                 <p>
                   <strong>Late Entry Until:</strong>{' '}
-                  {format(form.watch('lateEntry')!, 'PPP p')}
+                  {safeFormat(form.watch('lateEntry'), 'PPP p', '—')}
                 </p>
               )}
               <p>
