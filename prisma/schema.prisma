@@ -4,8 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -193,73 +193,6 @@ enum VerificationStatus {
   REJECTED
 }
 
-// ─── Commission, staff, physical tickets, scanner (additive) ────────────────
-
-enum CommissionScope {
-  ORGANIZER
-  EVENT
-}
-
-// Where the commission applied to an order came from. Persisted on Order so
-// historical financial records never depend on today's settings.
-enum CommissionSource {
-  EVENT_RULE
-  ORGANIZER_RULE
-  ORGANIZER_LEGACY // OrganizerProfile.customPlatformFee (pre-rules override)
-  GENERAL
-}
-
-enum StaffRole {
-  MANAGER
-  SCANNER
-}
-
-enum StaffPermission {
-  VIEW_EVENTS
-  MANAGE_EVENTS
-  VIEW_ANALYTICS
-  MANAGE_TICKETS
-  SCAN_TICKETS
-  VIEW_CHECKIN_STATS
-  GENERATE_TICKETS
-}
-
-enum StaffStatus {
-  PENDING
-  ACTIVE
-  REVOKED
-}
-
-enum TicketSource {
-  ONLINE
-  ADMIN_PHYSICAL
-  ORGANIZER_PHYSICAL
-}
-
-enum TicketCodeFormat {
-  QR
-  BARCODE
-}
-
-enum TicketPrintDesign {
-  BRANDED
-  CODES_ONLY
-}
-
-enum GenerationBatchStatus {
-  PENDING_PAYMENT
-  READY
-  GENERATING
-  COMPLETED
-  FAILED
-  CANCELLED
-}
-
-enum ScannerMode {
-  INBUILT_ONLY
-  UNIVERSAL
-}
-
 // Models
 model Notification {
   id        String   @id @default(cuid())
@@ -439,13 +372,6 @@ model Order {
   paymentMethod String? // card, bank_transfer, etc.
   currency      String  @default("NGN")
 
-  // Commission snapshot (resolved once, when the order is created, and never
-  // recalculated). Null on legacy orders created before commission rules.
-  commissionBps     Int? // basis points: 1000 = 10.00%
-  commissionSource  CommissionSource?
-  commissionRuleId  String?
-  organizerProceeds Float? // totalAmount - platformFee, in naira
-
   // Processing lock to prevent concurrent completions
   processingLockAt DateTime?
   processedAt      DateTime?
@@ -456,7 +382,7 @@ model Order {
   @@index([buyerId])
   @@index([eventId])
   @@index([paymentStatus])
-  @@index([paystackId])
+   @@index([paystackId])
   @@index([processingLockAt])
 }
 
@@ -520,16 +446,6 @@ model User {
   voteOrders       VoteOrder[]
   votes            Vote[]
 
-  // Commission rules / staff / physical tickets (additive relations)
-  commissionRulesCreated CommissionRule[]                    @relation("CommissionRuleCreator")
-  commissionRulesUpdated CommissionRule[]                    @relation("CommissionRuleUpdater")
-  commissionRuleTargets  CommissionRuleOrganizer[]           @relation("CommissionRuleOrganizerUser")
-  staffMemberships       OrganizerStaff[]                    @relation("StaffUser")
-  staffInvitesOwned      OrganizerStaff[]                    @relation("StaffOrganizer")
-  generationBatches      TicketGenerationBatch[]             @relation("BatchOrganizer")
-  generationPayments     TicketGenerationPayment[]           @relation("GenerationPaymentOrganizer")
-  ticketGenerationPrefs  OrganizerTicketGenerationSettings[]
-
   @@map("users")
 }
 
@@ -578,21 +494,12 @@ model Ticket {
   transferredAt DateTime?
   usedAt        DateTime? // When ticket was scanned/used
 
-  // Physical / pre-generated ticket inventory
-  source     TicketSource           @default(ONLINE)
-  tokenHash  String?                @unique // SHA-256 of the opaque scan token (token itself is never stored)
-  batchId    String?
-  batch      TicketGenerationBatch? @relation(fields: [batchId], references: [id])
-  batchIndex Int?
-
   validations TicketValidation[]
 
-  @@unique([batchId, batchIndex])
   @@index([userId])
   @@index([ticketTypeId])
   @@index([status])
   @@index([orderId])
-  @@index([batchId, status])
 }
 
 model TicketType {
@@ -608,10 +515,9 @@ model TicketType {
   saleEndDate   DateTime?
   isRefundable  Boolean   @default(true)
 
-  eventId           String
-  event             Event                   @relation(fields: [eventId], references: [id])
-  tickets           Ticket[]
-  generationBatches TicketGenerationBatch[]
+  eventId String
+  event   Event    @relation(fields: [eventId], references: [id])
+  tickets Ticket[]
 
   @@index([eventId])
 }
@@ -825,10 +731,6 @@ model Event {
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   coverImageUrl    String?
-  // Optional social sharing thumbnail (falls back to coverImageUrl, then platform default)
-  shareImageUrl    String?
-  shareImageWidth  Int?
-  shareImageHeight Int?
   startDateTime    DateTime        @default(now())
   endDateTime      DateTime        @default(now())
   isFree           Boolean         @default(false)
@@ -867,12 +769,6 @@ model Event {
 
   // Fields for voting contests
   votingContest VotingContest?
-
-  commissionRules   CommissionRuleEvent[]
-  staffAssignments  OrganizerStaffEvent[]
-  generationBatches TicketGenerationBatch[]
-  scannerSettings   EventScannerSettings?
-  ticketGenSettings OrganizerTicketGenerationSettings[]
 
   @@index([title])
   @@index([publishedStatus])
@@ -1205,241 +1101,4 @@ model EmailLog {
   @@index([toEmail])
   @@index([orderId])
   @@index([messageId])
-}
-
-// ─── Commission rules ───────────────────────────────────────────────────────
-// Precedence (resolved in src/lib/commission-service.ts):
-//   1. active EVENT rule  2. active ORGANIZER rule  3. legacy organizer fee  4. general
-model CommissionRule {
-  id            String          @id @default(cuid())
-  name          String?
-  scope         CommissionScope
-  percentageBps Int // 0..10000 (basis points)
-  startsAt      DateTime? // null = effective immediately
-  endsAt        DateTime? // null = never expires
-  isActive      Boolean         @default(true)
-  note          String?
-
-  createdById String?
-  createdBy   User?   @relation("CommissionRuleCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedById String?
-  updatedBy   User?   @relation("CommissionRuleUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  organizers CommissionRuleOrganizer[]
-  events     CommissionRuleEvent[]
-
-  @@index([scope, isActive])
-  @@index([startsAt, endsAt])
-}
-
-model CommissionRuleOrganizer {
-  id          String         @id @default(cuid())
-  ruleId      String
-  rule        CommissionRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
-  organizerId String
-  organizer   User           @relation("CommissionRuleOrganizerUser", fields: [organizerId], references: [id], onDelete: Cascade)
-  createdAt   DateTime       @default(now())
-
-  @@unique([ruleId, organizerId])
-  @@index([organizerId])
-}
-
-model CommissionRuleEvent {
-  id        String         @id @default(cuid())
-  ruleId    String
-  rule      CommissionRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
-  eventId   String
-  event     Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  createdAt DateTime       @default(now())
-
-  @@unique([ruleId, eventId])
-  @@index([eventId])
-}
-
-// ─── Organizer staff ────────────────────────────────────────────────────────
-// Scoped to ONE organizer. Never changes User.role / User.subRole.
-model OrganizerStaff {
-  id          String            @id @default(cuid())
-  organizerId String
-  organizer   User              @relation("StaffOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
-  userId      String? // null until an invited, not-yet-registered person accepts
-  user        User?             @relation("StaffUser", fields: [userId], references: [id], onDelete: Cascade)
-  email       String // lower-cased
-  role        StaffRole
-  permissions StaffPermission[] @default([])
-  allEvents   Boolean           @default(true)
-  status      StaffStatus       @default(PENDING)
-
-  inviteTokenHash String?   @unique
-  inviteExpiresAt DateTime?
-  invitedById     String?
-  invitedAt       DateTime  @default(now())
-  lastInvitedAt   DateTime  @default(now())
-  acceptedAt      DateTime?
-  revokedAt       DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  events OrganizerStaffEvent[]
-
-  @@unique([organizerId, email])
-  @@index([userId, status])
-  @@index([organizerId, status])
-}
-
-model OrganizerStaffEvent {
-  id      String         @id @default(cuid())
-  staffId String
-  staff   OrganizerStaff @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  eventId String
-  event   Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  @@unique([staffId, eventId])
-  @@index([eventId])
-}
-
-// ─── Physical ticket generation ─────────────────────────────────────────────
-model TicketGenerationPricingTier {
-  id          String   @id @default(cuid())
-  label       String?
-  minQuantity Int
-  maxQuantity Int? // null = no upper bound
-  feeKobo     Int // 0 = free
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  updatedById String?
-
-  payments TicketGenerationPayment[]
-  batches  TicketGenerationBatch[]
-
-  @@index([isActive, minQuantity])
-}
-
-model TicketGenerationBatch {
-  id           String       @id @default(cuid())
-  eventId      String
-  event        Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  organizerId  String // the event owner the batch is billed to
-  organizer    User         @relation("BatchOrganizer", fields: [organizerId], references: [id])
-  createdById  String // who pressed "generate" (organizer or staff)
-  ticketTypeId String
-  ticketType   TicketType   @relation(fields: [ticketTypeId], references: [id])
-  source       TicketSource @default(ORGANIZER_PHYSICAL)
-
-  quantity       Int
-  codeFormat     TicketCodeFormat  @default(QR)
-  design         TicketPrintDesign @default(BRANDED)
-  ticketsPerPage Int               @default(4)
-  showSerial     Boolean           @default(true) // codes-only: print small serial under each code
-  organizerLabel String? // optional organizer branding text
-
-  status GenerationBatchStatus @default(PENDING_PAYMENT)
-
-  pricingTierId String?
-  pricingTier   TicketGenerationPricingTier? @relation(fields: [pricingTierId], references: [id], onDelete: SetNull)
-  feeKobo       Int                          @default(0)
-  currency      String                       @default("NGN")
-
-  inventoryReserved Boolean   @default(false)
-  partSize          Int       @default(500)
-  partsTotal        Int       @default(0)
-  partsDone         Int       @default(0)
-  lockedUntil       DateTime?
-  lastError         String?
-  completedAt       DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  tickets Ticket[]
-  files   TicketGenerationFile[]
-  payment TicketGenerationPayment?
-
-  @@index([organizerId, createdAt])
-  @@index([eventId, createdAt])
-  @@index([status, updatedAt])
-}
-
-model TicketGenerationFile {
-  id        String                @id @default(cuid())
-  batchId   String
-  batch     TicketGenerationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  partIndex Int
-  fromIndex Int // inclusive batchIndex
-  toIndex   Int // exclusive
-  fileKey   String? // UploadThing key (private file)
-  bytes     Int                   @default(0)
-  createdAt DateTime              @default(now())
-
-  @@unique([batchId, partIndex])
-}
-
-model TicketGenerationPayment {
-  id          String                @id @default(cuid())
-  batchId     String                @unique
-  batch       TicketGenerationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  organizerId String
-  organizer   User                  @relation("GenerationPaymentOrganizer", fields: [organizerId], references: [id])
-  eventId     String
-  reference   String                @unique // Paystack reference
-
-  quantity           Int
-  pricingTierId      String?
-  pricingTier        TicketGenerationPricingTier? @relation(fields: [pricingTierId], references: [id], onDelete: SetNull)
-  pricingTierLabel   String? // snapshot of the tier label/range at purchase time
-  amountKobo         Int
-  currency           String                       @default("NGN")
-  status             PaymentStatus                @default(PENDING)
-  verifiedAmountKobo Int?
-  paidAt             DateTime?
-  failureReason      String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([organizerId, createdAt])
-  @@index([eventId])
-  @@index([status, createdAt])
-}
-
-// Organizer defaults (eventId null) and optional per-event overrides.
-model OrganizerTicketGenerationSettings {
-  id             String            @id @default(cuid())
-  organizerId    String
-  organizer      User              @relation(fields: [organizerId], references: [id], onDelete: Cascade)
-  eventId        String? // null = organizer-wide default
-  event          Event?            @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  scopeKey       String // eventId or "DEFAULT" — makes (organizer, scope) unique even when eventId is null
-  codeFormat     TicketCodeFormat  @default(QR)
-  design         TicketPrintDesign @default(BRANDED)
-  ticketsPerPage Int               @default(4)
-  showSerial     Boolean           @default(true)
-  organizerLabel String?
-  updatedAt      DateTime          @updatedAt
-
-  @@unique([organizerId, scopeKey])
-}
-
-model EventScannerSettings {
-  id          String      @id @default(cuid())
-  eventId     String      @unique
-  event       Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  mode        ScannerMode @default(UNIVERSAL)
-  updatedById String?
-  updatedAt   DateTime    @updatedAt
-  createdAt   DateTime    @default(now())
-}
-
-// Fixed-window rate limiting shared by all serverless instances (see src/lib/rate-limit.ts).
-model RateLimitBucket {
-  key         String   @id
-  windowStart DateTime
-  count       Int      @default(0)
-
-  @@index([windowStart])
 }
