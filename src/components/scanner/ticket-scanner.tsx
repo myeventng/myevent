@@ -22,7 +22,9 @@ import {
   SwitchCamera,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { validateTicket } from '@/actions/ticket.actions';
+import { validateTicket, getScanSession } from '@/actions/ticket.actions';
+
+type Channel = 'CAMERA' | 'KEYBOARD';
 
 interface TicketScannerProps {
   eventId: string;
@@ -79,6 +81,21 @@ export function TicketScanner({
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
 
   const audioContextRef = useRef<AudioContext | null>(null);
+  // Server-issued, channel-bound scan sessions (re-requested shortly before expiry or on rejection).
+  const sessionsRef = useRef<Partial<Record<Channel, { token: string; expiresAt: number }>>>({});
+
+  const ensureSession = async (channel: Channel, force = false): Promise<string | null> => {
+    const cur = sessionsRef.current[channel];
+    if (!force && cur && cur.expiresAt - Date.now() > 60_000) return cur.token;
+    const res = await getScanSession(eventId, channel);
+    if (!res.success || !res.data) {
+      delete sessionsRef.current[channel];
+      toast.error(res.message ?? 'Scanning is not available');
+      return null;
+    }
+    sessionsRef.current[channel] = { token: res.data.token, expiresAt: res.data.expiresAt };
+    return res.data.token;
+  };
 
   const playSound = (type: 'success' | 'error') => {
     try {
@@ -167,11 +184,18 @@ export function TicketScanner({
     setCameraError('Failed to scan QR code. Please ensure proper lighting and try again.');
   };
 
-  const validateScannedTicket = async (ticketId: string) => {
+  const validateScannedTicket = async (ticketId: string, channel: Channel = 'CAMERA') => {
     setIsProcessing(true);
 
     try {
-      const result = await validateTicket(ticketId, eventId);
+      let token = await ensureSession(channel);
+      if (!token) return;
+      let result = await validateTicket(ticketId, eventId, token);
+      if (result.outcome === 'BAD_SESSION') {
+        token = await ensureSession(channel, true);
+        if (!token) return;
+        result = await validateTicket(ticketId, eventId, token);
+      }
       const scanResult: ScanResult = {
         ...result,
         message: result.message ?? 'No message provided',
@@ -215,11 +239,14 @@ export function TicketScanner({
       } else {
         playSound('error');
         triggerErrorAnimation();
+        const used = result.outcome === 'ALREADY_USED';
+        const firstAt = result.firstScan?.at ? new Date(result.firstScan.at).toLocaleTimeString() : null;
         toast.error(
           <div className="flex items-center gap-2">
             <XCircle className="h-4 w-4 text-red-500" />
             <div>
-              <div className="font-medium">✗ INVALID TICKET</div>
+              <div className="font-medium">{used ? '✗ ALREADY USED — DO NOT ADMIT' : '✗ INVALID TICKET'}</div>
+              {used && firstAt && <div className="text-sm text-muted-foreground">First scanned at {firstAt}{result.firstScan?.by ? ` by ${result.firstScan.by}` : ''}</div>}
               <div className="text-sm text-muted-foreground">{scanResult.message}</div>
             </div>
           </div>,
@@ -264,7 +291,7 @@ export function TicketScanner({
       toast.error('Please enter a ticket ID');
       return;
     }
-    await validateScannedTicket(manualTicketId.trim());
+    await validateScannedTicket(manualTicketId.trim(), 'KEYBOARD');
   };
 
   const resetScanner = () => {

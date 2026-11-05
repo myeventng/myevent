@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { validateAndMeasureShareImage, ShareImageError } from "@/lib/share-image-server";
+import { resolveEventAccess, can } from "@/lib/staff/access";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import {
@@ -221,6 +223,9 @@ export async function createEvent(data: any): Promise<ActionResponse<any>> {
         data.publishedStatus === "DRAFT" ? "DRAFT" : "PENDING_REVIEW";
     }
 
+    // Optional social thumbnail: validated server-side (host, type, size, dimensions) before it is stored.
+    const share = data.shareImageUrl ? await validateAndMeasureShareImage(data.shareImageUrl) : null;
+
     // Create base event only - no type-specific nested data
     const newEvent = await prisma.event.create({
       data: {
@@ -229,6 +234,9 @@ export async function createEvent(data: any): Promise<ActionResponse<any>> {
         description: data.description,
         location: data.location,
         coverImageUrl: data.coverImageUrl,
+        shareImageUrl: share?.url ?? null,
+        shareImageWidth: share?.width ?? null,
+        shareImageHeight: share?.height ?? null,
         startDateTime: data.startDateTime,
         endDateTime: data.endDateTime,
         isFree:
@@ -294,6 +302,7 @@ export async function createEvent(data: any): Promise<ActionResponse<any>> {
       data: newEvent,
     };
   } catch (error) {
+    if (error instanceof ShareImageError) return { success: false, message: error.message };
     console.error("Error creating event:", error);
     return {
       success: false,
@@ -305,12 +314,21 @@ export async function createEvent(data: any): Promise<ActionResponse<any>> {
 // CORRECTED: Update event - only handles base event updates
 // Type-specific updates (voting contests, invite-only) are handled by specialized actions
 export async function updateEvent(data: any): Promise<ActionResponse<any>> {
-  const permissionCheck = await validateUserPermission();
+  // Organizer-scoped staff (Manager with MANAGE_EVENTS on this event) may edit event details.
+  // They can never change ownership, and anything they submit goes to review like an organizer's edit.
+  let staffEditing = false;
+  let permissionCheck = await validateUserPermission();
   if (!permissionCheck.success) {
-    return {
-      success: false,
-      message: permissionCheck.message,
-    };
+    const session = await auth.api.getSession({ headers: await headers() });
+    const access = session && typeof data?.id === "string"
+      ? await resolveEventAccess({ id: session.user.id, role: session.user.role as string }, data.id)
+      : null;
+    if (session && access?.via === "STAFF" && can(access, "MANAGE_EVENTS")) {
+      staffEditing = true;
+      permissionCheck = { success: true, userData: { userId: access.organizerId as string, isAdmin: false, canCreateEvents: true } } as typeof permissionCheck;
+    } else {
+      return { success: false, message: permissionCheck.message };
+    }
   }
 
   const { userId, isAdmin } = permissionCheck.userData!;
@@ -337,6 +355,16 @@ export async function updateEvent(data: any): Promise<ActionResponse<any>> {
         success: false,
         message: "You can only update events that you created",
       };
+    }
+    void staffEditing; // ownership is never taken from client input; `userId` above is the resolved organizer
+
+    // Share image: undefined = leave as is, null/"" = remove, string = replace (validated server-side).
+    let shareData: { shareImageUrl: string | null; shareImageWidth: number | null; shareImageHeight: number | null } | undefined;
+    if (data.shareImageUrl === null || data.shareImageUrl === "") {
+      shareData = { shareImageUrl: null, shareImageWidth: null, shareImageHeight: null };
+    } else if (typeof data.shareImageUrl === "string" && data.shareImageUrl !== existingEvent.shareImageUrl) {
+      const m = await validateAndMeasureShareImage(data.shareImageUrl);
+      shareData = { shareImageUrl: m.url, shareImageWidth: m.width, shareImageHeight: m.height };
     }
 
     // Generate new slug if needed
@@ -372,6 +400,7 @@ export async function updateEvent(data: any): Promise<ActionResponse<any>> {
         description: data.description,
         location: data.location,
         coverImageUrl: data.coverImageUrl,
+        ...(shareData ?? {}),
         startDateTime: data.startDateTime,
         endDateTime: data.endDateTime,
         isFree:
@@ -454,6 +483,7 @@ export async function updateEvent(data: any): Promise<ActionResponse<any>> {
       data: updatedEvent,
     };
   } catch (error) {
+    if (error instanceof ShareImageError) return { success: false, message: error.message };
     console.error("Error updating event:", error);
     return {
       success: false,

@@ -6,6 +6,10 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { getCachedSetting } from "@/lib/platform-settings";
+import { aggregateOrderFinancials } from "@/lib/commission-service";
+import { validateScan, getScannerMode } from "@/lib/scanner/validate";
+import { signScanSession, channelAllowed } from "@/lib/scanner/session";
+import { can, isOwnerOrAdmin, resolveEventAccess } from "@/lib/staff/access";
 interface TicketTypeInput {
   name: string;
   price: number;
@@ -66,34 +70,6 @@ function extractGuestInfo(order: any) {
   return null;
 }
 
-// Helper function to get platform fee percentage
-async function getPlatformFee(): Promise<number> {
-  const defaultFee = await getCachedSetting(
-    "financial.defaultPlatformFeePercentage",
-  );
-  return defaultFee || 5; // Default 5% if not set
-}
-
-// Helper function to get custom platform fee for specific organizer
-async function getOrganizerPlatformFee(organizerId: string): Promise<number> {
-  try {
-    const organizerProfile = await prisma.organizerProfile.findUnique({
-      where: { userId: organizerId },
-      select: { customPlatformFee: true },
-    });
-
-    if (organizerProfile?.customPlatformFee) {
-      return organizerProfile.customPlatformFee;
-    }
-
-    // Fall back to default platform fee
-    return await getPlatformFee();
-  } catch (error) {
-    console.error("Error fetching organizer platform fee:", error);
-    return await getPlatformFee();
-  }
-}
-
 // Helper function to get validation window settings
 async function getValidationWindows() {
   const [earlyEntry, lateEntry] = await Promise.all([
@@ -107,181 +83,60 @@ async function getValidationWindows() {
   };
 }
 
-// Validate ticket for event entry
+// Validate ticket for event entry.
+// All decision logic lives in src/lib/scanner/validate.ts (atomic check-in, permission
+// re-check on every scan, signed scan session, per-event scanner mode).
 export async function validateTicket(
   ticketId: string,
   eventId: string,
-): Promise<ActionResponse<any>> {
-  const headersList = await headers();
-  const session = await auth.api.getSession({
-    headers: headersList,
-  });
-
-  if (!session) {
-    return {
-      success: false,
-      message: "Not authenticated",
-    };
-  }
+  sessionToken: string,
+): Promise<ActionResponse<any> & { outcome?: string; alreadyUsed?: boolean; firstScan?: { at: string; by: string | null } }> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { success: false, message: "Not authenticated" };
 
   try {
-    // Check if user has permission to validate tickets for this event
-    const event = await prisma.event.findUnique({
-      where: { id: eventId },
-      include: {
-        user: true,
-      },
+    const result = await validateScan({
+      actor: { id: session.user.id, role: session.user.role as "ADMIN" | "USER" },
+      eventId,
+      code: ticketId,
+      sessionToken,
+      windows: await getValidationWindows(),
     });
-
-    if (!event) {
-      return {
-        success: false,
-        message: "Event not found",
-      };
+    if (result.success) {
+      revalidatePath("/dashboard/scanner");
+      revalidatePath("/admin/dashboard/events");
     }
-
-    // Only event organizer or admin can validate tickets
-    const isOwner = event.userId === session.user.id;
-    const isAdmin = session.user.role === "ADMIN";
-
-    if (!isOwner && !isAdmin) {
-      return {
-        success: false,
-        message:
-          "You do not have permission to validate tickets for this event",
-      };
-    }
-
-    // Find the ticket
-    const ticket = await prisma.ticket.findFirst({
-      where: {
-        ticketId: ticketId,
-        ticketType: {
-          eventId: eventId,
-        },
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
-          },
-        },
-        ticketType: {
-          include: {
-            event: {
-              select: {
-                id: true,
-                title: true,
-                startDateTime: true,
-                endDateTime: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!ticket) {
-      return {
-        success: false,
-        message: "Ticket not found or does not belong to this event",
-      };
-    }
-
-    // Check if ticket is valid status
-    if (ticket.status === "CANCELLED" || ticket.status === "REFUNDED") {
-      return {
-        success: false,
-        message: `Ticket is ${ticket.status.toLowerCase()} and cannot be used`,
-      };
-    }
-
-    // Get validation window settings from platform settings
-    const { earlyEntryHours, lateEntryHours } = await getValidationWindows();
-
-    // Check if event has started (allow entry from configured hours before start time)
-    const eventStart = new Date(ticket.ticketType.event.startDateTime);
-    const earlyEntryTime = new Date(
-      eventStart.getTime() - earlyEntryHours * 60 * 60 * 1000,
-    );
-    const now = new Date();
-
-    if (now < earlyEntryTime) {
-      return {
-        success: false,
-        message: `Event has not started yet. Entry allowed ${earlyEntryHours} hour(s) before start time.`,
-      };
-    }
-
-    // Check if event has ended (allow entry until configured hours after end time)
-    const eventEnd = new Date(ticket.ticketType.event.endDateTime);
-    const lateEntryTime = new Date(
-      eventEnd.getTime() + lateEntryHours * 60 * 60 * 1000,
-    );
-
-    if (now > lateEntryTime) {
-      return {
-        success: false,
-        message: `Event has ended and entry is no longer allowed after ${lateEntryHours} hour(s) post-event.`,
-      };
-    }
-
-    const wasAlreadyUsed = ticket.status === "USED";
-
-    // Mark ticket as used if not already used
-    if (!wasAlreadyUsed) {
-      await prisma.ticket.update({
-        where: { id: ticket.id },
-        data: {
-          status: "USED",
-          usedAt: new Date(),
-        },
-      });
-
-      // Log the validation
-      await prisma.ticketValidation.create({
-        data: {
-          ticketId: ticket.id,
-          validatedBy: session.user.id,
-          validatedAt: new Date(),
-          eventId: eventId,
-        },
-      });
-    }
-
-    revalidatePath("/dashboard/scanner");
-    revalidatePath("/admin/dashboard/events");
-
     return {
-      success: true,
-      message: wasAlreadyUsed
-        ? "Ticket was already used but entry is allowed"
-        : "Ticket validated successfully",
-      alreadyUsed: wasAlreadyUsed,
-      data: {
-        id: ticket.id,
-        ticketId: ticket.ticketId,
-        status: "USED",
-        user: ticket.user,
-        ticketType: {
-          name: ticket.ticketType.name,
-          price: ticket.ticketType.price,
-        },
-        purchasedAt: ticket.purchasedAt.toISOString(),
-        validatedAt: new Date().toISOString(),
-        validatedBy: session.user.name,
-      },
+      success: result.success,
+      message: result.message,
+      outcome: result.outcome,
+      alreadyUsed: result.outcome === "ALREADY_USED",
+      firstScan: result.firstScan,
+      data: result.ticket
+        ? { ticketId: result.ticket.serial, ticketType: { name: result.ticket.typeName }, user: result.ticket.holderName ? { name: result.ticket.holderName } : null, source: result.ticket.source, usedAt: result.ticket.usedAt }
+        : undefined,
     };
   } catch (error) {
     console.error("Error validating ticket:", error);
-    return {
-      success: false,
-      message: "Failed to validate ticket",
-    };
+    return { success: false, message: "Failed to validate ticket" };
   }
+}
+
+// Issue a short-lived, channel-bound scan session. The channel is checked against the
+// event's CURRENT scanner mode on the server before a session is handed out and again on every scan.
+export async function getScanSession(
+  eventId: string,
+  channel: "CAMERA" | "KEYBOARD",
+): Promise<ActionResponse<{ token: string; expiresAt: number; mode: "INBUILT_ONLY" | "UNIVERSAL" }>> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return { success: false, message: "Not authenticated" };
+  if (channel !== "CAMERA" && channel !== "KEYBOARD") return { success: false, message: "Invalid channel" };
+  const access = await resolveEventAccess({ id: session.user.id, role: session.user.role as "ADMIN" | "USER" }, eventId);
+  if (!can(access, "SCAN_TICKETS")) return { success: false, message: "You do not have permission to scan tickets for this event" };
+  const mode = await getScannerMode(eventId);
+  if (!channelAllowed(mode, channel)) return { success: false, message: "This event only accepts the in-built camera scanner" };
+  const { token, expiresAt } = signScanSession(session.user.id, eventId, channel);
+  return { success: true, data: { token, expiresAt, mode } };
 }
 
 // Get validation history for an event
@@ -315,10 +170,8 @@ export async function getTicketValidations(
       };
     }
 
-    const isOwner = event.userId === session.user.id;
-    const isAdmin = session.user.role === "ADMIN";
-
-    if (!isOwner && !isAdmin) {
+    const vAccess = await resolveEventAccess({ id: session.user.id, role: session.user.role as "ADMIN" | "USER" }, eventId);
+    if (!can(vAccess, "SCAN_TICKETS") && !can(vAccess, "VIEW_CHECKIN_STATS")) {
       return {
         success: false,
         message:
@@ -420,15 +273,14 @@ export async function getEventTicketStats(
       };
     }
 
-    const isOwner = event.userId === session.user.id;
-    const isAdmin = session.user.role === "ADMIN";
-
-    if (!isOwner && !isAdmin) {
+    const sAccess = await resolveEventAccess({ id: session.user.id, role: session.user.role as "ADMIN" | "USER" }, eventId);
+    if (!can(sAccess, "VIEW_CHECKIN_STATS")) {
       return {
         success: false,
         message: "You do not have permission to view stats for this event",
       };
     }
+    const canSeeFinancials = isOwnerOrAdmin(sAccess);
 
     // Get ticket statistics
     const ticketStats = await prisma.ticket.groupBy({
@@ -486,12 +338,10 @@ export async function getEventTicketStats(
 
     const netRevenue = totalRevenue - totalRefunded;
 
-    // Get platform fee from settings (either custom for organizer or default)
-    const platformFeePercentage = event.userId
-      ? await getOrganizerPlatformFee(event.userId)
-      : await getPlatformFee();
-
-    const platformFee = Math.round(netRevenue * (platformFeePercentage / 100));
+    // Commission comes from the snapshots persisted on each order — never re-derived from today's rates.
+    const eventFinancials = await aggregateOrderFinancials({ eventId: event.id });
+    const platformFee = eventFinancials.netFeeNaira;
+    const platformFeePercentage = eventFinancials.effectivePercent ?? 0;
     const organizerRevenue = netRevenue - platformFee;
 
     // Get ticket type breakdown
@@ -545,15 +395,11 @@ export async function getEventTicketStats(
               ? Math.round((usedTickets / totalTickets) * 100)
               : 0,
         },
-        revenue: {
-          totalRevenue,
-          totalRefunded,
-          netRevenue,
-          platformFee,
-          organizerRevenue,
-          platformFeePercentage,
-        },
-        ticketTypes: ticketTypeStats,
+        // Staff never receive financial figures; only the owner or an admin does.
+        revenue: canSeeFinancials
+          ? { totalRevenue, totalRefunded, netRevenue, platformFee, organizerRevenue, platformFeePercentage }
+          : null,
+        ticketTypes: canSeeFinancials ? ticketTypeStats : ticketTypeStats.map((t: any) => ({ ...t, revenue: undefined })),
         recentValidations: await prisma.ticketValidation.count({
           where: {
             eventId,
@@ -602,11 +448,6 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
         },
       },
     });
-
-    // Get organizer's custom platform fee or default
-    const platformFeePercentage = await getOrganizerPlatformFee(
-      session.user.id,
-    );
 
     // Calculate overall statistics
     let totalRevenue = 0;
@@ -657,7 +498,9 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
     );
 
     const netRevenue = totalRevenue - totalRefunded;
-    const platformFee = Math.round(netRevenue * (platformFeePercentage / 100));
+    const organizerFinancials = await aggregateOrderFinancials({ event: { userId: session.user.id } });
+    const platformFee = organizerFinancials.netFeeNaira;
+    const platformFeePercentage = organizerFinancials.effectivePercent ?? 0;
     const organizerEarnings = netRevenue - platformFee;
 
     return {
@@ -1623,9 +1466,6 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
   }
 
   try {
-    // Get platform fee percentage from settings
-    const platformFeePercentage = await getPlatformFee();
-
     // Get ticket status breakdown
     const ticketStats = await prisma.ticket.groupBy({
       by: ["status"],
@@ -1654,11 +1494,13 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
       _count: true,
     });
 
-    // Calculate platform fees using settings-based percentage
+    // Platform fees are the sum of per-order commission snapshots (historical orders keep their rate).
     const totalRevenue = revenueStats._sum.totalAmount || 0;
     const totalRefunded = refundStats._sum.totalAmount || 0;
     const netRevenue = totalRevenue - totalRefunded;
-    const platformFees = Math.round(netRevenue * (platformFeePercentage / 100));
+    const adminFinancials = await aggregateOrderFinancials({});
+    const platformFees = adminFinancials.netFeeNaira;
+    const platformFeePercentage = adminFinancials.effectivePercent ?? 0;
 
     // Get recent activity from settings (default to 30 days)
     const activityDays =

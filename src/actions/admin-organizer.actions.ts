@@ -7,7 +7,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { createNotification } from "@/actions/notification.actions";
 import { VerificationStatus } from "@/generated/prisma";
-import { getPlatformFee } from "@/lib/platform-settings";
+import { aggregateOrderFinancials } from "@/lib/commission-service";
 
 type UserWithOrganizer = Prisma.UserGetPayload<{
   include: { organizerProfile: true };
@@ -106,10 +106,6 @@ export async function getOrganizersWithAnalytics(): Promise<
   }
 
   try {
-    // Get platform fee percentage from settings
-    const platformFeePercentage = await getPlatformFee();
-    const platformFeeDecimal = platformFeePercentage / 100;
-
     // Get all organizers with their profiles
     const organizers = await prisma.user.findMany({
       where: {
@@ -209,8 +205,8 @@ export async function getOrganizersWithAnalytics(): Promise<
               )
             : undefined;
 
-        // Revenue breakdown - use dynamic platform fee
-        const platformFees = totalRevenue * platformFeeDecimal;
+        // Revenue breakdown - sum of per-order commission snapshots (event/organizer/general rates as they were)
+        const platformFees = (await aggregateOrderFinancials({ event: { userId: organizer.id } })).netFeeNaira;
         const refunds = 0; // Would need to calculate from refunded orders
         const netEarnings = totalRevenue - platformFees - refunds;
 
@@ -305,10 +301,6 @@ export async function getOrganizerById(
   }
 
   try {
-    // Get platform fee percentage from settings
-    const platformFeePercentage = await getPlatformFee();
-    const platformFeeDecimal = platformFeePercentage / 100;
-
     const organizer = await prisma.user.findUnique({
       where: {
         id: organizerId,
@@ -402,8 +394,8 @@ export async function getOrganizerById(
         ? new Date(Math.max(...events.map((e) => e.startDateTime.getTime())))
         : undefined;
 
-    // Use dynamic platform fee
-    const platformFees = totalRevenue * platformFeeDecimal;
+    // Sum of per-order commission snapshots
+    const platformFees = (await aggregateOrderFinancials({ event: { userId: organizerId } })).netFeeNaira;
     const completedPayouts = organizer.payouts.filter(
       (p) => p.status === "COMPLETED",
     );

@@ -13,7 +13,9 @@ import {
 } from "@/generated/prisma";
 import { createTicketNotification } from "@/actions/notification.actions";
 import { emailService } from "@/lib/email-service";
-import { getCachedSetting, getPlatformFee } from "@/lib/platform-settings";
+import { getCachedSetting } from "@/lib/platform-settings";
+import { calculateCommissionForAmount, orderCommissionSnapshot } from "@/lib/commission-service";
+import { getCommissionVisibility } from "@/lib/commission-visibility";
 
 interface ActionResponse<T> {
   success: boolean;
@@ -69,12 +71,6 @@ const getPaystackConfig = async () => {
     publicKey: publicKey || process.env.PAYSTACK_PUBLIC_KEY,
     baseUrl: "https://api.paystack.co",
   };
-};
-
-// Calculate platform fee
-const calculatePlatformFee = async (amount: number): Promise<number> => {
-  const feePercentage = await getPlatformFee();
-  return Math.round((amount * feePercentage) / 100);
 };
 
 // Validate guest purchase data
@@ -208,7 +204,14 @@ export async function initiateOrder(
       }
     }
 
-    const platformFee = await calculatePlatformFee(totalAmount);
+    // Resolve once (event rule > organizer rule > general) and persist the snapshot on the order.
+    const commission = await calculateCommissionForAmount({
+      eventId: event.id,
+      organizerId: event.userId,
+      amountNaira: totalAmount,
+    });
+    const commissionSnapshot = orderCommissionSnapshot(commission);
+    const platformFee = commissionSnapshot.platformFee;
     const paystackReference = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // Create order with guest information
@@ -216,7 +219,7 @@ export async function initiateOrder(
       paystackId: paystackReference,
       totalAmount,
       quantity: totalQuantity,
-      platformFee,
+      ...commissionSnapshot,
       paymentStatus: "PENDING",
       eventId: data.eventId,
       purchaseNotes: JSON.stringify({
@@ -298,7 +301,8 @@ export async function initiateOrder(
         paymentUrl: paystackData.data.authorization_url,
         reference: paystackReference,
         amount: totalAmount,
-        platformFee,
+        // The commission is always charged/recorded; visibility only controls display.
+        ...((await getCommissionVisibility()).checkout ? { platformFee, commissionPercent: commission.bps / 100 } : {}),
       },
     };
   } catch (error) {

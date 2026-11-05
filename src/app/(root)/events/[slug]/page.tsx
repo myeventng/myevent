@@ -27,6 +27,7 @@ import { EventReviews } from "@/components/events/clientside/event-reviews";
 import { ShareEventButton } from "@/components/events/clientside/share-event-button";
 import { EventType } from "@/generated/prisma";
 import Image from "next/image";
+import { SITE_URL, resolveShareImage, truncateForShare } from "@/lib/share-image";
 
 interface EventPageProps {
   params: Promise<{
@@ -71,23 +72,39 @@ export async function generateMetadata({ params }: EventPageProps) {
     description = `Vote for your favorite contestant in ${event.title}! ${event.votingContest.contestants?.length || 0} contestants competing.`;
   }
 
+  // Server-side, absolute-URL social metadata (WhatsApp/Facebook/X/LinkedIn crawlers don't run JS).
+  const share = resolveShareImage(event);
+  const canonical = `${SITE_URL}/events/${event.slug ?? slug}`;
+  const shareDescription = truncateForShare(description, 200);
+  const pageTitle = `${event.title} ${isVotingContest ? "| Voting Contest" : ""} | ${format(
+    new Date(event.startDateTime),
+    "MMM d, yyyy",
+  )}`;
+  const ogImage = {
+    url: share.url,
+    alt: event.title,
+    ...(share.width && share.height ? { width: share.width, height: share.height } : {}),
+    ...(share.type ? { type: share.type } : {}),
+  };
+
   return {
-    title: `${event.title} ${isVotingContest ? "| Voting Contest" : ""} | ${format(
-      new Date(event.startDateTime),
-      "MMM d, yyyy",
-    )}`,
-    description,
+    title: pageTitle,
+    description: shareDescription,
+    alternates: { canonical },
     openGraph: {
       title: event.title,
-      description,
-      images: event.coverImageUrl ? [event.coverImageUrl] : [],
+      description: shareDescription,
+      url: canonical,
+      siteName: "Myevent.com.ng",
+      locale: "en_NG",
+      images: [ogImage],
       type: "website",
     },
     twitter: {
       card: "summary_large_image",
       title: event.title,
-      description,
-      images: event.coverImageUrl ? [event.coverImageUrl] : [],
+      description: shareDescription,
+      images: [share.url],
     },
     other: {
       // Add structured data for events

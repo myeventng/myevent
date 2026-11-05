@@ -23,6 +23,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 const formSchema = z.object({
   coverImageUrl: z.string().min(1, 'Cover image is required'),
   imageUrls: z.array(z.string()),
+  shareImageUrl: z.string().optional().nullable(),
   embeddedVideoUrl: z.string().url().optional().or(z.literal('')),
 });
 
@@ -43,12 +44,14 @@ export function EventMediaUpload({
 }: EventMediaUploadProps) {
   const [coverFiles, setCoverFiles] = useState<File[]>([]);
   const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
+  const [shareFiles, setShareFiles] = useState<File[]>([]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       coverImageUrl: formData.coverImageUrl || '',
       imageUrls: Array.isArray(formData.imageUrls) ? formData.imageUrls : [],
+      shareImageUrl: formData.shareImageUrl || '',
       embeddedVideoUrl: formData.embeddedVideoUrl || '',
     },
   });
@@ -120,6 +123,47 @@ export function EventMediaUpload({
                 <FormDescription>
                   Upload a high-quality cover image for your event (recommended
                   size: 1200x630 pixels).
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="shareImageUrl"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Social Sharing Thumbnail (optional)</FormLabel>
+
+                <Alert className="mb-4">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Usage:</strong> The preview image shown when your
+                    event link is shared on WhatsApp, Facebook, X (Twitter),
+                    LinkedIn and Telegram.
+                    <br />
+                    <strong>Recommended:</strong> 1200x630 pixels (1.91:1),
+                    JPG or PNG, under 4MB. Keep key text and faces in the centre
+                    so nothing is cropped.
+                    <br />
+                    If you skip this, your cover image is used, then the
+                    platform default.
+                  </AlertDescription>
+                </Alert>
+
+                <FormControl>
+                  <FileUploader
+                    onFieldChange={(v) => field.onChange(Array.isArray(v) ? v[0] ?? '' : v)}
+                    imageUrls={field.value || ''}
+                    setFiles={setShareFiles}
+                    endpoint="eventShareImage"
+                  />
+                </FormControl>
+                <FormDescription>
+                  Use the remove button on the image to clear it and fall back
+                  to the cover image. Small or wrongly-shaped images are
+                  rejected when the event is saved.
                 </FormDescription>
                 <FormMessage />
               </FormItem>

@@ -17,6 +17,8 @@ import {
   Vote,
   Shield,
   Armchair,
+  Printer,
+  ScanLine,
 } from 'lucide-react';
 import {
   useReactTable,
@@ -461,6 +463,16 @@ export function OrganizerEventsTable({
             <Button variant="ghost" size="sm" asChild>
               <Link href={`/dashboard/events/${event.id}/edit`}>
                 <Edit className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={`/dashboard/events/${event.id}/tickets/generate`} title="Generate physical tickets" aria-label="Generate physical tickets">
+                <Printer className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={`/dashboard/events/${event.id}/scanner-settings`} title="Scanner settings" aria-label="Scanner settings">
+                <ScanLine className="h-4 w-4" />
               </Link>
             </Button>
           </div>

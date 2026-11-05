@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
+import { getGeneralCommissionBps, bpsToPercent, BOOTSTRAP_GENERAL_COMMISSION_PERCENT } from '@/lib/commission-service';
 import { testEmailProvider, type EmailProviderType } from '@/lib/email/email-provider';
 
 interface ActionResponse<T> {
@@ -74,7 +75,8 @@ const defaultSettings: PlatformSettings = {
     allowRegistrations: true,
   },
   financial: {
-    defaultPlatformFeePercentage: 5,
+    // Read-only mirror; the authoritative value is edited via commission-settings.actions.ts
+    defaultPlatformFeePercentage: BOOTSTRAP_GENERAL_COMMISSION_PERCENT,
     minimumWithdrawal: 1000,
     maximumRefundDays: 30,
     autoApproveRefunds: false,
@@ -116,7 +118,6 @@ function buildFlatSettings(settings: PlatformSettings) {
     { key: 'general.maintenanceMode', value: settings.general.maintenanceMode },
     { key: 'general.allowRegistrations', value: settings.general.allowRegistrations },
     // Financial
-    { key: 'financial.defaultPlatformFeePercentage', value: settings.financial.defaultPlatformFeePercentage },
     { key: 'financial.minimumWithdrawal', value: settings.financial.minimumWithdrawal },
     { key: 'financial.maximumRefundDays', value: settings.financial.maximumRefundDays },
     { key: 'financial.autoApproveRefunds', value: settings.financial.autoApproveRefunds },
@@ -187,6 +188,8 @@ export async function getPlatformSettings(): Promise<ActionResponse<PlatformSett
 
     const rows = await prisma.platformSettings.findMany();
     const structured = populateFromDb(rows, defaultSettings);
+    // One authoritative general commission, resolved by the commission service.
+    structured.financial.defaultPlatformFeePercentage = bpsToPercent(await getGeneralCommissionBps());
 
     return { success: true, data: scrubSecrets(structured) };
   } catch (error) {

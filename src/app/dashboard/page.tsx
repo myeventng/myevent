@@ -22,7 +22,7 @@ async function getInitialData() {
     console.error("Error fetching initial analytics data:", error);
     return {
       initialStats: null,
-      platformFee: 5, // Default fallback
+      platformFee: undefined, // no hardcoded rate; client shows the server-provided value only
     };
   }
 }

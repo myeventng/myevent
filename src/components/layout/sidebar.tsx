@@ -35,6 +35,10 @@ import {
   CreditCard,
   ShoppingCart, // Added ShoppingCart icon for orders
   Mail,
+  Percent,
+  Printer,
+  UserPlus,
+  History,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -249,6 +253,16 @@ export function Sidebar({
           href: '/admin/dashboard/payouts',
           icon: <CreditCard className="w-4 h-4" />,
         },
+        {
+          title: 'Commission Management',
+          href: '/admin/dashboard/commissions',
+          icon: <Percent className="w-4 h-4" />,
+        },
+        {
+          title: 'Ticket Generation Payments',
+          href: '/admin/dashboard/ticket-generation-payments',
+          icon: <Printer className="w-4 h-4" />,
+        },
       ],
     },
     {
@@ -369,6 +383,27 @@ export function Sidebar({
       title: 'Scanner',
       href: '/dashboard/scanner',
       icon: <ScanQrCode className="w-5 h-5" />,
+    },
+    {
+      title: 'Physical Tickets',
+      icon: <Printer className="w-5 h-5" />,
+      children: [
+        {
+          title: 'Generation History',
+          href: '/dashboard/ticket-generation',
+          icon: <History className="w-4 h-4" />,
+        },
+        {
+          title: 'Default Settings',
+          href: '/dashboard/settings/ticket-generation',
+          icon: <Settings className="w-4 h-4" />,
+        },
+      ],
+    },
+    {
+      title: 'Staff',
+      href: '/dashboard/settings/staff',
+      icon: <UserPlus className="w-5 h-5" />,
     },
     {
       title: 'Venues',

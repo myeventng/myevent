@@ -44,7 +44,7 @@ export default async function AdminDashboardPage() {
   const isUserSuperAdmin = isSuperAdmin(session.user);
 
   // Fetch platform fee percentage
-  let platformFeePercentage = 5;
+  let platformFeePercentage = 0;
   try {
     platformFeePercentage = await getPlatformFee();
   } catch (error) {

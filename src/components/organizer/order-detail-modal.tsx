@@ -1,5 +1,6 @@
 // src/components/organizer/order-detail-modal.tsx
 'use client';
+import { useCommissionVisibility } from '@/hooks/use-commission-visibility';
 
 import { useState } from 'react';
 import { format } from 'date-fns';
@@ -101,6 +102,7 @@ export function OrderDetailModal({
     userRole,
     userSubRole,
 }: OrderDetailModalProps) {
+    const { organizerDashboard: showCommission } = useCommissionVisibility();
     const [refundNotes, setRefundNotes] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -458,7 +460,7 @@ export function OrderDetailModal({
                                 <p className="font-medium">{formatCurrency(order.totalAmount)}</p>
                             </div>
 
-                            {order.platformFee > 0 && (
+                            {showCommission && order.platformFee > 0 && (
                                 <>
                                     <Separator />
                                     <div className="flex justify-between items-center">

@@ -56,9 +56,14 @@ export async function getPaystackConfig() {
   };
 }
 
+/**
+ * General (default) commission as a percentage. Delegates to the commission
+ * service so there is exactly one place that knows the default; it is NOT cached
+ * here so admin changes apply immediately.
+ */
 export async function getPlatformFee(): Promise<number> {
-  const fee = await getCachedSetting('financial.defaultPlatformFeePercentage');
-  return fee || 10; // Default 10%
+  const { getGeneralCommissionBps, bpsToPercent } = await import('@/lib/commission-service');
+  return bpsToPercent(await getGeneralCommissionBps());
 }
 
 export async function isMaintenanceMode(): Promise<boolean> {

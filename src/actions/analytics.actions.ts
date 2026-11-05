@@ -603,7 +603,8 @@ export async function getRevenueAnalytics(): Promise<
       ]);
 
     const totalRevenue = revenueData._sum.totalAmount || 0;
-    const platformFees = revenueData._sum.platformFee || totalRevenue * 0.05; // Default 5%
+    // Persisted per-order snapshots only; a 0% (or zero-fee) period must stay 0, never an invented default.
+    const platformFees = revenueData._sum.platformFee ?? 0;
     const organizerEarnings = totalRevenue - platformFees;
     const refundedAmount = refundedData._sum.totalAmount || 0;
 
@@ -638,7 +639,7 @@ async function getMonthlyRevenueData(): Promise<ActionResponse<any[]>> {
       SELECT 
         DATE_TRUNC('month', "createdAt") as month,
         SUM("totalAmount") as revenue,
-        SUM(COALESCE("platformFee", "totalAmount" * 0.05)) as fees
+        SUM("platformFee") as fees
       FROM "Order"
       WHERE "createdAt" >= ${startDate} AND "paymentStatus" = 'COMPLETED'
       GROUP BY DATE_TRUNC('month', "createdAt")

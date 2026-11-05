@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     siteName: 'Myevent.com.ng',
     images: [
       {
-        url: '/og-image.jpg', // Ensure this exists in public/
+        url: '/og-default.jpg',
         width: 1200,
         height: 630,
         alt: 'Myevent.com.ng - Nigerian Event Ticketing Platform',
@@ -49,7 +49,7 @@ export const metadata: Metadata = {
     title: 'Myevent.com.ng | Nigerian Event Ticketing Platform',
     description:
       'Buy and sell event tickets in Nigeria with Myevent.com.ng. Manage RSVPs, check-ins, and more.',
-    images: ['/og-image.jpg'],
+    images: ['/og-default.jpg'],
     site: '@myeventng',
   },
   authors: [

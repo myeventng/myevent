@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 type UploadEndpoint =
   | 'eventImage'
   | 'eventCover'
+  | 'eventShareImage'
   | 'profileImage'
   | 'blogImage'
   | 'venueImage'

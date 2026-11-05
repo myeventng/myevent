@@ -254,7 +254,7 @@ async function calculateOrganizerPayout(organizerId: string) {
 
   const grossAmount = orders.reduce((sum, order) => sum + order.totalAmount, 0);
   const platformFee = orders.reduce(
-    (sum, order) => sum + (order.platformFee || order.totalAmount * 0.05),
+    (sum, order) => sum + (order.platformFee ?? 0),
     0,
   );
   const netAmount = grossAmount - platformFee;

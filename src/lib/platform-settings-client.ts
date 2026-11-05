@@ -1,10 +1,5 @@
 // /lib/platform-settings-client.ts
 
-export function getPlatformFee(): number {
-  // Return default platform fee percentage for client-side calculations
-  return 10; // Default 10%
-}
-
 export function getDefaultPaystackConfig() {
   return {
     publicKey: process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || "",
@@ -29,7 +24,6 @@ export async function fetchPlatformSettings() {
   } catch (error) {
     console.error("Error fetching platform settings:", error);
     return {
-      defaultPlatformFeePercentage: 10,
       maintenanceMode: false,
       paystackPublicKey: "",
       paystackSecretKey: "",

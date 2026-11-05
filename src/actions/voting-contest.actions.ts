@@ -7,7 +7,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { VotingType, ContestantStatus, EventType } from "@/generated/prisma";
 import { createNotification } from "@/actions/notification.actions";
-import { getPlatformFee } from "@/lib/platform-settings";
+import { calculateCommissionForAmount, orderCommissionSnapshot } from "@/lib/commission-service";
 
 interface ActionResponse<T> {
   success: boolean;
@@ -861,9 +861,14 @@ export async function purchaseVotePackage(data: {
       return { success: false, message: "Voting has ended" };
     }
 
-    // Get platform fee percentage
-    const platformFeePercentage = await getPlatformFee();
-    const platformFee = (votePackage.price * platformFeePercentage) / 100;
+    // Commission resolved through the shared service (event > organizer > general), stored on the order.
+    const platformFee = orderCommissionSnapshot(
+      await calculateCommissionForAmount({
+        eventId: contest.eventId,
+        organizerId: contest.event.userId,
+        amountNaira: votePackage.price,
+      }),
+    ).platformFee;
 
     // Create a unique reference for Paystack
     const reference = `vote_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
@@ -1104,9 +1109,13 @@ export async function purchaseVoteWithDefaultPrice(data: {
       return { success: false, message: "Voting has ended" };
     }
 
-    // Get platform fee percentage
-    const platformFeePercentage = await getPlatformFee();
-    const platformFee = (data.amount * platformFeePercentage) / 100;
+    const platformFee = orderCommissionSnapshot(
+      await calculateCommissionForAmount({
+        eventId: contest.eventId,
+        organizerId: contest.event.userId,
+        amountNaira: data.amount,
+      }),
+    ).platformFee;
 
     // Create a unique reference for Paystack
     const reference = `vote_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;

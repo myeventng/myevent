@@ -2,7 +2,13 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   turbopack: {},
-  serverExternalPackages: ['bcryptjs'],
+  // pdfkit reads its font metric files from disk and bwip-js ships native-ish assets: keep both
+  // un-bundled and make sure the files are traced into the serverless functions on Vercel.
+  serverExternalPackages: ['bcryptjs', 'pdfkit', 'bwip-js'],
+  outputFileTracingIncludes: {
+    '/api/**/*': ['./node_modules/pdfkit/js/data/**/*', './public/logo-black.png'],
+    '/dashboard/**/*': ['./node_modules/pdfkit/js/data/**/*', './public/logo-black.png'],
+  },
   images: {
     remotePatterns: [
       {

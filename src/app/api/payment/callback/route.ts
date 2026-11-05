@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { completeOrder } from '@/actions/order.actions';
 import { verifyVotePayment } from '@/actions/voting-contest.actions';
 import crypto from 'crypto';
+import { isGenerationReference, verifyAndSettleGeneration } from '@/lib/ticket-generation/paystack';
 
 // CRITICAL: Process references to prevent duplicate processing
 const processingReferences = new Map<string, Promise<any>>();
@@ -48,6 +49,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Physical-ticket generation fee: verify with Paystack server-side, settle once, then return to the generator.
+    if (await isGenerationReference(reference)) {
+      const settled = await verifyAndSettleGeneration(reference).catch(() => null);
+      const pay = await prisma.ticketGenerationPayment.findUnique({ where: { reference }, select: { eventId: true, batchId: true } });
+      const target = pay ? `/dashboard/events/${pay.eventId}/tickets/generate?batch=${pay.batchId}&payment=${settled?.ok ? 'success' : 'pending'}` : '/dashboard';
+      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}${target}`);
+    }
+
     // Use lock to prevent duplicate processing
     const result = await processOrderWithLock(reference, async () => {
       // First, check if it's a vote order

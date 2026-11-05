@@ -47,6 +47,7 @@ import {
   getEventTicketStats,
 } from "@/actions/ticket.actions";
 import { getPlatformFee } from "@/lib/platform-settings";
+import { getMyCommissionVisibility } from "@/actions/commission.actions";
 import {
   getOrganizerRevenueAnalytics,
   requestPayout,
@@ -97,8 +98,15 @@ export function OrganizerAnalytics({
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingEvent, setIsLoadingEvent] = useState(false);
   const [currentPlatformFee, setPlatformFee] = useState(
-    initialPlatformFee || 5,
+    initialPlatformFee ?? 0,
   );
+  // Admin-controlled: hides commission lines on the organizer dashboard (amounts are unchanged).
+  const [showCommission, setShowCommission] = useState(true);
+  useEffect(() => {
+    getMyCommissionVisibility()
+      .then((v) => setShowCommission(v.organizerDashboard))
+      .catch(() => {});
+  }, []);
   const [revenueAnalytics, setRevenueAnalytics] = useState<any>(null);
   const [payouts, setPayouts] = useState<any[]>([]);
   const [isLoadingPayouts, setIsLoadingPayouts] = useState(false);
@@ -420,6 +428,7 @@ export function OrganizerAnalytics({
                     {formatCurrency(stats.overview.netRevenue)}
                   </span>
                 </div>
+                {showCommission && (
                 <div className="flex justify-between items-center text-orange-600">
                   <span className="text-sm">
                     Platform Fee ({formatPercentage(currentPlatformFee)})
@@ -428,6 +437,7 @@ export function OrganizerAnalytics({
                     -{formatCurrency(stats.overview.platformFee)}
                   </span>
                 </div>
+                )}
                 <div className="border-t pt-2">
                   <div className="flex justify-between items-center text-green-600 font-bold">
                     <span>Your Earnings</span>
@@ -661,12 +671,14 @@ export function OrganizerAnalytics({
                       {formatPercentage(100 - currentPlatformFee)}
                     </span>
                   </div>
+                  {showCommission && (
                   <div className="flex justify-between">
                     <span className="text-sm">Total Fees Paid (All Time)</span>
                     <span className="font-medium">
                       {formatCurrency(stats.overview.platformFee)}
                     </span>
                   </div>
+                  )}
                 </div>
                 <div className="space-y-3">
                   <div className="p-3 bg-blue-50 rounded-lg">
@@ -872,9 +884,11 @@ export function OrganizerAnalytics({
                               <p className="font-medium">
                                 {formatCurrency(payout.netAmount)}
                               </p>
+                              {showCommission && (
                               <p className="text-xs text-muted-foreground">
                                 Fee: {formatCurrency(payout.platformFee)}
                               </p>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -1119,6 +1133,7 @@ export function OrganizerAnalytics({
                         {formatCurrency(eventStats.revenue.netRevenue)}
                       </span>
                     </div>
+                    {showCommission && (
                     <div className="flex justify-between text-orange-600">
                       <span>
                         Platform Fee ({formatPercentage(currentPlatformFee)})
@@ -1127,6 +1142,7 @@ export function OrganizerAnalytics({
                         -{formatCurrency(eventStats.revenue.platformFee)}
                       </span>
                     </div>
+                    )}
                     <div className="border-t pt-2">
                       <div className="flex justify-between font-bold text-green-600">
                         <span>Your Earnings</span>

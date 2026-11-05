@@ -62,16 +62,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate financial settings
-    if (
-      financial.defaultPlatformFeePercentage < 0 ||
-      financial.defaultPlatformFeePercentage > 50
-    ) {
-      return NextResponse.json(
-        { success: false, message: 'Platform fee must be between 0% and 50%' },
-        { status: 400 }
-      );
-    }
+    // The general commission is edited only via the dedicated commission action (single source of truth).
 
     const result = await updatePlatformSettings(body);
 

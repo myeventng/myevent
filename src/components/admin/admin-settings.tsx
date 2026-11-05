@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CommissionSettingsPanel } from "@/components/admin/commission/commission-settings-panel";
+import { PricingTiersPanel } from "@/components/admin/commission/pricing-tiers-panel";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Settings,
@@ -78,7 +80,7 @@ export function AdminSettings({
       allowRegistrations: true,
     },
     financial: {
-      defaultPlatformFeePercentage: 10,
+      defaultPlatformFeePercentage: 0, // display-only placeholder until the real value loads
       minimumWithdrawal: 1000,
       maximumRefundDays: 30,
       autoApproveRefunds: false,
@@ -263,10 +265,12 @@ export function AdminSettings({
 
       {/* Settings Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 h-auto">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="financial">Financial</TabsTrigger>
           <TabsTrigger value="email">Email</TabsTrigger>
+          <TabsTrigger value="commission">Commission</TabsTrigger>
+          <TabsTrigger value="ticket-pricing">Ticket Pricing</TabsTrigger>
         </TabsList>
 
         {/* General Settings */}
@@ -387,25 +391,10 @@ export function AdminSettings({
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="platformFee">Platform Fee Percentage</Label>
-                  <Input
-                    id="platformFee"
-                    type="number"
-                    min="0"
-                    max="50"
-                    step="0.1"
-                    value={settings.financial.defaultPlatformFeePercentage}
-                    onChange={(e) =>
-                      updateSetting(
-                        "financial",
-                        "defaultPlatformFeePercentage",
-                        parseFloat(e.target.value) || 0,
-                      )
-                    }
-                    disabled={!isUserSuperAdmin}
-                  />
+                  <Label>Default platform commission</Label>
+                  <p className="mt-1 text-2xl font-semibold">{settings.financial.defaultPlatformFeePercentage}%</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Default fee charged on ticket sales
+                    Managed in the <strong>Commission</strong> tab (with preview, organizer/event rules and visibility).
                   </p>
                 </div>
                 <div>
@@ -632,6 +621,16 @@ export function AdminSettings({
             settings={settings.email}
             onChange={(email) => setSettings((prev) => ({ ...prev, email }))}
           />
+        </TabsContent>
+
+        {/* Commission */}
+        <TabsContent value="commission" className="space-y-4">
+          <CommissionSettingsPanel canEdit={isUserSuperAdmin} />
+        </TabsContent>
+
+        {/* Physical ticket generation pricing */}
+        <TabsContent value="ticket-pricing" className="space-y-4">
+          <PricingTiersPanel canEdit={isUserSuperAdmin} />
         </TabsContent>
       </Tabs>
 

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import crypto from "crypto";
-import { getPlatformFee } from "@/lib/platform-settings";
+import { calculateCommissionForAmount, orderCommissionSnapshot } from "@/lib/commission-service";
 import { sendInvitationEmail } from "@/lib/email/send-invitation-email";
 import { sendRSVPConfirmationEmail } from "@/lib/email/send-rsvp-confirmation";
 import { sendDonationReceiptEmail } from "@/lib/email/send-donation-receipt";
@@ -520,9 +520,10 @@ export async function createDonationOrder(data: {
       };
     }
 
-    // Calculate platform fee
-    const platformFeePercentage = await getPlatformFee();
-    const platformFee = (data.amount * platformFeePercentage) / 100;
+    // Commission resolved through the shared service (event > organizer > general)
+    const platformFee = orderCommissionSnapshot(
+      await calculateCommissionForAmount({ eventId: event.id, organizerId: event.userId, amountNaira: data.amount }),
+    ).platformFee;
     const netAmount = data.amount - platformFee;
 
     // Generate Paystack reference

@@ -44,6 +44,17 @@ export const ourFileRouter = {
       return { uploadedBy: metadata.userId, url: file.url };
     }),
 
+  // Social sharing thumbnail (WhatsApp / Facebook / X / LinkedIn previews). Server re-validates dimensions on save.
+  eventShareImage: f({ image: { maxFileSize: '4MB', maxFileCount: 1 } })
+    .middleware(async () => {
+      const session = await auth.api.getSession({ headers: await headers() });
+      if (!session?.user) throw new Error('Unauthorized');
+      return { userId: session.user.id };
+    })
+    .onUploadComplete(async ({ metadata, file }) => {
+      return { uploadedBy: metadata.userId, url: file.ufsUrl ?? file.url };
+    }),
+
   profileImage: f({ image: { maxFileSize: '2MB', maxFileCount: 1 } })
     .middleware(async () => {
       const headersList = await headers();

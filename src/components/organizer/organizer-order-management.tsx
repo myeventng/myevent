@@ -1,5 +1,6 @@
 // src/components/organizer/organizer-order-management.tsx - Complete Rewrite with Guest Support
 'use client';
+import { useCommissionVisibility } from '@/hooks/use-commission-visibility';
 
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
@@ -118,6 +119,7 @@ export function OrganizerOrderManagement({
   initialOrders,
   organizerId,
 }: OrganizerOrderManagementProps) {
+  const { organizerDashboard: showCommission } = useCommissionVisibility();
   const [orders, setOrders] = useState<any[]>(initialOrders);
   const [filteredOrders, setFilteredOrders] = useState<any[]>(initialOrders);
   const [isLoading, setIsLoading] = useState(false);
@@ -201,7 +203,7 @@ export function OrganizerOrderManagement({
           'Event Venue': order.event.venue?.name || '',
           Quantity: order.quantity,
           'Total Amount (NGN)': order.totalAmount,
-          'Platform Fee (NGN)': order.platformFee || 0,
+          ...(showCommission ? { 'Platform Fee (NGN)': order.platformFee || 0 } : {}),
           'Net Amount (NGN)': order.totalAmount - (order.platformFee || 0),
           'Payment Status': order.paymentStatus,
           'Refund Status': order.refundStatus || 'None',
@@ -600,6 +602,7 @@ export function OrganizerOrderManagement({
                 Total from completed orders
               </p>
             </div>
+            {showCommission && (
             <div className="p-4 border rounded-lg">
               <p className="text-sm font-medium text-muted-foreground">
                 Platform Fees
@@ -613,6 +616,7 @@ export function OrganizerOrderManagement({
                   : 'No fees charged'}
               </p>
             </div>
+            )}
             <div className="p-4 border rounded-lg bg-green-50">
               <p className="text-sm font-medium text-muted-foreground">
                 Net Revenue

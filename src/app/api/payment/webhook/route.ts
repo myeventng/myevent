@@ -5,6 +5,8 @@ import { completeOrder } from "@/actions/order.actions";
 import { verifyVotePayment } from "@/actions/voting-contest.actions";
 import { getCachedSetting } from "@/lib/platform-settings";
 import crypto from "crypto";
+import { isGenerationReference, settleFromWebhook } from "@/lib/ticket-generation/paystack";
+import { processNextPart } from "@/lib/ticket-generation/service";
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,11 +28,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // HMAC over the RAW body, compared in constant time.
     const hash = crypto
       .createHmac("sha512", paystackSecretKey)
       .update(body)
       .digest("hex");
-    if (hash !== signature) {
+    const a = Buffer.from(hash, "utf8");
+    const b = Buffer.from(signature, "utf8");
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
 
@@ -38,6 +43,22 @@ export async function POST(request: NextRequest) {
     const { event, data } = webhookData;
 
     console.log(`Webhook received: ${event} for reference: ${data?.reference}`);
+
+    // Physical-ticket generation fee (paid to the platform account). Amount, currency and
+    // status are verified and the PENDING→COMPLETED transition is exactly-once (idempotent).
+    if ((event === "charge.success" || event === "charge.failed") && data?.reference && (await isGenerationReference(data.reference))) {
+      const settled = await settleFromWebhook({
+        reference: data.reference,
+        status: event === "charge.success" ? String(data.status ?? "success") : "failed",
+        amount: Number(data.amount),
+        currency: String(data.currency ?? "NGN"),
+      });
+      if (settled.ok && !settled.alreadyProcessed) {
+        // Kick off the first chunk; the UI poller and the cron route finish the rest.
+        void processNextPart(settled.batchId).catch((e) => console.error("Generation kick-off failed:", e));
+      }
+      return NextResponse.json({ status: settled.ok ? "success" : settled.reason.toLowerCase() });
+    }
 
     // Handle successful payment
     if (event === "charge.success" && data?.reference) {
