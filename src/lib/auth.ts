@@ -1,0 +1,226 @@
+import { betterAuth, type BetterAuthOptions } from 'better-auth';
+import { nextCookies } from 'better-auth/next-js';
+import { prismaAdapter } from 'better-auth/adapters/prisma';
+import { createAuthMiddleware, APIError } from 'better-auth/api';
+import {
+  admin,
+  customSession,
+  magicLink,
+  twoFactor,
+} from 'better-auth/plugins';
+import { prisma } from '@/lib/prisma';
+import { hashPassword, verifyPassword } from '@/lib/bcrypt';
+import { normalizeName } from '@/lib/utils';
+import { ac, roles } from '@/lib/permissions';
+import { sendEmailAction } from '@/actions/send-email.action';
+
+const options = {
+  database: prismaAdapter(prisma, {
+    provider: 'postgresql',
+  }),
+  emailVerification: {
+    sendOnSignUp: true,
+    expiresIn: 60 * 60,
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      const link = new URL(url);
+      link.searchParams.set('callbackURL', '/auth/verify');
+
+      const result = await sendEmailAction({
+        to: user.email,
+        subject: 'Verify your email address',
+        meta: {
+          recipientName: user.name,
+          description:
+            'Welcome to MyEvent.com.ng! Please confirm your email address to finish creating your account and start discovering events.',
+          buttonText: 'Verify Email Address',
+          footerNote: 'This link expires in 1 hour.',
+          link: String(link),
+        },
+      });
+
+      if (!result.success) {
+        console.error(
+          '[Auth] Failed to send verification email to',
+          user.email
+        );
+      }
+    },
+  },
+  emailAndPassword: {
+    enabled: true,
+    minPasswordLength: 6,
+    autoSignIn: false,
+    password: {
+      hash: hashPassword,
+      verify: verifyPassword,
+    },
+    requireEmailVerification: true,
+    sendResetPassword: async ({ user, url }) => {
+      await sendEmailAction({
+        to: user.email,
+        subject: 'Reset your password',
+        meta: {
+          description:
+            'We received a request to reset your password. Click the button below to choose a new one.',
+          buttonText: 'Reset Password',
+          footerNote: 'This link expires in 1 hour.',
+          link: String(url),
+        },
+      });
+    },
+  },
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path === '/sign-up/email') {
+        const name = normalizeName(ctx.body.name);
+
+        return {
+          context: { ...ctx, body: { ...ctx.body, name } },
+        };
+      }
+
+      if (ctx.path === '/sign-in/magic-link') {
+        const name = normalizeName(ctx.body.name);
+
+        return {
+          context: { ...ctx, body: { ...ctx.body, name } },
+        };
+      }
+
+      if (ctx.path === '/update-user') {
+        const name = normalizeName(ctx.body.name);
+
+        return {
+          context: { ...ctx, body: { ...ctx.body, name } },
+        };
+      }
+    }),
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          const ADMIN_EMAILS = process.env.ADMIN_EMAILS?.split(';') ?? [];
+
+          if (ADMIN_EMAILS.includes(user.email)) {
+            return { data: { ...user, role: 'ADMIN' } };
+          }
+
+          return { data: user };
+        },
+      },
+    },
+  },
+  user: {
+    additionalFields: {
+      role: {
+        type: ['USER', 'ADMIN'],
+        input: false,
+      },
+      subRole: {
+        type: ['ORDINARY', 'ORGANIZER', 'STAFF', 'SUPER_ADMIN'],
+        input: false,
+      },
+    },
+  },
+  session: {
+    expiresIn: 30 * 24 * 60 * 60,
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60,
+    },
+  },
+  account: {
+    accountLinking: {
+      enabled: false,
+    },
+  },
+  advanced: {
+    database: {
+      generateId: false,
+    },
+  },
+  socialProviders: {
+    google: {
+      clientId: String(process.env.GOOGLE_CLIENT_ID),
+      clientSecret: String(process.env.GOOGLE_CLIENT_SECRET),
+    },
+    github: {
+      clientId: String(process.env.GITHUB_CLIENT_ID),
+      clientSecret: String(process.env.GITHUB_CLIENT_SECRET),
+    },
+  },
+  plugins: [
+    nextCookies(),
+    admin({
+      defaultRole: 'USER',
+      defaultSubRole: 'ORDINARY',
+      adminRoles: ['ADMIN'],
+      adminSubRoles: ['STAFF', 'SUPER_ADMIN'],
+      ac,
+      roles,
+    }),
+    magicLink({
+      sendMagicLink: async ({ email, url }) => {
+        await sendEmailAction({
+          to: email,
+          subject: 'Magic Link Login',
+          meta: {
+            description:
+              'Click the button below to log in to your MyEvent.com.ng account. No password needed.',
+            buttonText: 'Log In',
+            link: String(url),
+          },
+        });
+      },
+    }),
+    // twoFactor({
+    //   issuer: 'MyEventComNg',
+    //   otpOptions: {
+    //     period: 30,
+    //     digits: 6,
+    //     // algorithm: 'SHA1',
+    //   },
+    //   backupCodes: {
+    //     enabled: true,
+    //     amount: 10,
+    //     length: 8,
+    //   },
+    // }),
+  ],
+} satisfies BetterAuthOptions;
+
+export const auth = betterAuth({
+  ...options,
+  plugins: [
+    ...(options.plugins ?? []),
+
+    customSession(async ({ user, session }) => {
+      const userSubRole = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { subRole: true },
+      });
+
+      return {
+        session: {
+          expiresAt: session.expiresAt,
+          token: session.token,
+          userAgent: session.userAgent,
+        },
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          createdAt: user.createdAt,
+          role: user.role,
+          subRole: userSubRole?.subRole || 'ORDINARY',
+          giraffeFact: 'giraffes can sometimes nap with one eye open',
+        },
+      };
+    }, options),
+  ],
+});
+
+export type ErrorCode = keyof typeof auth.$ERROR_CODES | 'UNKNOWN';

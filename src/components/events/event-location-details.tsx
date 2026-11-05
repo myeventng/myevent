@@ -1,0 +1,455 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { Button } from "@/components/ui/button";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { getVenues } from "@/actions/venue-actions";
+import { getUserVenues } from "@/actions/venue-actions";
+import { toast } from "sonner";
+import { getUserOrganizerProfile } from "@/actions/organizer.actions";
+import { Plus, Loader2, Globe, MapPin, Vote, Mail } from "lucide-react";
+import { CreateVenueModal } from "./create-venue-modal";
+import { EventType } from "@/generated/prisma";
+
+// Form schema for this step
+const formSchema = z.object({
+  venueId: z.string().min(1, "Venue is required"),
+  location: z.string().optional(),
+  cityId: z.string().optional(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+interface EventLocationDetailsProps {
+  formData: any;
+  updateFormData: (data: Partial<FormValues>) => void;
+  onNext: () => void;
+  onPrevious: () => void;
+}
+
+export function EventLocationDetails({
+  formData,
+  updateFormData,
+  onNext,
+  onPrevious,
+}: EventLocationDetailsProps) {
+  const [venues, setVenues] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isOrganizer, setIsOrganizer] = useState(false);
+  const [selectedVenue, setSelectedVenue] = useState<any>(null);
+  const [showCreateVenue, setShowCreateVenue] = useState(false);
+
+  const isVotingContest = formData.eventType === EventType.VOTING_CONTEST;
+  const isInviteOnly = formData.eventType === EventType.INVITE;
+  const isStandardEvent = formData.eventType === EventType.STANDARD;
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      venueId: formData.venueId || "",
+      location: formData.location || "",
+    },
+  });
+
+  // Fetch venues and check if user is an organizer
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+
+        // Check if user is an organizer
+        const profileResponse = await getUserOrganizerProfile();
+        setIsOrganizer(!!profileResponse.data);
+
+        let venuesResponse;
+
+        if (profileResponse.data) {
+          // If user is an organizer, get their venues plus all venues
+          const [userVenuesRes, allVenuesRes] = await Promise.all([
+            getUserVenues(),
+            getVenues(),
+          ]);
+
+          // Combine and deduplicate venues
+          const userVenues = userVenuesRes.success ? userVenuesRes.data : [];
+          const allVenues = allVenuesRes.success ? allVenuesRes.data : [];
+
+          // Create a map to avoid duplicates
+          const venueMap = new Map();
+
+          // Add user's venues first (they'll appear at the top)
+          (userVenues ?? []).forEach((venue) => {
+            venueMap.set(venue.id, { ...venue, isOwned: true });
+          });
+
+          // Add other venues
+          (allVenues ?? []).forEach((venue) => {
+            if (!venueMap.has(venue.id)) {
+              venueMap.set(venue.id, { ...venue, isOwned: false });
+            }
+          });
+
+          setVenues(Array.from(venueMap.values()));
+        } else {
+          // Otherwise, get all venues (for admin users)
+          venuesResponse = await getVenues();
+          if (venuesResponse.success && venuesResponse.data) {
+            const allVenues = venuesResponse.data.map((venue) => ({
+              ...venue,
+              isOwned: false,
+            }));
+            setVenues(allVenues);
+          }
+        }
+
+        // If we have a venueId in formData, set the selected venue
+        if (formData.venueId) {
+          const venue = venues.find((v: any) => v.id === formData.venueId);
+          if (venue) {
+            setSelectedVenue(venue);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        toast.error("Failed to load venues");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [formData.venueId]);
+
+  // Auto-select online venue for voting contests if none selected
+  useEffect(() => {
+    if (isVotingContest && !formData.venueId && venues.length > 0) {
+      // Look for the online venue (either by ID or name)
+      const onlineVenue = venues.find(
+        (v) => v.id === "online-venue-id" || v.name === "Online Event",
+      );
+      if (onlineVenue) {
+        handleVenueChange(onlineVenue.id);
+        setSelectedVenue(onlineVenue);
+      }
+    }
+  }, [isVotingContest, formData.venueId, venues]);
+
+  // Update selected venue when venueId changes
+  const handleVenueChange = (venueId: string) => {
+    const venue = venues.find((v) => v.id === venueId);
+    setSelectedVenue(venue || null);
+    form.setValue("venueId", venueId);
+  };
+
+  // Handle venue creation
+  const handleVenueCreated = (newVenue: any) => {
+    // Add the new venue to the list
+    const venueWithOwnership = { ...newVenue, isOwned: true };
+    setVenues((prev) => [venueWithOwnership, ...prev]);
+
+    // Auto-select the newly created venue
+    setSelectedVenue(venueWithOwnership);
+    form.setValue("venueId", newVenue.id);
+
+    toast.success("Venue created and selected!");
+  };
+
+  // Handle form submission
+  const onSubmit = (values: FormValues) => {
+    // Find the selected venue to get its city ID
+    const venue = venues.find((venue) => venue.id === values.venueId);
+    let cityId = venue?.cityId || venue?.city?.id;
+
+    // For online venues, set cityId appropriately
+    if (venue?.name === "Online Event" || venue?.id === "online-venue-id") {
+      // Look for the online city or set to null
+      cityId = venue?.cityId || undefined;
+    }
+
+    updateFormData({
+      ...values,
+      cityId,
+    });
+
+    onNext();
+  };
+
+  // Determine the icon based on event type
+  const getHeaderIcon = () => {
+    if (isVotingContest) return <Vote className="h-6 w-6 text-primary" />;
+    if (isInviteOnly) return <Mail className="h-6 w-6 text-primary" />;
+    return <MapPin className="h-6 w-6 text-primary" />;
+  };
+
+  // Determine the header title
+  const getHeaderTitle = () => {
+    if (isVotingContest) return "Contest Location";
+    if (isInviteOnly) return "Event Venue";
+    return "Event Location";
+  };
+
+  // Determine the description
+  const getHeaderDescription = () => {
+    if (isVotingContest) {
+      return "Voting contests are conducted online, but you can add additional location details if needed.";
+    }
+    if (isInviteOnly) {
+      return "Select the venue where your invite-only event will take place, or create a new one.";
+    }
+    return "Select the venue for your event or create a new one.";
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="flex items-center gap-3 mb-2">
+          {getHeaderIcon()}
+          <h2 className="text-2xl font-bold">{getHeaderTitle()}</h2>
+        </div>
+        <p className="text-muted-foreground">{getHeaderDescription()}</p>
+      </div>
+
+      {isVotingContest && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <Globe className="h-5 w-5 text-blue-600 mt-0.5" />
+            <div>
+              <h3 className="font-medium text-blue-900">Online Event</h3>
+              <p className="text-sm text-blue-700 mt-1">
+                Voting contests are conducted online. The &quot;Online
+                Event&quot; venue will be automatically selected for you. You
+                can provide additional details about the contest in the location
+                field below if needed.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isInviteOnly && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <Mail className="h-5 w-5 text-purple-600 mt-0.5" />
+            <div>
+              <h3 className="font-medium text-purple-900">
+                Private Event Venue
+              </h3>
+              <p className="text-sm text-purple-700 mt-1">
+                Select the venue where your guests will gather. This could be a
+                home, banquet hall, outdoor space, or any location suitable for
+                your private event.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <FormField
+            control={form.control}
+            name="venueId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  {isVotingContest ? "Event Type" : "Venue"}
+                </FormLabel>
+                <div className="space-y-3">
+                  <Select
+                    onValueChange={(value) => handleVenueChange(value)}
+                    value={field.value}
+                    disabled={isLoading}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={
+                            isVotingContest ? "Online Event" : "Select a venue"
+                          }
+                        />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {venues.map((venue) => (
+                        <SelectItem key={venue.id} value={venue.id}>
+                          <div className="flex items-center gap-2">
+                            {(venue.name === "Online Event" ||
+                              venue.id === "online-venue-id") && (
+                              <Globe className="h-4 w-4 text-blue-600" />
+                            )}
+                            <span>{venue.name}</span>
+                            {venue.isOwned && venue.name !== "Online Event" && (
+                              <span className="text-xs bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
+                                Owned
+                              </span>
+                            )}
+                            {venue.name !== "Online Event" && (
+                              <span className="text-muted-foreground">
+                                - {venue.city?.name || venue.address}
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {/* Quick Venue Creation - For standard events AND invite-only events */}
+                  {(isStandardEvent || isInviteOnly) && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowCreateVenue(true)}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Create New Venue
+                      </Button>
+                      <span className="text-sm text-muted-foreground">
+                        Can&apos;t find your venue? Create one!
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <FormDescription>
+                  {isVotingContest
+                    ? "Voting contests are conducted online and don't require a physical venue."
+                    : isInviteOnly
+                      ? "Select the venue where your private event will be held."
+                      : "Select the venue where your event will take place."}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {selectedVenue && (
+            <div className="border rounded-md p-4 bg-muted/20">
+              <h3 className="font-medium mb-2 flex items-center gap-2">
+                {selectedVenue.name === "Online Event"
+                  ? "Event Type:"
+                  : "Venue Details:"}
+                {selectedVenue.isOwned &&
+                  selectedVenue.name !== "Online Event" && (
+                    <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
+                      Your Venue
+                    </span>
+                  )}
+                {(selectedVenue.name === "Online Event" ||
+                  selectedVenue.id === "online-venue-id") && (
+                  <span className="text-xs bg-blue-600 text-white px-2 py-1 rounded">
+                    Online
+                  </span>
+                )}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p>
+                    <strong>Location:</strong> {selectedVenue.address}
+                  </p>
+                  {selectedVenue.name !== "Online Event" && (
+                    <p>
+                      <strong>City:</strong> {selectedVenue.city?.name},{" "}
+                      {selectedVenue.city?.state}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  {selectedVenue.capacity && (
+                    <p>
+                      <strong>Capacity:</strong>{" "}
+                      {selectedVenue.capacity.toLocaleString()} people
+                    </p>
+                  )}
+                  {selectedVenue.contactInfo && (
+                    <p>
+                      <strong>Contact:</strong> {selectedVenue.contactInfo}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {selectedVenue.description &&
+                selectedVenue.name !== "Online Event" && (
+                  <div className="mt-3 pt-3 border-t">
+                    <p className="text-sm">{selectedVenue.description}</p>
+                  </div>
+                )}
+            </div>
+          )}
+
+          <FormField
+            control={form.control}
+            name="location"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  {isVotingContest
+                    ? "Additional Contest Information"
+                    : isInviteOnly
+                      ? "Additional Event Details"
+                      : "Additional Location Details"}
+                </FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder={
+                      isVotingContest
+                        ? "Provide any additional information about the contest platform, voting instructions, or other relevant details..."
+                        : isInviteOnly
+                          ? "Provide any additional information about the event location, parking instructions, dress code, or special notes for guests..."
+                          : "Provide any additional location information..."
+                    }
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  {isVotingContest
+                    ? "Provide specific details about how the voting will work, any special instructions for voters, or other important contest information."
+                    : isInviteOnly
+                      ? "Share specific details about the venue, entry instructions, parking availability, or any special requirements guests should know about."
+                      : "Provide specific details about the location, such as entry information, parking instructions, or specific room/area within the venue."}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className="flex justify-between">
+            <Button type="button" variant="outline" onClick={onPrevious}>
+              Previous
+            </Button>
+            <Button type="submit">Next</Button>
+          </div>
+        </form>
+      </Form>
+
+      {/* Create Venue Modal - For standard events AND invite-only events */}
+      {(isStandardEvent || isInviteOnly) && (
+        <CreateVenueModal
+          isOpen={showCreateVenue}
+          onClose={() => setShowCreateVenue(false)}
+          onVenueCreated={handleVenueCreated}
+        />
+      )}
+    </div>
+  );
+}

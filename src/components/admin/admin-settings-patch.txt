@@ -1,0 +1,72 @@
+// PATCH for src/components/admin/admin-settings.tsx
+// Add these three changes to integrate the EmailSettingsTab.
+
+// ─── 1. Add to imports (top of file) ──────────────────────────────────────────
+import { EmailSettingsTab, type EmailSettings } from './email-settings-tab';
+
+// ─── 2. Add `email` to the PlatformSettings interface ─────────────────────────
+// Inside the existing `interface PlatformSettings { ... }` block, add:
+
+  email: {
+    activeProvider: 'gmail' | 'ses';
+    fromName: string;
+    gmail: {
+      host: string;
+      port: number;
+      secure: boolean;
+      user: string;
+      password: string;
+    };
+    ses: {
+      region: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+      fromAddress: string;
+    };
+  };
+
+// ─── 3. Add default email settings inside useState initializer ─────────────────
+// Inside `const [settings, setSettings] = useState<PlatformSettings>({ ... })`, add:
+
+    email: {
+      activeProvider: 'gmail',
+      fromName: 'MyEvent.com.ng',
+      gmail: {
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true,
+        user: '',
+        password: '',
+      },
+      ses: {
+        region: 'us-east-1',
+        accessKeyId: '',
+        secretAccessKey: '',
+        fromAddress: '',
+      },
+    },
+
+// ─── 4. Add a new <TabsTrigger> and <TabsContent> inside your existing Tabs ────
+// Find where you have your other TabsTrigger elements and add:
+
+<TabsTrigger value="email">Email</TabsTrigger>
+
+// Then add a matching TabsContent (alongside the existing ones):
+
+<TabsContent value="email" className="space-y-6">
+  <div>
+    <h3 className="text-lg font-medium">Email Provider</h3>
+    <p className="text-sm text-muted-foreground">
+      Configure how MyEvent sends transactional emails. Switch between Gmail and
+      Amazon SES without redeploying the app.
+    </p>
+  </div>
+  <EmailSettingsTab
+    settings={settings.email}
+    onChange={(email) => setSettings((prev) => ({ ...prev, email }))}
+  />
+</TabsContent>
+
+// ─── 5. No changes needed to the save handler ─────────────────────────────────
+// updatePlatformSettings() already handles the full settings object including
+// the new `email` section via buildFlatSettings() in platform-settings.actions.ts.

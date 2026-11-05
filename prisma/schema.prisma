@@ -1,0 +1,1104 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+//vote
+enum EventType {
+  STANDARD
+  VOTING_CONTEST
+  INVITE
+}
+
+enum VotingType {
+  FREE
+  PAID
+}
+
+enum ContestantStatus {
+  ACTIVE
+  DISQUALIFIED
+  WITHDRAWN
+}
+
+enum VoteStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  ATTENDED
+  NO_SHOW
+}
+
+// New enum for RSVP response
+enum RSVPResponse {
+  ATTENDING
+  NOT_ATTENDING
+  MAYBE
+}
+
+enum TableShape {
+  ROUND
+  RECTANGLE
+  SQUARE
+  OVAL
+  CUSTOM
+}
+
+// Enums
+enum NotificationType {
+  EVENT_SUBMITTED
+  EVENT_APPROVED
+  EVENT_REJECTED
+  BLOG_SUBMITTED
+  BLOG_APPROVED
+  BLOG_REJECTED
+  TICKET_PURCHASED
+  TICKET_AVAILABLE
+  EVENT_CANCELLED
+  REFUND_REQUESTED
+  REFUND_PROCESSED
+  VENUE_SUBMITTED
+  VENUE_APPROVED
+  VENUE_REJECTED
+  VOTE_PURCHASED
+  VOTING_STARTED
+  VOTING_ENDED
+  CONTEST_WINNER_ANNOUNCED
+  CONTESTANT_DISQUALIFIED
+  SYSTEM_UPDATE
+  PAYMENT_RECEIVED
+  USER_REGISTERED
+  USER_UPGRADED_TO_ORGANIZER
+  ORDER_CONFIRMATION
+  PAYOUT_PROCESSED
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum UserSubRole {
+  ORDINARY
+  ORGANIZER
+  STAFF
+  SUPER_ADMIN
+}
+
+enum AgeRestriction {
+  ALL_AGES
+  AGE_14_PLUS
+  AGE_18_PLUS
+  AGE_21_PLUS
+  AGE_25_PLUS
+  KIDS_ONLY
+  SENIORS_ONLY
+}
+
+enum DressCode {
+  CASUAL
+  BUSINESS_CASUAL
+  FORMAL
+  BLACK_TIE
+  THEMED_COSTUME
+  SMART_CASUAL
+  ALL_WHITE
+  NO_DRESS_CODE
+}
+
+enum PublishedStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  REJECTED
+}
+
+enum WaitingStatus {
+  WAITING
+  OFFERED
+  PURCHASED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum RefundStatus {
+  INITIATED
+  PROCESSED
+  FAILED
+  REJECTED
+}
+
+enum TicketStatus {
+  UNUSED
+  USED
+  REFUNDED
+  CANCELLED
+}
+
+enum BlogStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  REJECTED
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum OrganizationType {
+  COMPANY
+  INDIVIDUAL
+  NGO
+  GOVERNMENT
+  OTHER
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+// Models
+model Notification {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  type      NotificationType
+  status    NotificationStatus @default(UNREAD)
+  title     String
+  message   String
+  actionUrl String?
+  metadata  Json?
+  readAt    DateTime?
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  isAdminNotification Boolean @default(false)
+
+  eventId String?
+  event   Event?  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  blogId String?
+
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  venueId       String?
+  venue         Venue?          @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  VoteOrder     VoteOrder?      @relation(fields: [voteOrderId], references: [id])
+  voteOrderId   String?
+  DonationOrder DonationOrder[]
+
+  @@index([userId, status])
+  @@index([isAdminNotification, status])
+  @@index([type, status])
+  @@index([createdAt])
+}
+
+model PushSubscription {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  subscription Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("push_subscriptions")
+}
+
+model OrganizerProfile {
+  id               String  @id @default(cuid())
+  organizationName String
+  bio              String?
+  website          String?
+
+  // Enhanced organizer fields
+  businessRegistrationNumber String?
+  taxIdentificationNumber    String?
+  organizationType           OrganizationType?
+  verificationStatus         VerificationStatus @default(PENDING)
+  customPlatformFee          Float? // Custom fee percentage for this organizer
+
+  // Bank account details for payouts
+  bankAccount String? // Bank account number
+  bankCode    String? // Bank code for identification
+  accountName String? // Verified account name from bank
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Verification {
+  id        String    @id @default(cuid())
+  createdAt DateTime?
+  updatedAt DateTime?
+
+  identifier String
+  value      String
+  expiresAt  DateTime
+
+  @@map("verifications")
+}
+
+model Session {
+  id             String   @id @default(cuid())
+  impersonatedBy String?
+  createdAt      DateTime
+  updatedAt      DateTime
+
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Account {
+  id        String   @id @default(cuid())
+  createdAt DateTime
+  updatedAt DateTime
+
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("accounts")
+}
+
+model TwoFactor {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  secret      String
+  backupCodes String?
+  verified    Boolean @default(false)
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("twoFactor")
+}
+
+model WaitingList {
+  id             String    @id @default(cuid())
+  createdAt      DateTime  @default(now())
+  offerExpiresAt DateTime?
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id])
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+
+  status WaitingStatus @default(WAITING)
+
+  @@index([eventId, status])
+  @@index([userId, eventId])
+  @@index([userId])
+}
+
+model Order {
+  id            String        @id @default(cuid())
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  paystackId    String        @unique
+  totalAmount   Float
+  quantity      Int
+  paymentStatus PaymentStatus @default(PENDING)
+  refundStatus  RefundStatus?
+
+  eventId       String
+  event         Event   @relation(fields: [eventId], references: [id])
+  buyerId       String?
+  buyer         User?   @relation(fields: [buyerId], references: [id])
+  purchaseNotes String?
+
+  // Enhanced order fields
+  platformFee   Float   @default(0) // Platform fee amount
+  paymentMethod String? // card, bank_transfer, etc.
+  currency      String  @default("NGN")
+
+  // Processing lock to prevent concurrent completions
+  processingLockAt DateTime?
+  processedAt      DateTime?
+
+  Notification Notification[]
+  tickets      Ticket[] // Direct relation to tickets
+
+  @@index([buyerId])
+  @@index([eventId])
+  @@index([paymentStatus])
+   @@index([paystackId])
+  @@index([processingLockAt])
+}
+
+model UserNote {
+  id        String   @id @default(cuid())
+  userId    String
+  note      String
+  createdBy String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_notes")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  createdAt DateTime
+  updatedAt DateTime
+
+  name          String
+  email         String      @unique
+  emailVerified Boolean
+  image         String?
+  firstName     String?
+  lastName      String?
+  banned        Boolean?
+  banReason     String?
+  banExpires    DateTime?
+  gender        Gender?
+  role          UserRole    @default(USER)
+  subRole       UserSubRole @default(ORDINARY)
+
+  // For proper suspension support
+  suspended        Boolean?  @default(false)
+  suspensionReason String?
+  suspendedAt      DateTime?
+
+  // For admin notes
+  adminNotes UserNote[]
+
+  // For better activity tracking
+  lastSeen DateTime?
+
+  sessions         Session[]
+  accounts         Account[]
+  waitingList      WaitingList[]
+  blogs            Blog[]
+  orders           Order[]
+  rating           Rating[]
+  tickets          Ticket[]
+  venue            Venue[]
+  eventsHosted     Event[]
+  organizerProfile OrganizerProfile?
+  twoFactor        TwoFactor?
+  Notification     Notification[]
+  validatedTickets TicketValidation[] @relation("ValidatedBy")
+  payouts          Payout[]           @relation("UserPayouts")
+  auditLogs        AuditLog[] // Relation to AuditLog
+  PushSubscription PushSubscription?
+  voteOrders       VoteOrder[]
+  votes            Vote[]
+
+  @@map("users")
+}
+
+model Tag {
+  id      String  @id @default(cuid())
+  name    String  @unique
+  bgColor String
+  slug    String?
+  events  Event[]
+
+  @@index([name])
+}
+
+model Rating {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id])
+  rating    Decimal
+  comment   String?
+
+  @@unique([userId, eventId])
+  @@index([eventId])
+  @@index([userId])
+}
+
+model Ticket {
+  id              String       @id @default(cuid())
+  ticketId        String       @unique
+  userId          String?
+  user            User?        @relation(fields: [userId], references: [id])
+  ticketTypeId    String
+  ticketType      TicketType   @relation(fields: [ticketTypeId], references: [id])
+  orderId         String?
+  order           Order?       @relation(fields: [orderId], references: [id])
+  status          TicketStatus @default(UNUSED)
+  purchasedAt     DateTime     @default(now())
+  paymentIntentId String?      @unique
+
+  // Enhanced ticket fields
+  qrCodeData    String? // JSON string with QR code data
+  transferredTo String? // User ID if ticket was transferred
+  transferredAt DateTime?
+  usedAt        DateTime? // When ticket was scanned/used
+
+  validations TicketValidation[]
+
+  @@index([userId])
+  @@index([ticketTypeId])
+  @@index([status])
+  @@index([orderId])
+}
+
+model TicketType {
+  id       String @id @default(cuid())
+  name     String
+  price    Float  @default(0.0)
+  quantity Int
+
+  // Enhanced ticket type fields
+  description   String?
+  maxPerUser    Int?      @default(10) // Max tickets per user for this type
+  saleStartDate DateTime?
+  saleEndDate   DateTime?
+  isRefundable  Boolean   @default(true)
+
+  eventId String
+  event   Event    @relation(fields: [eventId], references: [id])
+  tickets Ticket[]
+
+  @@index([eventId])
+}
+
+model TicketValidation {
+  id          String   @id @default(cuid())
+  ticketId    String
+  ticket      Ticket   @relation(fields: [ticketId], references: [id])
+  validatedBy String
+  validator   User     @relation("ValidatedBy", fields: [validatedBy], references: [id])
+  validatedAt DateTime @default(now())
+  eventId     String
+
+  // Additional validation data
+  location   String? // GPS coordinates or location name
+  deviceInfo String? // Scanner device information
+
+  @@index([ticketId])
+  @@index([eventId])
+  @@index([validatedAt])
+}
+
+model Category {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  events Event[]
+
+  @@index([name])
+}
+
+model City {
+  id         String  @id @default(cuid())
+  name       String  @unique
+  population Int?
+  state      String
+  events     Event[]
+  venues     Venue[]
+
+  @@index([name])
+}
+
+model Venue {
+  id            String         @id @default(cuid())
+  name          String
+  address       String
+  cityId        String
+  city          City           @relation(fields: [cityId], references: [id])
+  userId        String
+  description   String?
+  contactInfo   String?
+  user          User           @relation(fields: [userId], references: [id])
+  capacity      Int?
+  venueImageUrl String?
+  latitude      String?
+  longitude     String?
+  events        Event[]
+  Notification  Notification[]
+
+  @@index([cityId])
+}
+
+model VotingContest {
+  id      String @id @default(cuid())
+  eventId String @unique
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  votingType VotingType @default(FREE)
+
+  // Vote package settings
+  votePackagesEnabled Boolean   @default(false)
+  allowGuestVoting    Boolean   @default(false) // Allow voting without account
+  defaultVotePrice    Float? // Price for a single vote when no packages
+  // Voting rules
+  maxVotesPerUser     Int? // null means unlimited
+  allowMultipleVotes  Boolean   @default(true) // Can vote for multiple contestants
+  votingStartDate     DateTime?
+  votingEndDate       DateTime?
+
+  // Results settings
+  showLiveResults Boolean @default(true)
+  showVoterNames  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contestants  Contestant[]
+  votePackages VotePackage[]
+  votes        Vote[]
+  VoteOrder    VoteOrder[]
+
+  @@index([eventId])
+  @@index([votingType])
+}
+
+// NEW: Vote Package model (for paid voting with different vote quantities)
+model VotePackage {
+  id        String        @id @default(cuid())
+  contestId String
+  contest   VotingContest @relation(fields: [contestId], references: [id], onDelete: Cascade)
+
+  name        String // e.g., "5 Votes", "20 Votes", "100 Votes"
+  description String?
+  voteCount   Int // Number of votes in this package
+  price       Float // Price for this package
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  voteOrders VoteOrder[]
+
+  @@index([contestId])
+  @@index([isActive])
+}
+
+model Contestant {
+  id        String        @id @default(cuid())
+  contestId String
+  contest   VotingContest @relation(fields: [contestId], references: [id], onDelete: Cascade)
+
+  name          String
+  bio           String?
+  imageUrl      String?
+  contestNumber String // e.g., "001", "002" for display
+
+  status ContestantStatus @default(ACTIVE)
+
+  // Social media links
+  instagramUrl String?
+  twitterUrl   String?
+  facebookUrl  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  votes Vote[]
+
+  @@unique([contestId, contestNumber])
+  @@index([contestId])
+  @@index([status])
+}
+
+model VoteOrder {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  contestId     String
+  contest       VotingContest @relation(fields: [contestId], references: [id])
+  votePackageId String?
+  votePackage   VotePackage?  @relation(fields: [votePackageId], references: [id])
+
+  // Payment details
+  paystackId    String        @unique
+  totalAmount   Float
+  platformFee   Float         @default(0)
+  voteCount     Int // Number of votes purchased
+  paymentStatus PaymentStatus @default(PENDING)
+  paymentMethod String?
+  currency      String        @default("NGN")
+
+  // Vote tracking
+  votesUsed      Int       @default(0)
+  votesRemaining Int // voteCount - votesUsed
+  expiresAt      DateTime? // When unused votes expire
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  votes         Vote[]
+  notifications Notification[]
+
+  @@index([userId])
+  @@index([contestId])
+  @@index([paymentStatus])
+}
+
+model Vote {
+  id           String        @id @default(cuid())
+  userId       String?
+  user         User?         @relation(fields: [userId], references: [id])
+  contestId    String
+  contest      VotingContest @relation(fields: [contestId], references: [id])
+  contestantId String
+  contestant   Contestant    @relation(fields: [contestantId], references: [id])
+  voteOrderId  String? // Only for paid votes
+  voteOrder    VoteOrder?    @relation(fields: [voteOrderId], references: [id])
+
+  voteType  VotingType // FREE or PAID
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  // Prevent duplicate free votes per user per contestant
+  @@index([userId])
+  @@index([contestId])
+  @@index([contestantId])
+  @@index([voteType])
+  @@index([createdAt])
+  @@index([ipAddress])
+}
+
+model Event {
+  id               String          @id @default(cuid())
+  slug             String?
+  title            String
+  description      String?
+  location         String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  coverImageUrl    String?
+  startDateTime    DateTime        @default(now())
+  endDateTime      DateTime        @default(now())
+  isFree           Boolean         @default(false)
+  url              String?
+  lateEntry        DateTime?
+  idRequired       Boolean?        @default(false)
+  attendeeLimit    Int?
+  featured         Boolean         @default(false)
+  embeddedVideoUrl String?
+  dressCode        DressCode?
+  age              AgeRestriction?
+
+  imageUrls       String[]
+  tags            Tag[]
+  ratings         Rating[]
+  ticketTypes     TicketType[]
+  orders          Order[]
+  waitingList     WaitingList[]
+  inviteOnlyEvent InviteOnlyEvent?
+  donationOrders  DonationOrder[]
+
+  userId     String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+  categoryId String?
+  user       User?     @relation(fields: [userId], references: [id])
+  venueId    String
+  venue      Venue     @relation(fields: [venueId], references: [id])
+  cityId     String?
+  City       City?     @relation(fields: [cityId], references: [id])
+
+  isCancelled     Boolean?        @default(false)
+  publishedStatus PublishedStatus @default(DRAFT)
+  Notification    Notification[]
+
+  eventType EventType @default(STANDARD)
+
+  // Fields for voting contests
+  votingContest VotingContest?
+
+  @@index([title])
+  @@index([publishedStatus])
+  @@index([startDateTime])
+  @@index([featured])
+}
+
+model BlogCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  color       String   @default("#3B82F6")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  blogs       Blog[]
+
+  @@index([name])
+  @@index([slug])
+  @@map("blog_categories")
+}
+
+model Blog {
+  id              String     @id @default(cuid())
+  title           String
+  slug            String     @unique
+  excerpt         String?
+  content         String     @db.Text
+  featuredImage   String?
+  metaTitle       String?
+  metaDescription String?
+  tags            String[]
+  readingTime     Int?
+  views           Int        @default(0)
+  featured        Boolean    @default(false)
+  status          BlogStatus @default(DRAFT)
+  publishedAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  authorId   String
+  author     User         @relation(fields: [authorId], references: [id])
+  categoryId String
+  category   BlogCategory @relation(fields: [categoryId], references: [id])
+
+  @@index([status, publishedAt(sort: Desc)])
+  @@index([authorId])
+  @@index([categoryId])
+  @@index([slug])
+  @@index([featured])
+}
+
+model PlatformSettings {
+  id    String @id @default(cuid())
+  key   String @unique
+  value Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+}
+
+model Payout {
+  id          String       @id @default(cuid())
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  organizerId String
+  organizer   User         @relation("UserPayouts", fields: [organizerId], references: [id])
+  amount      Float
+  platformFee Float
+  netAmount   Float
+  status      PayoutStatus @default(PENDING)
+
+  // Paystack transfer details
+  transferCode String?
+  transferId   String?
+  bankAccount  String?
+  bankCode     String?
+  accountName  String?
+
+  // Date range for this payout
+  periodStart DateTime
+  periodEnd   DateTime
+
+  processedAt   DateTime?
+  failureReason String?
+
+  @@index([organizerId])
+  @@index([status])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id])
+  action   String // CREATE, UPDATE, DELETE, etc.
+  entity   String // USER, EVENT, ORDER, etc.
+  entityId String?
+
+  oldValues Json?
+  newValues Json?
+  ipAddress String?
+  userAgent String?
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
+}
+
+model InviteOnlyEvent {
+  id      String @id @default(cuid())
+  eventId String @unique
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  // Invitation settings
+  maxInvitations     Int? // Maximum number of invitations (null = unlimited)
+  allowPlusOnes      Boolean   @default(false)
+  maxPlusOnes        Int?      @default(1)
+  requireRSVP        Boolean   @default(true)
+  rsvpDeadline       DateTime?
+  sendAutoReminders  Boolean   @default(true)
+  reminderDaysBefore Int?      @default(7)
+
+  // Donation settings
+  acceptDonations     Boolean @default(false)
+  suggestedDonation   Float?
+  minimumDonation     Float?
+  donationDescription String?
+  showDonorNames      Boolean @default(true)
+
+  // Seating arrangement settings
+  enableSeatingArrangement Boolean        @default(false)
+  seatingTables            SeatingTable[]
+
+  // Privacy settings
+  isPrivate       Boolean @default(true)
+  requireApproval Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invitations Invitation[]
+
+  @@index([eventId])
+}
+
+// Model for individual invitations
+model Invitation {
+  id                String          @id @default(cuid())
+  inviteOnlyEventId String
+  inviteOnlyEvent   InviteOnlyEvent @relation(fields: [inviteOnlyEventId], references: [id], onDelete: Cascade)
+
+  // Guest information (no user account created)
+  guestName  String
+  guestEmail String
+  guestPhone String?
+
+  // Invitation details
+  invitationCode String           @unique
+  status         InvitationStatus @default(PENDING)
+  rsvpResponse   RSVPResponse?
+  rsvpDate       DateTime?
+
+  // Plus ones
+  plusOnesAllowed   Int      @default(0)
+  plusOnesConfirmed Int      @default(0)
+  plusOneNames      String[] // Array of plus one names
+
+  // Attendance tracking
+  checkedInAt DateTime?
+  checkedInBy String? // Staff/organizer who checked them in
+
+  // Donation
+  hasDonated      Boolean        @default(false)
+  donationAmount  Float?
+  donationOrderId String?        @unique
+  donationOrder   DonationOrder? @relation(fields: [donationOrderId], references: [id])
+
+  // Communication
+  invitationSentAt DateTime?
+  reminderSentAt   DateTime?
+  lastEmailSentAt  DateTime?
+
+  // Notes
+  specialRequirements String?
+  organizerNotes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  seat      Seat?
+
+  @@unique([inviteOnlyEventId, guestEmail])
+  @@index([inviteOnlyEventId, status])
+  @@index([invitationCode])
+  @@index([guestEmail])
+}
+
+// Model for donation orders
+model DonationOrder {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Payment details
+  paystackId    String        @unique
+  amount        Float
+  platformFee   Float         @default(0)
+  netAmount     Float
+  paymentStatus PaymentStatus @default(PENDING)
+  paymentMethod String?
+  currency      String        @default("NGN")
+
+  // Donor information (optional - can be anonymous)
+  donorName   String?
+  donorEmail  String?
+  donorPhone  String?
+  isAnonymous Boolean @default(false)
+
+  // Event reference
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id])
+
+  // Invitation reference (if donor is an invitee)
+  invitation Invitation?
+
+  // Message/dedication
+  donationMessage String?
+
+  // Receipt
+  receiptUrl    String?
+  receiptSentAt DateTime?
+
+  notifications Notification[]
+
+  @@index([eventId])
+  @@index([paymentStatus])
+  @@index([donorEmail])
+}
+
+model SeatingTable {
+  id                String          @id @default(cuid())
+  inviteOnlyEventId String
+  inviteOnlyEvent   InviteOnlyEvent @relation(fields: [inviteOnlyEventId], references: [id], onDelete: Cascade)
+
+  tableNumber Int // e.g., 1, 2, 3
+  tableName   String? // Optional name (e.g., "VIP Table", "Family Table")
+  capacity    Int // Maximum seats at this table
+  shape       TableShape @default(ROUND) // ROUND, RECTANGLE, SQUARE
+  notes       String?    @db.Text // Special notes about the table
+
+  // Position for visual layout (optional, for drag-and-drop)
+  positionX Float?
+  positionY Float?
+
+  seats Seat[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([inviteOnlyEventId, tableNumber])
+  @@index([inviteOnlyEventId])
+}
+
+// Individual Seat at a Table
+model Seat {
+  id      String       @id @default(cuid())
+  tableId String
+  table   SeatingTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+
+  seatNumber   Int // Position at table (1, 2, 3...)
+  invitationId String?     @unique // Assigned guest
+  invitation   Invitation? @relation(fields: [invitationId], references: [id], onDelete: SetNull)
+
+  isReserved  Boolean @default(false) // Reserved but not assigned
+  reservedFor String? // Name of person it's reserved for
+  notes       String? // Special notes about this seat
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tableId, seatNumber])
+  @@index([tableId])
+  @@index([invitationId])
+}
+
+// ─── Add to prisma/schema.prisma (replaces the Round 3 version) ──────────────
+// SENT      = accepted by the email provider (awaiting delivery confirmation)
+// DELIVERED = recipient's mail server accepted it (SES delivery event)
+// BOUNCED   = rejected by the recipient's mail server (bad/non-existent address, etc.)
+// COMPLAINED= recipient marked it as spam
+// FAILED    = could not be handed to the provider at all
+
+enum EmailLogStatus {
+  SENT
+  DELIVERED
+  BOUNCED
+  COMPLAINED
+  FAILED
+}
+
+model EmailLog {
+  id              String         @id @default(cuid())
+  createdAt       DateTime       @default(now())
+  type            String // ORDER_TICKETS | TICKET_RESEND
+  status          EmailLogStatus
+  provider        String? // ses | gmail
+  toEmail         String
+  subject         String
+  orderId         String?
+  eventId         String?
+  eventTitle      String?
+  ticketIds       String[] // human-readable ticket IDs included
+  attachmentCount Int            @default(0)
+  messageId       String? // provider message id (SES MessageId)
+  error           String?
+
+  // Delivery tracking (filled by the SES → SNS webhook)
+  deliveredAt  DateTime?
+  bouncedAt    DateTime?
+  complainedAt DateTime?
+  bounceType   String? // e.g. Permanent/General
+  bounceReason String?
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([toEmail])
+  @@index([orderId])
+  @@index([messageId])
+}
