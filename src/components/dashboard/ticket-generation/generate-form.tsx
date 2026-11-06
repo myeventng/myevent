@@ -20,6 +20,7 @@ import { BatchHistory } from './batch-history';
 export type GenerateFormProps = {
   eventId: string;
   eventTitle: string;
+  eventEnded?: boolean;
   ticketTypes: { id: string; name: string; available: number }[];
   defaults: { codeFormat: 'QR' | 'BARCODE'; design: 'BRANDED' | 'CODES_ONLY'; ticketsPerPage: number; showSerial: boolean; organizerLabel: string | null };
   layouts: { BRANDED: number[]; CODES_ONLY: number[] };
@@ -79,10 +80,16 @@ export function GenerateForm(p: GenerateFormProps) {
     setRefreshKey((k) => k + 1);
   });
 
-  const canSubmit = !!ticketTypeId && qtyValid && !!quote && !pending;
+  const canSubmit = !p.eventEnded && !!ticketTypeId && qtyValid && !!quote && !pending;
 
   return (
     <div className="space-y-6">
+      {p.eventEnded && (
+        <Alert variant="destructive">
+          <Info className="h-4 w-4" />
+          <AlertDescription>This event has already ended, so new physical tickets can&apos;t be generated. Your earlier batches and downloads below are unaffected.</AlertDescription>
+        </Alert>
+      )}
       {p.ticketTypes.length === 0 ? (
         <Alert><Info className="h-4 w-4" /><AlertDescription>This event has no ticket types yet. Add a ticket type before generating physical tickets.</AlertDescription></Alert>
       ) : (

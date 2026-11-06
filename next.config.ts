@@ -1,5 +1,14 @@
 import type { NextConfig } from 'next';
 
+function r2ImagePatterns() {
+  try {
+    const host = new URL(process.env.R2_PUBLIC_BASE_URL ?? '').hostname;
+    return host ? [{ protocol: 'https' as const, hostname: host, pathname: '/**' }] : [];
+  } catch {
+    return [];
+  }
+}
+
 const nextConfig: NextConfig = {
   turbopack: {},
   // pdfkit reads its font metric files from disk and bwip-js ships native-ish assets: keep both
@@ -18,9 +27,16 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
+        hostname: '*.ufs.sh',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
         hostname: 'images.unsplash.com',
         pathname: '/**',
       },
+      // Cloudflare R2 public bucket host (read at build time from R2_PUBLIC_BASE_URL).
+      ...r2ImagePatterns(),
     ],
   },
   webpack: (config, { isServer }) => {

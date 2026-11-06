@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CommissionSettingsPanel } from "@/components/admin/commission/commission-settings-panel";
 import { PricingTiersPanel } from "@/components/admin/commission/pricing-tiers-panel";
+import { StorageSettingsPanel } from "@/components/admin/storage-settings-panel";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Settings,
@@ -265,12 +266,13 @@ export function AdminSettings({
 
       {/* Settings Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 h-auto">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-6 h-auto">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="financial">Financial</TabsTrigger>
           <TabsTrigger value="email">Email</TabsTrigger>
           <TabsTrigger value="commission">Commission</TabsTrigger>
           <TabsTrigger value="ticket-pricing">Ticket Pricing</TabsTrigger>
+          <TabsTrigger value="storage">Storage</TabsTrigger>
         </TabsList>
 
         {/* General Settings */}
@@ -631,6 +633,18 @@ export function AdminSettings({
         {/* Physical ticket generation pricing */}
         <TabsContent value="ticket-pricing" className="space-y-4">
           <PricingTiersPanel canEdit={isUserSuperAdmin} />
+        </TabsContent>
+
+        {/* File storage (UploadThing / Cloudflare R2) */}
+        <TabsContent value="storage" className="space-y-4">
+          {isUserSuperAdmin ? (
+            <StorageSettingsPanel canEdit={isUserSuperAdmin} />
+          ) : (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>Only a Super Admin can view or change storage settings.</AlertDescription>
+            </Alert>
+          )}
         </TabsContent>
       </Tabs>
 

@@ -1,8 +1,15 @@
 import { imageSize } from 'image-size';
 import { SHARE_IMAGE_RULES } from '@/lib/share-image';
+import { r2PublicHost } from '@/lib/storage/r2';
 
-// Only accept images that were uploaded through our own UploadThing app (stops SSRF and hotlinked junk).
+// Only accept images uploaded through our own storage: UploadThing or our R2 public bucket (stops SSRF and hotlinked junk).
 const ALLOWED_HOSTS = [/^utfs\.io$/i, /\.ufs\.sh$/i, /^ufs\.sh$/i];
+
+function isAllowedHost(host: string): boolean {
+  if (ALLOWED_HOSTS.some((r) => r.test(host))) return true;
+  const r2 = r2PublicHost();
+  return !!r2 && host.toLowerCase() === r2;
+}
 
 export class ShareImageError extends Error {}
 
@@ -13,7 +20,7 @@ export async function validateAndMeasureShareImage(url: string): Promise<{ url: 
   } catch {
     throw new ShareImageError('The share image URL is not valid');
   }
-  if (u.protocol !== 'https:' || !ALLOWED_HOSTS.some((r) => r.test(u.hostname))) {
+  if (u.protocol !== 'https:' || !isAllowedHost(u.hostname)) {
     throw new ShareImageError('Please upload the share image using the uploader');
   }
 

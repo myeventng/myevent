@@ -1,5 +1,6 @@
 'use server';
 
+import { hasEventEnded } from '@/lib/event-status';
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { z } from 'zod';
@@ -63,6 +64,7 @@ export async function getPublicPricingTiers() {
 
 export async function getGenerateFormOptions(eventId: string): Promise<Result<{
   event: { id: string; title: string };
+  eventEnded: boolean;
   ticketTypes: { id: string; name: string; available: number }[];
   defaults: { codeFormat: 'QR' | 'BARCODE'; design: 'BRANDED' | 'CODES_ONLY'; ticketsPerPage: number; showSerial: boolean; organizerLabel: string | null };
   layouts: { BRANDED: number[]; CODES_ONLY: number[] };
@@ -73,7 +75,7 @@ export async function getGenerateFormOptions(eventId: string): Promise<Result<{
     const { actor } = await currentActor();
     const access = await requireEventPermission(actor, eventId, 'GENERATE_TICKETS');
     const [event, types, perEvent, general, tiers, max] = await Promise.all([
-      prisma.event.findUnique({ where: { id: eventId }, select: { id: true, title: true } }),
+      prisma.event.findUnique({ where: { id: eventId }, select: { id: true, title: true, startDateTime: true, endDateTime: true } }),
       prisma.ticketType.findMany({ where: { eventId }, select: { id: true, name: true, quantity: true }, orderBy: { name: 'asc' } }),
       prisma.organizerTicketGenerationSettings.findFirst({ where: { organizerId: access.organizerId!, scopeKey: eventId } }),
       prisma.organizerTicketGenerationSettings.findFirst({ where: { organizerId: access.organizerId!, scopeKey: 'DEFAULT' } }),
@@ -85,7 +87,8 @@ export async function getGenerateFormOptions(eventId: string): Promise<Result<{
     return {
       success: true,
       data: {
-        event,
+        event: { id: event.id, title: event.title },
+        eventEnded: hasEventEnded(event),
         ticketTypes: types.map((t) => ({ id: t.id, name: t.name, available: t.quantity })),
         defaults: { codeFormat: s?.codeFormat ?? 'QR', design: s?.design ?? 'BRANDED', ticketsPerPage: s?.ticketsPerPage ?? 4, showSerial: s?.showSerial ?? true, organizerLabel: s?.organizerLabel ?? null },
         layouts: { BRANDED: [...BRANDED_LAYOUTS], CODES_ONLY: [...CODES_ONLY_LAYOUTS] },

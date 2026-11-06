@@ -1,7 +1,12 @@
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { getServerSideAuth } from '@/lib/auth-server';
 import { TicketScannerPage } from '@/components/scanner/ticket-scanner-page';
-import { getEventById } from '@/actions/event.actions';
+import { prisma } from '@/lib/prisma';
+import { can, isOwnerOrAdmin, resolveEventAccess } from '@/lib/staff/access';
+import { getScannerMode } from '@/lib/scanner/validate';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -24,20 +29,17 @@ export default async function ScannerPage({ params }: ScannerPageProps) {
 
   const { eventId } = await params;
 
-  // Get event details
-  const eventResponse = await getEventById(eventId);
+  // Owner, platform admin, or active staff with the scan permission (checked in the database).
+  const access = await resolveEventAccess({ id: session.user.id, role: session.user.role }, eventId);
+  const event = access
+    ? await prisma.event.findUnique({ where: { id: eventId }, select: { title: true, startDateTime: true } })
+    : null;
+  if (!event) redirect('/dashboard/scanner');
+  const allowed = can(access, 'SCAN_TICKETS');
+  const canConfigure = isOwnerOrAdmin(access);
+  const scannerMode = await getScannerMode(eventId);
 
-  if (!eventResponse.success || !eventResponse.data) {
-    redirect('/dashboard/events');
-  }
-
-  const event = eventResponse.data;
-
-  // Check permissions - only event organizer or admin can scan
-  const isOwner = event.userId === session.user.id;
-  const isAdmin = session.user.role === 'ADMIN';
-
-  if (!isOwner && !isAdmin) {
+  if (!allowed) {
     return (
       <DashboardLayout session={session}>
         <Card>
@@ -60,11 +62,21 @@ export default async function ScannerPage({ params }: ScannerPageProps) {
   return (
     <DashboardLayout session={session}>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Event Scanner</h1>
-          <p className="text-muted-foreground">
-            {event.title} - Complete scanning and analytics dashboard
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold">Event Scanner</h1>
+            <p className="text-muted-foreground">
+              {event.title} - Complete scanning and analytics dashboard
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">{scannerMode === 'INBUILT_ONLY' ? 'Inbuilt scanner only' : 'Universal scanner'}</Badge>
+            {canConfigure && (
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/dashboard/events/${eventId}/scanner-settings`}>Scanner settings</Link>
+              </Button>
+            )}
+          </div>
         </div>
 
         {!isEventDay && (
@@ -79,6 +91,7 @@ export default async function ScannerPage({ params }: ScannerPageProps) {
         <TicketScannerPage
           eventId={eventId}
           eventTitle={event.title as string}
+          scannerMode={scannerMode}
         />
       </div>
     </DashboardLayout>

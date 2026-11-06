@@ -9,16 +9,8 @@ import type { OurFileRouter } from '@/app/api/uploadthing/core';
 import { Loader2, X, Plus, Upload } from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-
-// Define a type for the endpoint to handle different file categories
-type UploadEndpoint =
-  | 'eventImage'
-  | 'eventCover'
-  | 'eventShareImage'
-  | 'profileImage'
-  | 'blogImage'
-  | 'venueImage'
-  | 'contestantImage';
+import { R2Dropzone } from '@/components/layout/r2-dropzone';
+import type { UploadEndpoint } from '@/lib/storage/rules';
 
 interface FileUploaderProps {
   onFieldChange: (urls: string | string[]) => void;
@@ -44,6 +36,19 @@ export const FileUploader = ({
   const [key, setKey] = useState(0); // Add a key to force Image component remount
   const [showUploader, setShowUploader] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Which backend the super admin selected. null = still loading.
+  const [provider, setProvider] = useState<'uploadthing' | 'r2' | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/storage/provider', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { provider: 'uploadthing' }))
+      .then((d) => !cancelled && setProvider(d.provider === 'r2' ? 'r2' : 'uploadthing'))
+      .catch(() => !cancelled && setProvider('uploadthing'));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Convert imageUrls to array format for internal use
   const imageUrlArray = Array.isArray(imageUrls)
@@ -347,6 +352,18 @@ export const FileUploader = ({
           <Loader2 className="h-10 w-10 text-primary animate-spin" />
           <p className="mt-2 text-sm text-gray-500">Uploading...</p>
         </div>
+      ) : provider === null ? (
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      ) : provider === 'r2' ? (
+        <R2Dropzone
+          endpoint={endpoint}
+          maxFiles={maxFiles}
+          disabled={disabled}
+          // R2Dropzone shows its own busy state; flipping isUploading here would unmount it mid-upload.
+          onUploadBegin={() => {}}
+          onComplete={onComplete}
+          onError={() => setIsUploading(false)}
+        />
       ) : (
         <UploadDropzone<OurFileRouter, UploadEndpoint>
           endpoint={endpoint}

@@ -130,6 +130,20 @@ describe('physical ticket generation (Postgres)', () => {
     await expect(prepareBatch({ id: org.id, role: 'USER' }, input(ev.event.id, ev.ticketType.id, 60_000))).rejects.toThrow(/at most/);
   });
 
+  it('refuses to create a batch once the event has ended (owner and admin alike), reserving nothing; in-progress events still work', async () => {
+    const ended = await makeEvent(org, { ticketQty: 100, startsInHours: -10 }); // started 10h ago, ended 6h ago
+    const admin = await makeUser({ role: 'ADMIN', subRole: 'SUPER_ADMIN' });
+    for (const actor of [{ id: org.id, role: 'USER' as const }, { id: admin.id, role: 'ADMIN' as const }]) {
+      await expect(prepareBatch(actor, input(ended.event.id, ended.ticketType.id, 10))).rejects.toMatchObject({ code: 'EVENT_ENDED' });
+    }
+    expect((await prisma.ticketType.findUniqueOrThrow({ where: { id: ended.ticketType.id } })).quantity).toBe(100);
+    expect(await prisma.ticketGenerationBatch.count({ where: { eventId: ended.event.id } })).toBe(0);
+
+    // Started 1h ago, ends in 3h: door sales / on-the-day printing must still be possible.
+    const live = await makeEvent(org, { ticketQty: 100, startsInHours: -1 });
+    await expect(prepareBatch({ id: org.id, role: 'USER' }, input(live.event.id, live.ticketType.id, 10))).resolves.toBeTruthy();
+  });
+
   it('refuses when inventory is insufficient and never reserves partially', async () => {
     const small = await makeEvent(org, { ticketQty: 50 });
     await expect(prepareBatch({ id: org.id, role: 'USER' }, input(small.event.id, small.ticketType.id, 51))).rejects.toThrow(/Not enough/);

@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "prisma generate && next dev",
     "build": "prisma generate && next build",
+    "seed": "tsx prisma/seed.ts",
     "seed:blog": "tsx prisma/seed-blog.ts",
     "start": "next start",
     "lint": "next lint",
@@ -12,7 +13,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1163.0",
     "@aws-sdk/client-ses": "^3.1045.0",
+    "@aws-sdk/s3-request-presigner": "^3.1163.0",
     "@hookform/resolvers": "^5.0.1",
     "@node-rs/argon2": "^2.0.2",
     "@prisma/client": "^6.7.0",
@@ -51,6 +54,7 @@
     "date-fns-tz": "^3.2.0",
     "fflate": "^0.8.3",
     "framer-motion": "^12.23.21",
+    "fs": "^0.0.1-security",
     "handlebars": "^4.7.8",
     "image-size": "^2.0.4",
     "jspdf": "^3.0.1",

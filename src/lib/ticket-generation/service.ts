@@ -9,6 +9,7 @@
 // Everything here is safe on serverless: no in-memory locks, no local files.
 // Concurrency control is done with conditional UPDATEs and DB unique constraints.
 
+import { EVENT_ENDED_MESSAGE, hasEventEnded } from '@/lib/event-status';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import type {
@@ -110,10 +111,13 @@ export async function prepareBatch(
 
   const event = await db.event.findUnique({
     where: { id: input.eventId },
-    select: { id: true, userId: true, isCancelled: true, attendeeLimit: true, title: true },
+    select: { id: true, userId: true, isCancelled: true, attendeeLimit: true, title: true, startDateTime: true, endDateTime: true },
   });
   if (!event || !event.userId) throw new GenerationError('Event not found', 'NOT_FOUND');
   if (event.isCancelled) throw new GenerationError('Cannot generate tickets for a cancelled event', 'CANCELLED');
+  // Checked server-side at the moment of creating a batch (not just in the UI). Batches already
+  // created/paid before the event ended still finish, so a paid order is never stranded.
+  if (hasEventEnded(event)) throw new GenerationError(EVENT_ENDED_MESSAGE, 'EVENT_ENDED');
 
   const ticketType = await db.ticketType.findFirst({
     where: { id: input.ticketTypeId, eventId: input.eventId }, // type must belong to this event

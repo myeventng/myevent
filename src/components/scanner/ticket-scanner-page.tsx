@@ -8,6 +8,7 @@ import { getTicketValidations, getEventTicketStats } from '@/actions/ticket.acti
 import { CheckCircle, XCircle, Users, TrendingUp, Clock } from 'lucide-react';
 
 interface TicketScannerPageProps {
+  scannerMode?: 'INBUILT_ONLY' | 'UNIVERSAL';
   eventId: string;
   eventTitle: string;
 }
@@ -42,7 +43,7 @@ interface StatsData {
   };
 }
 
-export function TicketScannerPage({ eventId, eventTitle }: TicketScannerPageProps) {
+export function TicketScannerPage({ eventId, eventTitle, scannerMode }: TicketScannerPageProps) {
   const [validations, setValidations] = useState<ValidationRecord[]>([]);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -173,7 +174,7 @@ export function TicketScannerPage({ eventId, eventTitle }: TicketScannerPageProp
       )}
 
       {/* Scanner Component */}
-      <TicketScanner eventId={eventId} eventTitle={eventTitle} />
+      <TicketScanner eventId={eventId} eventTitle={eventTitle} scannerMode={scannerMode} />
 
       {/* Recent Validations */}
       <Card>

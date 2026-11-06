@@ -1,5 +1,6 @@
 "use server";
 
+import { EVENT_ENDED_MESSAGE, hasEventEnded } from "@/lib/event-status";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
@@ -133,6 +134,14 @@ export async function updateInviteOnlyEvent(data: {
 }
 
 // CREATE INVITATION
+async function inviteEventEnded(inviteOnlyEventId: string): Promise<boolean> {
+  const row = await prisma.inviteOnlyEvent.findUnique({
+    where: { id: inviteOnlyEventId },
+    select: { event: { select: { startDateTime: true, endDateTime: true } } },
+  });
+  return !!row && hasEventEnded(row.event);
+}
+
 export async function createInvitation(data: {
   inviteOnlyEventId: string;
   guestName: string;
@@ -144,6 +153,9 @@ export async function createInvitation(data: {
   sendEmail?: boolean;
 }): Promise<ActionResponse<any>> {
   try {
+    const ended = await inviteEventEnded(data.inviteOnlyEventId);
+    if (ended) return { success: false, message: EVENT_ENDED_MESSAGE };
+
     // Check if invitation already exists
     const existingInvitation = await prisma.invitation.findUnique({
       where: {
@@ -868,6 +880,9 @@ export async function sendInvitationEmails(data: {
   invitationIds?: string[];
 }): Promise<ActionResponse<{ sent: number; failed: number }>> {
   try {
+    if (await inviteEventEnded(data.inviteOnlyEventId)) {
+      return { success: false, message: EVENT_ENDED_MESSAGE };
+    }
     const whereClause: any = { inviteOnlyEventId: data.inviteOnlyEventId };
 
     if (data.invitationIds && data.invitationIds.length > 0) {

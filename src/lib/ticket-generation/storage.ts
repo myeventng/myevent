@@ -4,6 +4,8 @@
 // local filesystem (Vercel functions are ephemeral).
 
 import { UTApi } from 'uploadthing/server';
+import { getActiveProvider } from '@/lib/storage/provider';
+import { R2_KEY_PREFIX, deletePrivateObject, getR2Status, putPrivateObject, signPrivateGet } from '@/lib/storage/r2';
 
 export interface PartStorage {
   put(args: { batchId: string; partIndex: number; filename: string; data: Buffer }): Promise<{ key: string }>;
@@ -34,9 +36,54 @@ class UploadThingStorage implements PartStorage {
   }
 }
 
+class R2PrivateStorage implements PartStorage {
+  async put({ batchId, partIndex, filename, data }: { batchId: string; partIndex: number; filename: string; data: Buffer }) {
+    const safe = filename.replace(/[^\w.\-]/g, '_');
+    const key = `${R2_KEY_PREFIX}tickets/${batchId}/${partIndex}-${safe}`;
+    await putPrivateObject(key, data);
+    return { key };
+  }
+
+  async signedUrl(key: string, expiresInSeconds = 300) {
+    return signPrivateGet(key.slice(R2_KEY_PREFIX.length), expiresInSeconds, key.split('/').pop());
+  }
+
+  async remove(key: string) {
+    await deletePrivateObject(key.slice(R2_KEY_PREFIX.length));
+  }
+}
+
+/**
+ * Routes by provider. New parts go to whichever provider the super admin has
+ * selected (R2 only if its private bucket is configured). Existing parts keep
+ * working after a switch: R2 keys carry the "r2/" prefix, everything else is an
+ * UploadThing key.
+ */
+class SwitchingStorage implements PartStorage {
+  private ut = new UploadThingStorage();
+  private r2 = new R2PrivateStorage();
+  private static isR2Key = (k: string) => k.startsWith(R2_KEY_PREFIX);
+
+  async put(args: { batchId: string; partIndex: number; filename: string; data: Buffer }) {
+    const wantR2 = (await getActiveProvider()) === 'r2';
+    if (wantR2 && !getR2Status().ticketPdfReady) {
+      throw new Error('Cloudflare R2 is selected but R2_PRIVATE_BUCKET / credentials are missing');
+    }
+    return wantR2 ? this.r2.put(args) : this.ut.put(args);
+  }
+
+  signedUrl(key: string, expiresInSeconds?: number) {
+    return SwitchingStorage.isR2Key(key) ? this.r2.signedUrl(key, expiresInSeconds) : this.ut.signedUrl(key, expiresInSeconds);
+  }
+
+  remove(key: string) {
+    return SwitchingStorage.isR2Key(key) ? this.r2.remove(key) : this.ut.remove(key);
+  }
+}
+
 let instance: PartStorage | null = null;
 export function getPartStorage(): PartStorage {
-  if (!instance) instance = new UploadThingStorage();
+  if (!instance) instance = new SwitchingStorage();
   return instance;
 }
 

@@ -29,6 +29,8 @@ type Channel = 'CAMERA' | 'KEYBOARD';
 interface TicketScannerProps {
   eventId: string;
   eventTitle: string;
+  /** Organizer-chosen mode. INBUILT_ONLY = camera only; UNIVERSAL also allows hardware scanners / manual entry. */
+  scannerMode?: 'INBUILT_ONLY' | 'UNIVERSAL';
   onScanComplete?: (result: ScanResult) => void;
 }
 
@@ -66,8 +68,10 @@ interface IDetectedBarcode {
 export function TicketScanner({
   eventId,
   eventTitle,
+  scannerMode = 'UNIVERSAL',
   onScanComplete,
 }: TicketScannerProps) {
+  const universal = scannerMode === 'UNIVERSAL';
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -489,14 +493,16 @@ export function TicketScanner({
             </div>
           )}
 
+          {universal ? (
           <div className="space-y-2">
-            <label className="text-sm font-medium">Manual Ticket Entry</label>
+            <label className="text-sm font-medium">Hardware scanner / manual entry</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={manualTicketId}
                 onChange={(e) => setManualTicketId(e.target.value)}
-                placeholder="Enter ticket ID (e.g., TKT-ABC123)"
+                placeholder="Scan with a barcode/QR scanner, or type the code"
+                autoFocus={false}
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 onKeyPress={(e) => e.key === 'Enter' && handleManualValidation()}
                 disabled={isProcessing}
@@ -509,7 +515,11 @@ export function TicketScanner({
                 {isProcessing ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Validate'}
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground">Plug in or pair a USB / Bluetooth barcode or QR scanner, click this box, then scan. Most scanners type the code and press Enter automatically.</p>
           </div>
+          ) : (
+            <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">This event accepts the in-built camera scanner only. Hardware scanners and manual entry are turned off in Scanner settings.</p>
+          )}
         </CardContent>
       </Card>
 
@@ -632,7 +642,7 @@ export function TicketScanner({
         <CardContent>
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>
-              • <strong>QR Code Scanning:</strong> Click "Start QR Scanner" and position QR codes
+              • <strong>QR Code Scanning:</strong> Click &quot;Start QR Scanner&quot; and position QR codes
               in the target area
             </p>
             <p>
@@ -644,7 +654,7 @@ export function TicketScanner({
               front and back cameras
             </p>
             <p>
-              • <strong>Manual Entry:</strong> Type ticket ID and press Enter or click "Validate"
+              • <strong>Manual Entry:</strong> Type ticket ID and press Enter or click &quot;Validate&quot;
             </p>
             <p>
               • <strong>Audio Feedback:</strong> Listen for success (two beeps) or error (single
