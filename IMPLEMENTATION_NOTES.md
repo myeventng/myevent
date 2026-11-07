@@ -48,3 +48,23 @@ One shared check, `src/lib/event-status.ts` (`hasEventEnded`: now > end time, fa
 - creating invitations (single and bulk) and sending invitation emails for invite-only events.
 
 Intentionally NOT blocked: completing a payment already taken, batches already created/paid (they finish), re-sending or re-downloading tickets already issued, refunds. Online sales were already closed at event start by `initiateOrder`. Events in progress (started, not yet ended) can still print door tickets.
+
+## Online vs physical ticket stock; physical tickets are not sales
+
+- `TicketType.quantity` = ONLINE stock (reduced by online sales, as before). New `TicketType.physicalQuantity` = PHYSICAL stock, set per ticket type in the create/edit ticket form ("Physical quantity (optional)", default 0). Generating a batch reserves from `physicalQuantity` only; cancelling a batch returns it there. The two pools never touch each other.
+- Editing a ticket type only sends `physicalQuantity` if the organizer changed it, so saving online details can't overwrite stock a batch just reserved.
+- Scanning a physical ticket marks it USED (same atomic scanner path as online tickets).
+- Sales and revenue exclude physical tickets everywhere (`src/lib/ticket-stats.ts`: `ONLINE_SOLD_WHERE`). Event stats show physical issued/used separately. Revenue per ticket type is now `online sold × price`; order-based revenue was already correct.
+- The batch records the scanner mode at generation time (`TicketGenerationBatch.scannerMode`). Branded tickets print an "Entry" line, e.g. "QR code · Any scanner" or "Barcode · MyEvent app scanner only". Codes-only PDFs stay clean for designers; their options appear in the batch list and in a README.txt inside the SVG zip.
+- Migration `20261107000000_physical_quantity_and_batch_scanner_mode` is additive. `prisma/optional-restore-online-stock.sql` (manual, optional) returns online stock consumed by batches generated before the split.
+
+## Offline (physical) sales inventory
+
+Physical tickets sold outside the platform are recorded per batch ("Record sales" on the Generate page's batch list; sold / correct-or-returned, optional price and note). Append-only ledger `OfflineSale`; the atomic counter `TicketGenerationBatch.offlineSold` can never go below 0 or above the batch size, even under concurrent clicks. Permission = same as generating (owner, admin, or staff with GENERATE_TICKETS on that event).
+
+Shown in: batch list (sold offline / unsold / scanned), ticket-type cards when editing an event, event analytics (per-type "Physical / offline tickets" block + overview line), organizer dashboard (Tickets Sold card + per-event rows), organizer events table, admin ticket stats (`physical`). A scanned physical ticket counts as sold even if never recorded.
+
+Offline figures are inventory + organizer-recorded revenue only: they never feed online sales, platform revenue, commission or payouts. All numbers come from one place (`src/lib/ticket-generation/offline-sales.ts`).
+
+Also fixed: the organizer events table computed revenue/sold from ALL tickets (so printed tickets inflated it); it now uses online tickets only. Scanner overview cards still count online + physical (both are scannable).
+Migration: `20261107120000_offline_sales` (additive).

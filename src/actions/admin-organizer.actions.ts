@@ -117,7 +117,8 @@ export async function getOrganizersWithAnalytics(): Promise<
           include: {
             ticketTypes: {
               include: {
-                tickets: true,
+                // Sales = online tickets only (physical tickets are inventory, not sales).
+                tickets: { where: { source: 'ONLINE' } },
               },
             },
             orders: {
@@ -312,7 +313,8 @@ export async function getOrganizerById(
           include: {
             ticketTypes: {
               include: {
-                tickets: true,
+                // Sales = online tickets only (physical tickets are inventory, not sales).
+                tickets: { where: { source: 'ONLINE' } },
               },
             },
             orders: {

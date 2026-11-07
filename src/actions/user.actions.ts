@@ -42,7 +42,8 @@ export async function getUserById(
             venue: true,
             ticketTypes: {
               include: {
-                tickets: true,
+                // Sales/revenue = online tickets only (physical tickets are inventory, not sales).
+                tickets: { where: { source: 'ONLINE' } },
               },
             },
             _count: {

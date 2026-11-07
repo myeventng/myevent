@@ -108,7 +108,7 @@ export const getAdminDashboardStats = cache(
 
         // Total tickets sold
         prisma.ticket.count({
-          where: { status: { in: ['UNUSED', 'USED'] } },
+          where: { source: 'ONLINE', status: { in: ['UNUSED', 'USED'] } },
         }),
 
         // Total notifications

@@ -1,5 +1,6 @@
 'use server';
 
+import { getBatchInventory, recordOfflineSale } from '@/lib/ticket-generation/offline-sales';
 import { hasEventEnded } from '@/lib/event-status';
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
@@ -77,7 +78,7 @@ export async function getGenerateFormOptions(eventId: string): Promise<Result<{
     const access = await requireEventPermission(actor, eventId, 'GENERATE_TICKETS');
     const [event, types, perEvent, general, tiers, max] = await Promise.all([
       prisma.event.findUnique({ where: { id: eventId }, select: { id: true, title: true, startDateTime: true, endDateTime: true, attendeeLimit: true } }),
-      prisma.ticketType.findMany({ where: { eventId }, select: { id: true, name: true, quantity: true }, orderBy: { name: 'asc' } }),
+      prisma.ticketType.findMany({ where: { eventId }, select: { id: true, name: true, physicalQuantity: true }, orderBy: { name: 'asc' } }),
       prisma.organizerTicketGenerationSettings.findFirst({ where: { organizerId: access.organizerId!, scopeKey: eventId } }),
       prisma.organizerTicketGenerationSettings.findFirst({ where: { organizerId: access.organizerId!, scopeKey: 'DEFAULT' } }),
       getPublicPricingTiers(),
@@ -97,7 +98,7 @@ export async function getGenerateFormOptions(eventId: string): Promise<Result<{
         event: { id: event.id, title: event.title },
         eventEnded: hasEventEnded(event),
         attendeeRemaining,
-        ticketTypes: types.map((t) => ({ id: t.id, name: t.name, available: t.quantity })),
+        ticketTypes: types.map((t) => ({ id: t.id, name: t.name, available: t.physicalQuantity })),
         defaults: { codeFormat: s?.codeFormat ?? 'QR', design: s?.design ?? 'BRANDED', ticketsPerPage: s?.ticketsPerPage ?? 4, showSerial: s?.showSerial ?? true, organizerLabel: s?.organizerLabel ?? null },
         layouts: { BRANDED: [...BRANDED_LAYOUTS], CODES_ONLY: [...CODES_ONLY_LAYOUTS] },
         tiers,
@@ -210,6 +211,20 @@ export async function cancelGenerationBatch(batchId: string): Promise<Result> {
   }
 }
 
+/** Record physical tickets sold offline (positive) or correct a mistake (negative). */
+export async function recordOfflineSaleAction(input: { batchId: string; quantity: number; unitPriceNaira?: number | null; note?: string | null }): Promise<Result<{ offlineSold: number; batchQuantity: number }>> {
+  try {
+    const { actor } = await currentActor();
+    const r = await recordOfflineSale(actor, input);
+    const { batch } = await batchForActor(input.batchId, actor);
+    revalidatePath(`/dashboard/events/${batch.eventId}/tickets/generate`);
+    revalidatePath('/dashboard');
+    return { success: true, data: r, message: `Recorded. ${r.offlineSold.toLocaleString('en-NG')} of ${r.batchQuantity.toLocaleString('en-NG')} sold offline.` };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 export async function listGenerationBatches(input: { eventId?: string; page?: number; pageSize?: number }) {
   try {
     const { actor } = await currentActor();
@@ -232,10 +247,11 @@ export async function listGenerationBatches(input: { eventId?: string; page?: nu
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: { event: { select: { id: true, title: true } }, ticketType: { select: { name: true } }, payment: { select: { status: true, amountKobo: true } } },
+        include: { event: { select: { id: true, title: true } }, ticketType: { select: { name: true, price: true } }, payment: { select: { status: true, amountKobo: true } } },
       }),
     ]);
     const stats = await Promise.all(rows.map((b) => getBatchStats(b.id)));
+    const inventory = await getBatchInventory(rows.map((b) => b.id));
     return {
       success: true as const,
       data: {
@@ -251,6 +267,8 @@ export async function listGenerationBatches(input: { eventId?: string; page?: nu
           quantity: b.quantity,
           design: b.design,
           codeFormat: b.codeFormat,
+          scannerMode: b.scannerMode,
+          showSerial: b.showSerial,
           ticketsPerPage: b.ticketsPerPage,
           status: b.status,
           partsDone: b.partsDone,
@@ -259,6 +277,7 @@ export async function listGenerationBatches(input: { eventId?: string; page?: nu
           feeKobo: b.feeKobo,
           paymentStatus: b.payment?.status ?? null,
           stats: stats[i],
+          offline: (() => { const v = inventory.get(b.id); return { soldOffline: v?.soldOffline ?? 0, unsold: v?.unsold ?? 0, revenueKobo: v?.revenueKobo ?? 0, defaultPriceNaira: b.ticketType.price }; })(),
         })),
       },
     };

@@ -599,7 +599,10 @@ model TicketType {
   id       String @id @default(cuid())
   name     String
   price    Float  @default(0.0)
-  quantity Int
+  quantity Int // ONLINE stock: decremented when an online ticket is sold
+  // PHYSICAL stock: independent of `quantity`. Reserved when a physical batch is generated
+  // (released if the batch is cancelled); never touched by online sales.
+  physicalQuantity Int @default(0)
 
   // Enhanced ticket type fields
   description   String?
@@ -1337,6 +1340,8 @@ model TicketGenerationBatch {
   ticketsPerPage Int               @default(4)
   showSerial     Boolean           @default(true) // codes-only: print small serial under each code
   organizerLabel String? // optional organizer branding text
+  scannerMode    ScannerMode       @default(UNIVERSAL) // snapshot of the event's scanner mode at generation time
+  offlineSold    Int               @default(0) // physical tickets the organizer has recorded as sold offline (ledger: OfflineSale)
 
   status GenerationBatchStatus @default(PENDING_PAYMENT)
 
@@ -1359,6 +1364,7 @@ model TicketGenerationBatch {
   tickets Ticket[]
   files   TicketGenerationFile[]
   payment TicketGenerationPayment?
+  offlineSales OfflineSale[]
 
   @@index([organizerId, createdAt])
   @@index([eventId, createdAt])
@@ -1442,4 +1448,25 @@ model RateLimitBucket {
   count       Int      @default(0)
 
   @@index([windowStart])
+}
+
+// Append-only ledger of physical tickets the organizer sold OUTSIDE the platform (cash, door, resellers).
+// quantity is signed (a negative row corrects / returns). Informational inventory + revenue: it never
+// feeds platform revenue, commission or payouts.
+model OfflineSale {
+  id           String                @id @default(cuid())
+  batchId      String
+  batch        TicketGenerationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  eventId      String
+  ticketTypeId String
+  quantity     Int // signed
+  unitPriceKobo Int // price per ticket at the time (defaults to the ticket type price)
+  amountKobo   Int // quantity * unitPriceKobo (signed)
+  note         String?
+  recordedById String
+  createdAt    DateTime              @default(now())
+
+  @@index([batchId])
+  @@index([eventId, createdAt])
+  @@index([ticketTypeId])
 }

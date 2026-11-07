@@ -52,7 +52,7 @@ export async function makeOrganizer(name = 'Org') {
 let venueId: string | null = null;
 export async function makeEvent(
   owner: { id: string },
-  opts: { title?: string; ticketQty?: number; price?: number; attendeeLimit?: number; startsInHours?: number } = {},
+  opts: { title?: string; ticketQty?: number; physicalQty?: number; onlineQty?: number; price?: number; attendeeLimit?: number; startsInHours?: number } = {},
 ) {
   if (!venueId) {
     const city = await prisma.city.create({ data: { name: `City ${uid()}`, state: 'FCT' } });
@@ -75,7 +75,7 @@ export async function makeEvent(
     },
   });
   const ticketType = await prisma.ticketType.create({
-    data: { name: 'Regular', price: opts.price ?? 5000, quantity: opts.ticketQty ?? 1000, eventId: event.id },
+    data: { name: 'Regular', price: opts.price ?? 5000, quantity: opts.onlineQty ?? 1000, physicalQuantity: opts.physicalQty ?? opts.ticketQty ?? 1000, eventId: event.id },
   });
   return { event, ticketType };
 }

@@ -23,7 +23,7 @@ import type {
 import { requireEventPermission, type ActorLike } from '@/lib/staff/access';
 import { selectTier } from '@/lib/ticket-generation/pricing';
 import { deriveToken, hashToken, serialFor } from '@/lib/ticket-generation/token';
-import { isValidLayout, renderTicketsPdf, type PrintTicket } from '@/lib/ticket-generation/pdf';
+import { describeScan, isValidLayout, renderTicketsPdf, type PrintTicket } from '@/lib/ticket-generation/pdf';
 import { getPartStorage, type PartStorage } from '@/lib/ticket-generation/storage';
 import { formatLagosTime } from '@/lib/utils';
 
@@ -121,10 +121,11 @@ export async function prepareBatch(
 
   const ticketType = await db.ticketType.findFirst({
     where: { id: input.ticketTypeId, eventId: input.eventId }, // type must belong to this event
-    select: { id: true, quantity: true, name: true },
+    select: { id: true, quantity: true, physicalQuantity: true, name: true },
   });
   if (!ticketType) throw new GenerationError('Ticket category does not belong to this event', 'BAD_TICKET_TYPE');
 
+  const scannerSettings = await db.eventScannerSettings.findUnique({ where: { eventId: event.id }, select: { mode: true } });
   const quote = await quoteQuantity(input.quantity, db);
   const isAdmin = access.via === 'ADMIN';
   const feeKobo = isAdmin ? 0 : quote.feeKobo; // admin-generated inventory is not billed
@@ -144,15 +145,15 @@ export async function prepareBatch(
       }
     }
 
-    // Reserve inventory atomically: the conditional update fails if another
-    // sale/batch already consumed it. Released again if the batch is cancelled.
+    // Reserve PHYSICAL stock atomically (independent of the online `quantity`): the conditional update
+    // fails if another batch already consumed it. Released again if the batch is cancelled.
     const reserved = await tx.ticketType.updateMany({
-      where: { id: ticketType.id, quantity: { gte: input.quantity } },
-      data: { quantity: { decrement: input.quantity } },
+      where: { id: ticketType.id, physicalQuantity: { gte: input.quantity } },
+      data: { physicalQuantity: { decrement: input.quantity } },
     });
     if (reserved.count === 0) {
       throw new GenerationError(
-        `Not enough remaining "${ticketType.name}" tickets (${ticketType.quantity.toLocaleString('en-NG')} available). Increase the ticket quantity first.`,
+        `Not enough physical "${ticketType.name}" tickets allocated (${ticketType.physicalQuantity.toLocaleString('en-NG')} available). Increase the physical quantity on this ticket type first.`,
         'INSUFFICIENT_INVENTORY',
       );
     }
@@ -171,6 +172,7 @@ export async function prepareBatch(
         ticketsPerPage: input.ticketsPerPage,
         showSerial: input.showSerial,
         organizerLabel: input.organizerLabel || null,
+        scannerMode: scannerSettings?.mode ?? 'UNIVERSAL',
         status: needsPayment ? 'PENDING_PAYMENT' : 'READY',
         pricingTierId: quote.tierId,
         feeKobo,
@@ -229,7 +231,7 @@ async function releaseReservation(tx: Prisma.TransactionClient, batchId: string)
   });
   if (claimed.count === 1) {
     const b = await tx.ticketGenerationBatch.findUnique({ where: { id: batchId }, select: { ticketTypeId: true, quantity: true } });
-    if (b) await tx.ticketType.update({ where: { id: b.ticketTypeId }, data: { quantity: { increment: b.quantity } } });
+    if (b) await tx.ticketType.update({ where: { id: b.ticketTypeId }, data: { physicalQuantity: { increment: b.quantity } } });
   }
 }
 
@@ -347,6 +349,7 @@ export async function loadPrintContext(batchId: string, db: Db = prisma) {
       venueText,
       ticketTypeName: batch.ticketType.name,
       organizerLabel: batch.organizerLabel,
+      scanText: describeScan(batch.codeFormat as TicketCodeFormat, batch.scannerMode),
     },
   };
 }

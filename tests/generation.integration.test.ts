@@ -6,6 +6,8 @@ import {
 } from '@/lib/ticket-generation/service';
 import type { PartStorage } from '@/lib/ticket-generation/storage';
 import { deriveToken, hashToken } from '@/lib/ticket-generation/token';
+import { describeScan } from '@/lib/ticket-generation/pdf';
+import { ONLINE_SOLD_WHERE, PHYSICAL_ISSUED_WHERE } from '@/lib/ticket-stats';
 
 class MemoryStorage implements PartStorage {
   files = new Map<string, Buffer>();
@@ -83,8 +85,10 @@ describe('physical ticket generation (Postgres)', () => {
     expect(storage.files.size).toBe(2);
     const stats = await getBatchStats(p.batchId);
     expect(stats).toEqual({ generated: qty, unused: qty, validated: 0, cancelled: 0 });
-    // inventory was reserved
-    expect((await prisma.ticketType.findUniqueOrThrow({ where: { id: ev.ticketType.id } })).quantity).toBe(100_000 - qty);
+    // PHYSICAL inventory was reserved; ONLINE stock is untouched.
+    const tt = await prisma.ticketType.findUniqueOrThrow({ where: { id: ev.ticketType.id } });
+    expect(tt.physicalQuantity).toBe(100_000 - qty);
+    expect(tt.quantity).toBe(1000);
   });
 
   it('is resumable: a failed part leaves earlier parts intact and a retry finishes without duplicates', async () => {
@@ -136,7 +140,7 @@ describe('physical ticket generation (Postgres)', () => {
     for (const actor of [{ id: org.id, role: 'USER' as const }, { id: admin.id, role: 'ADMIN' as const }]) {
       await expect(prepareBatch(actor, input(ended.event.id, ended.ticketType.id, 10))).rejects.toMatchObject({ code: 'EVENT_ENDED' });
     }
-    expect((await prisma.ticketType.findUniqueOrThrow({ where: { id: ended.ticketType.id } })).quantity).toBe(100);
+    expect((await prisma.ticketType.findUniqueOrThrow({ where: { id: ended.ticketType.id } })).physicalQuantity).toBe(100);
     expect(await prisma.ticketGenerationBatch.count({ where: { eventId: ended.event.id } })).toBe(0);
 
     // Started 1h ago, ends in 3h: door sales / on-the-day printing must still be possible.
@@ -144,10 +148,58 @@ describe('physical ticket generation (Postgres)', () => {
     await expect(prepareBatch({ id: org.id, role: 'USER' }, input(live.event.id, live.ticketType.id, 10))).resolves.toBeTruthy();
   });
 
+  it('physical stock is independent of online stock: online-only types cannot be printed, and printing never touches online stock', async () => {
+    const onlineOnly = await makeEvent(org, { onlineQty: 500, physicalQty: 0 });
+    await expect(prepareBatch({ id: org.id, role: 'USER' }, input(onlineOnly.event.id, onlineOnly.ticketType.id, 1))).rejects.toMatchObject({ code: 'INSUFFICIENT_INVENTORY' });
+
+    const both = await makeEvent(org, { onlineQty: 300, physicalQty: 40 });
+    await expect(prepareBatch({ id: org.id, role: 'USER' }, input(both.event.id, both.ticketType.id, 41))).rejects.toThrow(/physical/i);
+    const p = await prepareBatch({ id: org.id, role: 'USER' }, input(both.event.id, both.ticketType.id, 40));
+    const t = await prisma.ticketType.findUniqueOrThrow({ where: { id: both.ticketType.id } });
+    expect(t).toMatchObject({ quantity: 300, physicalQuantity: 0 });
+    expect(p.status).toBe('READY');
+  });
+
+  it('generated physical tickets are NOT sales: they never count toward sold tickets or revenue', async () => {
+    const e = await makeEvent(org, { onlineQty: 100, physicalQty: 50, price: 5000 });
+    // One real online sale
+    const buyer = await makeUser();
+    const order = await prisma.order.create({ data: { paystackId: `ps-${Date.now()}`, totalAmount: 5000, quantity: 1, paymentStatus: 'COMPLETED', buyerId: buyer.id, eventId: e.event.id } });
+    await prisma.ticket.create({ data: { ticketId: `ON-${Date.now()}`, ticketTypeId: e.ticketType.id, userId: buyer.id, orderId: order.id, status: 'UNUSED' } });
+
+    const p = await prepareBatch({ id: org.id, role: 'USER' }, input(e.event.id, e.ticketType.id, 50));
+    await drain(p.batchId, storage);
+
+    const physical = await prisma.ticket.count({ where: { ticketTypeId: e.ticketType.id, ...PHYSICAL_ISSUED_WHERE } });
+    const sold = await prisma.ticket.count({ where: { ticketTypeId: e.ticketType.id, ...ONLINE_SOLD_WHERE } });
+    expect(physical).toBe(50);
+    expect(sold).toBe(1);
+    expect(sold * 5000).toBe(5000); // revenue basis: 1 online ticket, not 51
+
+    // Scanning a physical ticket marks it used, and it is still not a sale.
+    const first = await prisma.ticket.findFirstOrThrow({ where: { batchId: p.batchId }, orderBy: { batchIndex: 'asc' } });
+    await prisma.ticket.update({ where: { id: first.id }, data: { status: 'USED', usedAt: new Date() } });
+    expect(await prisma.ticket.count({ where: { ticketTypeId: e.ticketType.id, ...ONLINE_SOLD_WHERE } })).toBe(1);
+    expect(await prisma.ticket.count({ where: { ticketTypeId: e.ticketType.id, source: 'ORGANIZER_PHYSICAL', status: 'USED' } })).toBe(1);
+  });
+
+  it('snapshots the scanner mode and code type on the batch, and cancelling releases PHYSICAL stock only', async () => {
+    const e = await makeEvent(org, { onlineQty: 200, physicalQty: 60, price: 5000 });
+    await prisma.eventScannerSettings.create({ data: { eventId: e.event.id, mode: 'INBUILT_ONLY' } });
+    const p = await prepareBatch({ id: org.id, role: 'USER' }, input(e.event.id, e.ticketType.id, 10, { codeFormat: 'BARCODE' }));
+    const batch = await prisma.ticketGenerationBatch.findUniqueOrThrow({ where: { id: p.batchId } });
+    expect(batch).toMatchObject({ scannerMode: 'INBUILT_ONLY', codeFormat: 'BARCODE' });
+    // Changing the event setting later does not rewrite what this batch was generated with.
+    await prisma.eventScannerSettings.update({ where: { eventId: e.event.id }, data: { mode: 'UNIVERSAL' } });
+    expect((await prisma.ticketGenerationBatch.findUniqueOrThrow({ where: { id: p.batchId } })).scannerMode).toBe('INBUILT_ONLY');
+    expect(describeScan(batch.codeFormat, batch.scannerMode)).toBe('Barcode · MyEvent app scanner only');
+    expect(describeScan('QR', 'UNIVERSAL')).toBe('QR code · Any scanner');
+  });
+
   it('refuses when inventory is insufficient and never reserves partially', async () => {
     const small = await makeEvent(org, { ticketQty: 50 });
     await expect(prepareBatch({ id: org.id, role: 'USER' }, input(small.event.id, small.ticketType.id, 51))).rejects.toThrow(/Not enough/);
-    expect((await prisma.ticketType.findUniqueOrThrow({ where: { id: small.ticketType.id } })).quantity).toBe(50);
+    expect((await prisma.ticketType.findUniqueOrThrow({ where: { id: small.ticketType.id } })).physicalQuantity).toBe(50);
   });
 
   describe('paid tier + Paystack settlement', () => {
@@ -172,13 +224,13 @@ describe('physical ticket generation (Postgres)', () => {
       const res = await settlePayment(p.paymentReference!, { status: 'failed', amountKobo: 0, currency: 'NGN' });
       expect(res.ok).toBe(false);
       expect((await prisma.ticketGenerationBatch.findUniqueOrThrow({ where: { id: p.batchId } })).status).toBe('CANCELLED');
-      expect((await prisma.ticketType.findUniqueOrThrow({ where: { id: ev.ticketType.id } })).quantity).toBe(100_000);
+      expect((await prisma.ticketType.findUniqueOrThrow({ where: { id: ev.ticketType.id } })).physicalQuantity).toBe(100_000);
       expect((await processNextPart(p.batchId, { storage })).partsDone).toBe(0);
       expect(await prisma.ticket.count({ where: { batchId: p.batchId } })).toBe(0);
       // releasing twice must not double-credit
       await settlePayment(p.paymentReference!, { status: 'failed', amountKobo: 0, currency: 'NGN' });
       await cancelUnpaidBatch(p.batchId);
-      expect((await prisma.ticketType.findUniqueOrThrow({ where: { id: ev.ticketType.id } })).quantity).toBe(100_000);
+      expect((await prisma.ticketType.findUniqueOrThrow({ where: { id: ev.ticketType.id } })).physicalQuantity).toBe(100_000);
     });
 
     it('wrong amount or currency is rejected and does not unlock generation', async () => {

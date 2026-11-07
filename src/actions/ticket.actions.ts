@@ -1,6 +1,8 @@
 // src/actions/ticket.actions.ts
 "use server";
 
+import { getEventPhysicalInventory, getPhysicalInventoryForEvents } from "@/lib/ticket-generation/offline-sales";
+import { ONLINE_SOLD_WHERE, PHYSICAL_ISSUED_WHERE } from "@/lib/ticket-stats";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
@@ -13,7 +15,8 @@ import { can, isOwnerOrAdmin, resolveEventAccess } from "@/lib/staff/access";
 interface TicketTypeInput {
   name: string;
   price: number;
-  quantity: number;
+  quantity: number; // ONLINE stock
+  physicalQuantity?: number; // PHYSICAL stock (independent; omit to leave unchanged on update)
   eventId: string;
 }
 
@@ -283,15 +286,27 @@ export async function getEventTicketStats(
     const canSeeFinancials = isOwnerOrAdmin(sAccess);
 
     // Get ticket statistics
+    // Sales figures count ONLINE tickets only; physical inventory is reported separately below.
     const ticketStats = await prisma.ticket.groupBy({
       by: ["status"],
       where: {
         ticketType: {
           eventId,
         },
+        source: "ONLINE",
       },
       _count: true,
     });
+    const physicalStats = await prisma.ticket.groupBy({
+      by: ["status"],
+      where: {
+        ticketType: { eventId },
+        source: { in: ["ADMIN_PHYSICAL", "ORGANIZER_PHYSICAL"] },
+      },
+      _count: true,
+    });
+
+    const physicalInv = await getEventPhysicalInventory(eventId);
 
     // Get orders statistics
     const orderStats = await prisma.order.groupBy({
@@ -347,27 +362,27 @@ export async function getEventTicketStats(
     // Get ticket type breakdown
     const ticketTypeStats = await Promise.all(
       event.ticketTypes.map(async (ticketType) => {
+        // Online sales only: physical tickets are not sales and must not inflate sold/revenue.
         const sold = await prisma.ticket.count({
-          where: {
-            ticketTypeId: ticketType.id,
-            status: { in: ["UNUSED", "USED"] },
-          },
+          where: { ticketTypeId: ticketType.id, ...ONLINE_SOLD_WHERE },
         });
 
         const used = await prisma.ticket.count({
+          where: { ticketTypeId: ticketType.id, source: "ONLINE", status: "USED" },
+        });
+
+        const physicalIssued = await prisma.ticket.count({
+          where: { ticketTypeId: ticketType.id, ...PHYSICAL_ISSUED_WHERE },
+        });
+        const physicalUsed = await prisma.ticket.count({
           where: {
             ticketTypeId: ticketType.id,
+            source: { in: ["ADMIN_PHYSICAL", "ORGANIZER_PHYSICAL"] },
             status: "USED",
           },
         });
 
-        const revenue =
-          (await prisma.ticket.count({
-            where: {
-              ticketTypeId: ticketType.id,
-              status: { in: ["UNUSED", "USED"] },
-            },
-          })) * ticketType.price;
+        const revenue = sold * ticketType.price;
 
         return {
           id: ticketType.id,
@@ -378,6 +393,13 @@ export async function getEventTicketStats(
           used,
           remaining: ticketType.quantity,
           revenue,
+          physicalRemaining: ticketType.physicalQuantity,
+          physicalIssued,
+          physicalUsed,
+          // Offline inventory: sold outside the platform (organizer-recorded) vs still unsold in hand.
+          soldOffline: physicalInv.byType.get(ticketType.id)?.soldOffline ?? 0,
+          unsoldPhysical: physicalInv.byType.get(ticketType.id)?.unsold ?? 0,
+          offlineRevenue: canSeeFinancials ? (physicalInv.byType.get(ticketType.id)?.revenueKobo ?? 0) / 100 : undefined,
         };
       }),
     );
@@ -394,6 +416,16 @@ export async function getEventTicketStats(
             totalTickets > 0
               ? Math.round((usedTickets / totalTickets) * 100)
               : 0,
+        },
+        physical: {
+          issued: physicalStats
+            .filter((p) => p.status === "UNUSED" || p.status === "USED")
+            .reduce((sum, p) => sum + p._count, 0),
+          used: physicalStats.find((p) => p.status === "USED")?._count || 0,
+          unused: physicalStats.find((p) => p.status === "UNUSED")?._count || 0,
+          soldOffline: physicalInv.total.soldOffline,
+          unsold: physicalInv.total.unsold,
+          offlineRevenue: canSeeFinancials ? physicalInv.total.revenueKobo / 100 : undefined,
         },
         // Staff never receive financial figures; only the owner or an admin does.
         revenue: canSeeFinancials
@@ -443,7 +475,8 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
         },
         ticketTypes: {
           include: {
-            tickets: true,
+            // Sales only: physical (pre-generated) tickets are inventory, not sales.
+            tickets: { where: { source: "ONLINE" } },
           },
         },
       },
@@ -456,7 +489,16 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
     const totalEvents = events.length;
     let activeEvents = 0;
 
+    const offlineInv = await getPhysicalInventoryForEvents(events.map((e) => e.id));
+    let totalOfflineSold = 0;
+    let totalOfflineRevenue = 0;
+    let totalPhysicalUnsold = 0;
+
     const eventStats = events.map((event) => {
+      const off = offlineInv.byEvent.get(event.id);
+      totalOfflineSold += off?.soldOffline ?? 0;
+      totalOfflineRevenue += (off?.revenueKobo ?? 0) / 100;
+      totalPhysicalUnsold += off?.unsold ?? 0;
       const eventRevenue = event.orders.reduce(
         (sum, order) => sum + order.totalAmount,
         0,
@@ -478,6 +520,9 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
         title: event.title,
         revenue: eventRevenue,
         ticketsSold,
+        offlineSold: off?.soldOffline ?? 0,
+        physicalUnsold: off?.unsold ?? 0,
+        offlineRevenue: (off?.revenueKobo ?? 0) / 100,
         startDateTime: event.startDateTime,
         status: event.publishedStatus,
       };
@@ -510,6 +555,11 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
           totalEvents,
           activeEvents,
           totalTicketsSold,
+          // Physical tickets sold outside the platform (organizer-recorded). Kept separate: never part of
+          // online sales, platform revenue, commission or payouts.
+          totalOfflineSold,
+          totalPhysicalUnsold,
+          totalOfflineRevenue,
           totalRevenue,
           totalRefunded,
           netRevenue,
@@ -674,6 +724,7 @@ export async function createTicketType(
         name: data.name,
         price: data.price,
         quantity: data.quantity,
+        physicalQuantity: Math.max(0, Math.floor(data.physicalQuantity ?? 0)),
         event: { connect: { id: data.eventId } },
       },
     });
@@ -732,6 +783,11 @@ export async function updateTicketType(
         name: data.name,
         price: data.price,
         quantity: data.quantity,
+        // Only touched when explicitly provided, so editing online details can never overwrite
+        // physical stock that a batch has just reserved (and vice versa).
+        ...(data.physicalQuantity !== undefined
+          ? { physicalQuantity: Math.max(0, Math.floor(data.physicalQuantity)) }
+          : {}),
       },
     });
 
@@ -1469,6 +1525,7 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
     // Get ticket status breakdown
     const ticketStats = await prisma.ticket.groupBy({
       by: ["status"],
+      where: { source: "ONLINE" },
       _count: true,
     });
 
@@ -1502,6 +1559,7 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
     const platformFees = adminFinancials.netFeeNaira;
     const platformFeePercentage = adminFinancials.effectivePercent ?? 0;
 
+    const adminPhysical = await getPhysicalInventoryForEvents('ALL');
     // Get recent activity from settings (default to 30 days)
     const activityDays =
       (await getCachedSetting("analytics.recentActivityDays")) || 30;
@@ -1522,9 +1580,7 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
         ticketTypes: {
           include: {
             tickets: {
-              where: {
-                status: { in: ["UNUSED", "USED"] },
-              },
+              where: { ...ONLINE_SOLD_WHERE },
             },
           },
         },
@@ -1591,6 +1647,12 @@ export async function getAdminTicketStats(): Promise<ActionResponse<any>> {
           {} as Record<string, number>,
         ),
         topEvents: eventStats,
+        physical: {
+          issued: adminPhysical.total.issued,
+          soldOffline: adminPhysical.total.soldOffline,
+          unsold: adminPhysical.total.unsold,
+          scanned: adminPhysical.total.scanned,
+        },
         orders: {
           completed: revenueStats._count,
           refunded: refundStats._count,
@@ -1617,16 +1679,12 @@ export async function getTicketTypesWithSalesData(
         _count: {
           select: {
             tickets: {
-              where: {
-                status: { in: ["UNUSED", "USED"] }, // Only count sold tickets
-              },
+              where: { ...ONLINE_SOLD_WHERE }, // Only count online sales
             },
           },
         },
         tickets: {
-          where: {
-            status: { in: ["UNUSED", "USED"] },
-          },
+          where: { ...ONLINE_SOLD_WHERE },
           select: {
             id: true,
             status: true,
@@ -1636,19 +1694,38 @@ export async function getTicketTypesWithSalesData(
       orderBy: { price: "asc" },
     });
 
+    // Any issued ticket (online OR physical, any status) blocks deleting the type.
+    const anyTickets = await prisma.ticket.groupBy({
+      by: ["ticketTypeId"],
+      where: { ticketType: { eventId } },
+      _count: true,
+    });
+    const anyCount = new Map(anyTickets.map((t) => [t.ticketTypeId, t._count]));
+    const physicalGroups = await prisma.ticket.groupBy({
+      by: ["ticketTypeId"],
+      where: { ticketType: { eventId }, ...PHYSICAL_ISSUED_WHERE },
+      _count: true,
+    });
+    const physicalCount = new Map(physicalGroups.map((t) => [t.ticketTypeId, t._count]));
+    const offlineInv = await getEventPhysicalInventory(eventId);
+
     // Transform the data to include sold count and deletion capability
     const enhancedTicketTypes = ticketTypes.map((ticketType) => ({
       id: ticketType.id,
       name: ticketType.name,
       price: ticketType.price,
-      quantity: ticketType.quantity,
+      quantity: ticketType.quantity, // online stock
+      physicalQuantity: ticketType.physicalQuantity,
+      physicalGenerated: physicalCount.get(ticketType.id) ?? 0,
+      physicalSoldOffline: offlineInv.byType.get(ticketType.id)?.soldOffline ?? 0,
+      physicalUnsold: offlineInv.byType.get(ticketType.id)?.unsold ?? 0,
       description: ticketType.description,
       maxPerUser: ticketType.maxPerUser,
       saleStartDate: ticketType.saleStartDate,
       saleEndDate: ticketType.saleEndDate,
       isRefundable: ticketType.isRefundable,
-      soldCount: ticketType._count.tickets,
-      canDelete: ticketType._count.tickets === 0, // Can only delete if no tickets sold
+      soldCount: ticketType._count.tickets, // online sales only
+      canDelete: (anyCount.get(ticketType.id) ?? 0) === 0, // Can only delete if nothing was ever issued
       tickets: ticketType.tickets,
     }));
 

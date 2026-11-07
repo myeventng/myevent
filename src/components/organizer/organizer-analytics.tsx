@@ -1,6 +1,7 @@
 // src/components/organizer/organizer-analytics.tsx ok
 "use client";
 
+import { PhysicalInventoryRow } from "@/components/organizer/physical-inventory";
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -356,8 +357,13 @@ export function OrganizerAnalytics({
                 </div>
                 <div className="flex items-center text-xs text-muted-foreground">
                   <TrendingUp className="h-3 w-3 mr-1" />
-                  <span>Across {stats.overview.totalEvents} events</span>
+                  <span>Online · across {stats.overview.totalEvents} events</span>
                 </div>
+                {(stats.overview.totalOfflineSold > 0 || stats.overview.totalPhysicalUnsold > 0) && (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    + {stats.overview.totalOfflineSold} sold offline · {stats.overview.totalPhysicalUnsold} unsold in hand
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -540,7 +546,8 @@ export function OrganizerAnalytics({
                           {formatCurrency(event.revenue)}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {event.ticketsSold} tickets sold
+                          {event.ticketsSold} sold online
+                          {event.offlineSold > 0 && ` · ${event.offlineSold} offline`}
                         </div>
                       </div>
                       <ArrowUpRight className="h-4 w-4 ml-2 text-muted-foreground" />
@@ -1068,6 +1075,7 @@ export function OrganizerAnalytics({
                             </div>
                           </div>
                         </div>
+                        <PhysicalInventoryRow t={ticketType} formatMoney={formatCurrency} />
                         <div className="mt-3">
                           <div className="flex justify-between text-xs text-muted-foreground mb-1">
                             <span>Sales Progress</span>

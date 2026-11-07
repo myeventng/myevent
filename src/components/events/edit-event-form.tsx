@@ -553,7 +553,7 @@ export function EditEventForm({
 
             // Update/create ticket types
             for (const ticketType of ticketTypes) {
-              if (!ticketType.name || ticketType.quantity <= 0) continue;
+              if (!ticketType.name || (ticketType.quantity <= 0 && !(ticketType.physicalQuantity > 0))) continue;
 
               if (ticketType.id && !ticketType.id.startsWith("temp-")) {
                 // Update existing
@@ -564,6 +564,10 @@ export function EditEventForm({
                   name: ticketType.name,
                   price: parseFloat(ticketType.price.toString()),
                   quantity: parseInt(ticketType.quantity.toString(), 10),
+                  // Send physical stock only when the organizer actually changed it.
+                  ...(ticketType.physicalQuantity !== ticketType.physicalQuantityOriginal
+                    ? { physicalQuantity: parseInt((ticketType.physicalQuantity ?? 0).toString(), 10) }
+                    : {}),
                 });
               } else {
                 // Create new
@@ -573,6 +577,7 @@ export function EditEventForm({
                   name: ticketType.name,
                   price: parseFloat(ticketType.price.toString()),
                   quantity: parseInt(ticketType.quantity.toString(), 10),
+                  physicalQuantity: parseInt((ticketType.physicalQuantity ?? 0).toString(), 10),
                 });
               }
             }

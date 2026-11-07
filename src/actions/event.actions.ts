@@ -1,5 +1,6 @@
 "use server";
 
+import { getPhysicalInventoryForEvents } from "@/lib/ticket-generation/offline-sales";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { validateAndMeasureShareImage, ShareImageError } from "@/lib/share-image-server";
@@ -1386,10 +1387,11 @@ export async function getUserEvents() {
         },
         ticketTypes: {
           include: {
-            tickets: true,
+            // Sales/revenue in the organizer table = online tickets only; physical tickets are inventory.
+            tickets: { where: { source: "ONLINE" } },
             _count: {
               select: {
-                tickets: true,
+                tickets: { where: { source: "ONLINE" } },
               },
             },
           },
@@ -1441,9 +1443,18 @@ export async function getUserEvents() {
       },
     });
 
+    // Offline (physical) inventory per event, shown next to the online figures.
+    const inv = await getPhysicalInventoryForEvents(events.map((e) => e.id));
+    const withOffline = events.map((e) => ({
+      ...e,
+      offlineSold: inv.byEvent.get(e.id)?.soldOffline ?? 0,
+      physicalUnsold: inv.byEvent.get(e.id)?.unsold ?? 0,
+      physicalIssued: inv.byEvent.get(e.id)?.issued ?? 0,
+    }));
+
     return {
       success: true,
-      data: events,
+      data: withOffline,
     };
   } catch (error) {
     console.error("Error fetching user events:", error);

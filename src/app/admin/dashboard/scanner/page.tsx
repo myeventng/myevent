@@ -32,7 +32,7 @@ export default async function ScannerIndexPage() {
               event.ticketTypes?.reduce(
                 (total, ticketType) => total + (ticketType.tickets?.length || 0),
                 0
-              ) || 0;
+              ) || 0 + (event.physicalIssued ?? 0); // online + physical: both are scannable
 
             return (
               <Card key={event.id}>

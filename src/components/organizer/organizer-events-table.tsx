@@ -307,8 +307,13 @@ export function OrganizerEventsTable({
                 {totalSold} / {totalAvailable}
               </div>
               <div className="text-sm text-muted-foreground">
-                {ticketTypes.length} type{ticketTypes.length !== 1 ? 's' : ''}
+                {ticketTypes.length} type{ticketTypes.length !== 1 ? 's' : ''} · online
               </div>
+              {event.physicalIssued > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  Offline: {event.offlineSold} sold · {event.physicalUnsold} unsold
+                </div>
+              )}
             </div>
           );
         }

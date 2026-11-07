@@ -1,5 +1,6 @@
 'use client';
 
+import { PhysicalInventoryRow } from '@/components/organizer/physical-inventory';
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import {
@@ -350,6 +351,12 @@ export function EventAnalyticsModal({
                       <div className="flex items-center text-xs text-muted-foreground">
                         <span>{eventStats.overview.usedTickets} used</span>
                       </div>
+                      {eventStats.physical && eventStats.physical.issued > 0 && (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Online only · physical: {eventStats.physical.issued} generated,{' '}
+                          {eventStats.physical.soldOffline} sold offline, {eventStats.physical.unsold} unsold
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -646,6 +653,7 @@ export function EventAnalyticsModal({
                                   : formatCurrency(ticketType.price)}
                               </span>
                             </div>
+                            <PhysicalInventoryRow t={ticketType} formatMoney={formatCurrency} />
                             <div className="grid grid-cols-4 gap-4 text-sm mb-3">
                               <div>
                                 <span className="text-muted-foreground">

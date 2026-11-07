@@ -2,21 +2,25 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
-import { AlertCircle, Download, FileArchive, Loader2, RefreshCw, Trash2, CreditCard } from 'lucide-react';
+import { AlertCircle, Download, FileArchive, Loader2, RefreshCw, Trash2, CreditCard, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
-  advanceGeneration, cancelGenerationBatch, confirmBatchPayment, getBatchDownloadLinks, listGenerationBatches, resumeBatchPayment,
+  advanceGeneration, cancelGenerationBatch, confirmBatchPayment, getBatchDownloadLinks, listGenerationBatches, recordOfflineSaleAction, resumeBatchPayment,
 } from '@/actions/ticket-generation.actions';
 
 type Batch = {
   id: string; createdAt: string; eventId: string; eventTitle: string; ticketType: string; quantity: number; design: 'BRANDED' | 'CODES_ONLY';
-  codeFormat: 'QR' | 'BARCODE'; ticketsPerPage: number; status: string; partsDone: number; partsTotal: number; lastError: string | null;
+  codeFormat: 'QR' | 'BARCODE'; scannerMode: 'INBUILT_ONLY' | 'UNIVERSAL'; showSerial: boolean; ticketsPerPage: number; status: string; partsDone: number; partsTotal: number; lastError: string | null;
   feeKobo: number; paymentStatus: string | null; stats: { generated: number; unused: number; validated: number; cancelled: number };
+  offline: { soldOffline: number; unsold: number; revenueKobo: number; defaultPriceNaira: number };
 };
 
 const STATUS: Record<string, { label: string; tone: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
@@ -38,6 +42,21 @@ export function BatchHistory({ eventId, highlightBatchId, refreshKey = 0 }: { ev
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const driving = useRef(new Set<string>());
+  const [recordFor, setRecordFor] = useState<Batch | null>(null);
+  const [recQty, setRecQty] = useState('');
+  const [recPrice, setRecPrice] = useState('');
+  const [recNote, setRecNote] = useState('');
+  const [recMode, setRecMode] = useState<'sold' | 'correct'>('sold');
+  const openRecord = (b: Batch) => { setRecordFor(b); setRecQty(''); setRecPrice(String(b.offline.defaultPriceNaira)); setRecNote(''); setRecMode('sold'); };
+  const submitRecord = () => {
+    if (!recordFor) return;
+    const n = Number.parseInt(recQty, 10);
+    if (!Number.isInteger(n) || n < 1) { toast.error('Enter a whole number of tickets'); return; }
+    start(async () => {
+      const r = await recordOfflineSaleAction({ batchId: recordFor.id, quantity: recMode === 'sold' ? n : -n, unitPriceNaira: recPrice === '' ? null : Number(recPrice), note: recNote || null });
+      if (r.success) { toast.success(r.message); setRecordFor(null); load(true); } else toast.error(r.message);
+    });
+  };
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
 
@@ -113,7 +132,7 @@ export function BatchHistory({ eventId, highlightBatchId, refreshKey = 0 }: { ev
       <div className="overflow-x-auto">
         <Table>
           <TableHeader><TableRow>
-            <TableHead>Created</TableHead>{!eventId && <TableHead>Event</TableHead>}<TableHead>Batch</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Generated</TableHead><TableHead className="text-right">Unused</TableHead><TableHead className="text-right">Validated</TableHead><TableHead className="text-right">Actions</TableHead>
+            <TableHead>Created</TableHead>{!eventId && <TableHead>Event</TableHead>}<TableHead>Batch</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Generated</TableHead><TableHead className="text-right">Sold offline</TableHead><TableHead className="text-right">Unsold</TableHead><TableHead className="text-right">Scanned</TableHead><TableHead className="text-right">Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
             {batches.map((b) => {
@@ -125,15 +144,20 @@ export function BatchHistory({ eventId, highlightBatchId, refreshKey = 0 }: { ev
                   {!eventId && <TableCell className="max-w-40 truncate" title={b.eventTitle}>{b.eventTitle}</TableCell>}
                   <TableCell>
                     <div className="font-medium">{b.quantity.toLocaleString('en-NG')} × {b.ticketType}</div>
-                    <div className="text-xs text-muted-foreground">{b.design === 'CODES_ONLY' ? 'Codes only' : 'Branded'} · {b.codeFormat === 'QR' ? 'QR' : 'Barcode'} · {b.ticketsPerPage}/page{b.feeKobo > 0 ? ' · paid' : ' · free'}</div>
+                    <div className="text-xs text-muted-foreground">{b.design === 'CODES_ONLY' ? 'Codes only' : 'Branded'} · {b.codeFormat === 'QR' ? 'QR' : 'Barcode'} · {b.scannerMode === 'INBUILT_ONLY' ? 'MyEvent app scanner only' : 'Any scanner'} · {b.ticketsPerPage}/page{b.design === 'CODES_ONLY' ? (b.showSerial ? ' · serials shown' : ' · no serials') : ''}{b.feeKobo > 0 ? ' · paid' : ' · free'}</div>
                   </TableCell>
                   <TableCell className="min-w-40">
                     <Badge variant={st.tone}>{st.label}</Badge>
                     {inProgress && b.partsTotal > 0 && <div className="mt-2"><Progress value={(b.partsDone / b.partsTotal) * 100} /><div className="mt-1 text-xs text-muted-foreground">{b.partsDone}/{b.partsTotal} files</div></div>}
+                    {b.status === 'COMPLETED' && <Button size="sm" variant="outline" onClick={() => openRecord(b)}><Receipt className="mr-1 h-3 w-3" />Record sales</Button>}{' '}
                     {b.status === 'FAILED' && b.lastError && <div className="mt-1 max-w-48 truncate text-xs text-destructive" title={b.lastError}>{b.lastError}</div>}
                   </TableCell>
                   <TableCell className="text-right">{b.stats.generated.toLocaleString('en-NG')}</TableCell>
-                  <TableCell className="text-right">{b.stats.unused.toLocaleString('en-NG')}</TableCell>
+                  <TableCell className="text-right">
+                    {b.offline.soldOffline.toLocaleString('en-NG')}
+                    {b.offline.revenueKobo > 0 && <div className="text-xs text-muted-foreground">₦{(b.offline.revenueKobo / 100).toLocaleString('en-NG')}</div>}
+                  </TableCell>
+                  <TableCell className="text-right">{b.offline.unsold.toLocaleString('en-NG')}</TableCell>
                   <TableCell className="text-right">{b.stats.validated.toLocaleString('en-NG')}</TableCell>
                   <TableCell className="whitespace-nowrap text-right">
                     {b.status === 'PENDING_PAYMENT' && (<>
@@ -154,6 +178,40 @@ export function BatchHistory({ eventId, highlightBatchId, refreshKey = 0 }: { ev
           </TableBody>
         </Table>
       </div>
+      <Dialog open={!!recordFor} onOpenChange={(o) => !o && setRecordFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record offline sales</DialogTitle>
+            <DialogDescription>
+              {recordFor && <>Batch of {recordFor.quantity.toLocaleString('en-NG')} × {recordFor.ticketType}. Sold so far: <b>{recordFor.offline.soldOffline.toLocaleString('en-NG')}</b> · Unsold: <b>{recordFor.offline.unsold.toLocaleString('en-NG')}</b>. This is for your inventory only; it does not change online sales, platform revenue or payouts.</>}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant={recMode === 'sold' ? 'default' : 'outline'} onClick={() => setRecMode('sold')}>I sold tickets</Button>
+              <Button type="button" variant={recMode === 'correct' ? 'default' : 'outline'} onClick={() => setRecMode('correct')}>Correct / returned</Button>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="rec-qty">{recMode === 'sold' ? 'How many tickets did you sell?' : 'How many to take off the sold count?'}</Label>
+              <Input id="rec-qty" inputMode="numeric" value={recQty} onChange={(e) => setRecQty(e.target.value.replace(/[^0-9]/g, ''))} />
+              {recordFor && recMode === 'sold' && <p className="text-xs text-muted-foreground">Up to {recordFor.offline.unsold.toLocaleString('en-NG')} more can be recorded for this batch.</p>}
+              {recordFor && recMode === 'correct' && <p className="text-xs text-muted-foreground">Up to {recordFor.offline.soldOffline.toLocaleString('en-NG')} can be taken off.</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="rec-price">Price per ticket (₦)</Label>
+              <Input id="rec-price" inputMode="decimal" value={recPrice} onChange={(e) => setRecPrice(e.target.value.replace(/[^0-9.]/g, ''))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="rec-note">Note (optional)</Label>
+              <Input id="rec-note" maxLength={200} value={recNote} placeholder="e.g. Sold at the gate / via reseller" onChange={(e) => setRecNote(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRecordFor(null)}>Cancel</Button>
+            <Button onClick={submitRecord} disabled={pending}>{pending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {total > pageSize && (
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Page {page} of {pages}</span>

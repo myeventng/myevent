@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { can, resolveEventAccess } from '@/lib/staff/access';
-import { isValidLayout, renderPreviewPdf } from '@/lib/ticket-generation/pdf';
+import { describeScan, isValidLayout, renderPreviewPdf } from '@/lib/ticket-generation/pdf';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { formatLagosTime } from '@/lib/utils';
 
@@ -36,9 +36,10 @@ export async function GET(req: NextRequest) {
   const access = await resolveEventAccess({ id: session.user.id, role: session.user.role as string }, o.eventId);
   if (!can(access, 'GENERATE_TICKETS')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const [event, type] = await Promise.all([
+  const [event, type, scanner] = await Promise.all([
     prisma.event.findUnique({ where: { id: o.eventId }, select: { title: true, startDateTime: true, venue: { select: { name: true, address: true, city: { select: { name: true } } } } } }),
     prisma.ticketType.findFirst({ where: { id: o.ticketTypeId, eventId: o.eventId }, select: { name: true } }),
+    prisma.eventScannerSettings.findUnique({ where: { eventId: o.eventId }, select: { mode: true } }),
   ]);
   if (!event || !type) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const v = event.venue;
@@ -54,6 +55,7 @@ export async function GET(req: NextRequest) {
       venueText: [v?.name, v?.address, v?.city?.name].filter(Boolean).join(', '),
       ticketTypeName: type.name,
       organizerLabel: o.organizerLabel || null,
+      scanText: describeScan(o.codeFormat, scanner?.mode ?? 'UNIVERSAL'),
     },
   });
   return new NextResponse(new Uint8Array(pdf), { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'inline; filename="preview.pdf"', 'Cache-Control': 'private, no-store' } });

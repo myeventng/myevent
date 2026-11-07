@@ -58,9 +58,9 @@ export function GenerateForm(p: GenerateFormProps) {
   const qtyError =
     !quantity ? 'Enter how many tickets to generate'
     : !Number.isInteger(qty) || qty < 1 ? 'Quantity must be at least 1'
-    : maxAllowed === 0 ? (capacityLeft === 0 ? 'This event has reached its attendee limit' : 'This ticket type has no tickets left')
+    : maxAllowed === 0 ? (capacityLeft === 0 ? 'This event has reached its attendee limit' : 'No physical tickets are allocated to this ticket type. Set a physical quantity when editing the event\'s ticket types.')
     : qty > maxAllowed ? (limitedBy === 'capacity' ? `Only ${fmt(maxAllowed)} more attendees fit under this event's limit`
-        : limitedBy === 'stock' ? `Only ${fmt(maxAllowed)} left for this ticket type`
+        : limitedBy === 'stock' ? `Only ${fmt(maxAllowed)} physical tickets left for this ticket type`
         : `Maximum per batch is ${fmt(maxAllowed)}`)
     : null;
   const qtyValid = qtyError === null;
@@ -120,7 +120,7 @@ export function GenerateForm(p: GenerateFormProps) {
                   <Label>Ticket type</Label>
                   <Select value={ticketTypeId} onValueChange={setTicketTypeId}>
                     <SelectTrigger><SelectValue placeholder="Select ticket type" /></SelectTrigger>
-                    <SelectContent>{p.ticketTypes.map((t) => <SelectItem key={t.id} value={t.id} disabled={t.available < 1}>{t.name} · {t.available < 1 ? 'sold out' : `${fmt(t.available)} left`}</SelectItem>)}</SelectContent>
+                    <SelectContent>{p.ticketTypes.map((t) => <SelectItem key={t.id} value={t.id} disabled={t.available < 1}>{t.name} · {t.available < 1 ? 'no physical stock' : `${fmt(t.available)} physical left`}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
@@ -133,7 +133,7 @@ export function GenerateForm(p: GenerateFormProps) {
                   )}
                   <div className="space-y-0.5 text-xs text-muted-foreground">
                     <p>Per batch limit: {fmt(p.max)}</p>
-                    <p>Left for this ticket type: {fmt(stockLeft)}</p>
+                    <p>Physical tickets left for this type: {fmt(stockLeft)}</p>
                     <p>Attendee capacity left: {p.attendeeRemaining == null ? 'no limit' : fmt(p.attendeeRemaining)}</p>
                   </div>
                   {maxAllowed > 0 && qty !== maxAllowed && (

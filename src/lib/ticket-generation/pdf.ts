@@ -45,6 +45,15 @@ export interface PrintEventInfo {
   venueText: string;
   ticketTypeName: string;
   organizerLabel?: string | null;
+  /** e.g. "QR code · Any scanner". Printed on branded tickets only (codes-only stays clean for designers). */
+  scanText?: string | null;
+}
+
+/** Human text for the options chosen at generation time. Shared by the PDF, the batch list and the SVG manifest. */
+export function describeScan(codeFormat: TicketCodeFormat, scannerMode: 'INBUILT_ONLY' | 'UNIVERSAL'): string {
+  const code = codeFormat === 'QR' ? 'QR code' : 'Barcode';
+  const scanner = scannerMode === 'INBUILT_ONLY' ? 'MyEvent app scanner only' : 'Any scanner';
+  return `${code} · ${scanner}`;
 }
 
 export interface PrintOptions {
@@ -169,6 +178,7 @@ function drawBrandedCard(
   line('Date & time', opts.event.dateText);
   line('Venue', opts.event.venueText);
   line('Ticket', opts.event.ticketTypeName);
+  if (opts.event.scanText) line('Entry', opts.event.scanText);
 
   // Code
   const drawn = drawCode(doc, geometry, codeBox.x, codeBox.y, codeBox.w, codeBox.h);

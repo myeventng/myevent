@@ -53,10 +53,18 @@ const ticketTypeSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(2, 'Name must be at least 2 characters'),
   price: z.coerce.number().min(0, 'Price must be 0 or greater'),
-  quantity: z.coerce.number().int().min(1, 'Quantity must be at least 1'),
+  // ONLINE stock: sold on the platform, reduced automatically by each online sale.
+  quantity: z.coerce.number().int().min(0, 'Online quantity cannot be negative'),
+  // PHYSICAL stock: printed / door tickets, independent of online sales.
+  physicalQuantity: z.coerce.number().int().min(0, 'Physical quantity cannot be negative'),
   // Additional fields for tracking
   soldCount: z.number().optional(),
+  physicalGenerated: z.number().optional(),
+  physicalQuantityOriginal: z.number().optional(),
   canDelete: z.boolean().optional(),
+}).refine((v) => v.quantity + v.physicalQuantity >= 1, {
+  message: 'Set an online quantity, a physical quantity, or both',
+  path: ['quantity'],
 });
 
 type TicketTypeValues = z.infer<typeof ticketTypeSchema>;
@@ -127,6 +135,7 @@ export function EventTickets({
       name: '',
       price: formData.isFree ? 0 : undefined,
       quantity: undefined,
+      physicalQuantity: 0,
     },
   });
 
@@ -139,6 +148,9 @@ export function EventTickets({
         name: ticketType.name,
         price: ticketType.price,
         quantity: ticketType.quantity,
+        physicalQuantity: ticketType.physicalQuantity ?? 0,
+        physicalGenerated: ticketType.physicalGenerated || 0,
+        physicalQuantityOriginal: ticketType.physicalQuantityOriginal ?? ticketType.physicalQuantity ?? 0,
         soldCount: ticketType.soldCount || 0,
         canDelete: ticketType.canDelete !== false,
       });
@@ -152,6 +164,7 @@ export function EventTickets({
         name: '',
         price: formData.isFree ? 0 : undefined,
         quantity: undefined,
+        physicalQuantity: 0,
       });
       setIsEditMode_Dialog(false);
       setEditIndex(null);
@@ -179,6 +192,10 @@ export function EventTickets({
         // Ensure proper data types
         price: parseFloat(values.price.toString()),
         quantity: parseInt(values.quantity.toString(), 10),
+        physicalQuantity: parseInt((values.physicalQuantity ?? 0).toString(), 10),
+        // What the DB held when the form loaded: lets the save step send physical stock only if it was edited.
+        physicalQuantityOriginal:
+          existingTicketType?.physicalQuantityOriginal ?? existingTicketType?.physicalQuantity,
       };
 
       // Validate minimum quantity for existing ticket types with sold tickets
@@ -383,9 +400,18 @@ export function EventTickets({
                   <CardContent className="pb-2">
                     <div className="space-y-1">
                       <p className="text-sm text-muted-foreground">
-                        Available: {ticketType.quantity}{' '}
-                        {ticketType.quantity === 1 ? 'ticket' : 'tickets'}
+                        <span className="font-medium">Online:</span> {ticketType.quantity}{' '}
+                        {ticketType.quantity === 1 ? 'ticket' : 'tickets'} available
                       </p>
+                      <p className="text-sm text-muted-foreground">
+                        <span className="font-medium">Physical:</span> {ticketType.physicalQuantity ?? 0}{' '}
+                        {(ticketType.physicalQuantity ?? 0) === 1 ? 'ticket' : 'tickets'} available to print
+                      </p>
+                      {isEditMode && (ticketType.physicalGenerated ?? 0) > 0 && (
+                        <p className="text-sm text-muted-foreground">
+                          Generated {ticketType.physicalGenerated} · sold offline {ticketType.physicalSoldOffline ?? 0} · unsold {ticketType.physicalUnsold ?? 0}
+                        </p>
+                      )}
                       {isEditMode && ticketType.soldCount > 0 && (
                         <p className="text-sm text-amber-600">
                           Sold: {ticketType.soldCount}{' '}
@@ -545,7 +571,7 @@ export function EventTickets({
                 name="quantity"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Available Quantity</FormLabel>
+                    <FormLabel>Online quantity</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -563,7 +589,28 @@ export function EventTickets({
                       editIndex !== null &&
                       ticketTypes[editIndex]?.soldCount > 0
                         ? `Minimum quantity: ${ticketTypes[editIndex].soldCount} (already sold)`
-                        : 'Set the number of tickets available for this type.'}
+                        : 'Tickets sold on MyEvent. Each online sale reduces this number.'}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="physicalQuantity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Physical quantity (optional)</FormLabel>
+                    <FormControl>
+                      <Input type="number" min={0} placeholder="0" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      {isEditMode_Dialog && editIndex !== null && (ticketTypes[editIndex]?.physicalGenerated ?? 0) > 0
+                        ? `${ticketTypes[editIndex].physicalGenerated} already generated. This is what is still available to generate. `
+                        : ''}
+                      Printed or door tickets you will generate. Separate from online stock: online sales never reduce it,
+                      and generating physical tickets never reduces online stock. Scanning a physical ticket marks it used.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

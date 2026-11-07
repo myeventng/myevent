@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { can, resolveEventAccess } from '@/lib/staff/access';
 import { codeToSvg } from '@/lib/ticket-generation/codes';
+import { describeScan } from '@/lib/ticket-generation/pdf';
 import { partRange, printTicketsForRange } from '@/lib/ticket-generation/service';
 import { checkRateLimit } from '@/lib/rate-limit';
 
@@ -26,7 +27,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ batchId: st
 
   const batch = await prisma.ticketGenerationBatch.findUnique({
     where: { id: batchId },
-    select: { id: true, eventId: true, quantity: true, partSize: true, partsTotal: true, codeFormat: true, files: { select: { partIndex: true } } },
+    select: { id: true, eventId: true, quantity: true, partSize: true, partsTotal: true, codeFormat: true, scannerMode: true, design: true, ticketsPerPage: true, showSerial: true, files: { select: { partIndex: true } } },
   });
   if (!batch) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
@@ -47,6 +48,22 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ batchId: st
     manifest.push(`${t.serial},${from + i + 1}`);
   });
   files['manifest.csv'] = strToU8(manifest.join('\n') + '\n');
+  // The SVGs carry no text by design, so the options chosen at generation time are recorded here.
+  files['README.txt'] = strToU8(
+    [
+      `Batch: ${batch.id}`,
+      `Part: ${part + 1} of ${batch.partsTotal} (tickets ${from + 1}-${to})`,
+      `Print design: ${batch.design === 'CODES_ONLY' ? 'Codes only' : 'Branded'}`,
+      `Code type: ${describeScan(batch.codeFormat, batch.scannerMode)}`,
+      `Layout: ${batch.ticketsPerPage} per page`,
+      `Serial numbers: ${batch.showSerial ? 'shown on the PDF version' : 'not shown'}`,
+      '',
+      'Each SVG is the code only. Keep the code type and a clear quiet zone when placing it in your artwork.',
+      batch.scannerMode === 'INBUILT_ONLY'
+        ? 'These tickets are valid ONLY with the MyEvent app scanner for this event.'
+        : 'These tickets can be scanned by the MyEvent app or any compatible scanner.',
+    ].join('\n') + '\n',
+  );
 
   const zip = zipSync(files, { level: 0 });
   return new NextResponse(Buffer.from(zip), {

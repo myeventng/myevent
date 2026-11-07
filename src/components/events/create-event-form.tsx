@@ -397,6 +397,7 @@ export function CreateEventForm({
               name: ticketType.name,
               price: ticketType.price,
               quantity: ticketType.quantity,
+              physicalQuantity: ticketType.physicalQuantity ?? 0,
               eventId: eventId,
             });
           });
