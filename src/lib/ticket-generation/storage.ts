@@ -44,12 +44,14 @@ class R2PrivateStorage implements PartStorage {
     return { key };
   }
 
+  // The stored key IS the object key in the bucket (including the "r2/" marker). Put, sign and
+  // delete must all use the same string, otherwise downloads 404 with NoSuchKey.
   async signedUrl(key: string, expiresInSeconds = 300) {
-    return signPrivateGet(key.slice(R2_KEY_PREFIX.length), expiresInSeconds, key.split('/').pop());
+    return signPrivateGet(key, expiresInSeconds, key.split('/').pop());
   }
 
   async remove(key: string) {
-    await deletePrivateObject(key.slice(R2_KEY_PREFIX.length));
+    await deletePrivateObject(key);
   }
 }
 

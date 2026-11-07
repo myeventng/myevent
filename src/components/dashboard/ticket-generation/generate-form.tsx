@@ -21,6 +21,7 @@ export type GenerateFormProps = {
   eventId: string;
   eventTitle: string;
   eventEnded?: boolean;
+  attendeeRemaining?: number | null;
   ticketTypes: { id: string; name: string; available: number }[];
   defaults: { codeFormat: 'QR' | 'BARCODE'; design: 'BRANDED' | 'CODES_ONLY'; ticketsPerPage: number; showSerial: boolean; organizerLabel: string | null };
   layouts: { BRANDED: number[]; CODES_ONLY: number[] };
@@ -31,7 +32,7 @@ export type GenerateFormProps = {
 };
 
 export function GenerateForm(p: GenerateFormProps) {
-  const [ticketTypeId, setTicketTypeId] = useState(p.ticketTypes[0]?.id ?? '');
+  const [ticketTypeId, setTicketTypeId] = useState((p.ticketTypes.find((t) => t.available > 0) ?? p.ticketTypes[0])?.id ?? '');
   const [quantity, setQuantity] = useState('100');
   const [codeFormat, setCodeFormat] = useState<'QR' | 'BARCODE'>(p.defaults.codeFormat);
   const [design, setDesign] = useState<'BRANDED' | 'CODES_ONLY'>(p.defaults.design);
@@ -45,20 +46,37 @@ export function GenerateForm(p: GenerateFormProps) {
   const [pending, start] = useTransition();
 
   const qty = Number.parseInt(quantity, 10);
-  const qtyValid = Number.isInteger(qty) && qty >= 1 && qty <= p.max;
+  // Hard ceiling = the smallest of: per-batch cap, stock left on this ticket type, attendee capacity left.
+  const selectedType = p.ticketTypes.find((t) => t.id === ticketTypeId);
+  const stockLeft = selectedType?.available ?? 0;
+  const capacityLeft = p.attendeeRemaining ?? Number.POSITIVE_INFINITY;
+  const maxAllowed = Math.max(0, Math.min(p.max, stockLeft, capacityLeft));
+  const limitedBy: 'batch' | 'stock' | 'capacity' =
+    maxAllowed === capacityLeft && capacityLeft < Math.min(p.max, stockLeft) ? 'capacity'
+    : maxAllowed === stockLeft && stockLeft < p.max ? 'stock' : 'batch';
+  const fmt = (n: number) => n.toLocaleString('en-NG');
+  const qtyError =
+    !quantity ? 'Enter how many tickets to generate'
+    : !Number.isInteger(qty) || qty < 1 ? 'Quantity must be at least 1'
+    : maxAllowed === 0 ? (capacityLeft === 0 ? 'This event has reached its attendee limit' : 'This ticket type has no tickets left')
+    : qty > maxAllowed ? (limitedBy === 'capacity' ? `Only ${fmt(maxAllowed)} more attendees fit under this event's limit`
+        : limitedBy === 'stock' ? `Only ${fmt(maxAllowed)} left for this ticket type`
+        : `Maximum per batch is ${fmt(maxAllowed)}`)
+    : null;
+  const qtyValid = qtyError === null;
   const layouts = p.layouts[design];
   useEffect(() => { if (!layouts.includes(perPage)) setPerPage(layouts.includes(4) ? 4 : layouts[0]); }, [layouts, perPage]);
 
   // Live price (advisory; the server recalculates when the batch is created).
   useEffect(() => {
-    if (!qtyValid) { setQuote(null); setQuoteErr(qty > p.max ? `Maximum per batch is ${p.max.toLocaleString('en-NG')}` : null); return; }
+    if (!qtyValid) { setQuote(null); setQuoteErr(null); return; }
     setQuoteErr(null);
     const t = setTimeout(async () => {
       const r = await getGenerationQuote(p.eventId, qty);
       if (r.success) setQuote(r.data); else { setQuote(null); setQuoteErr(r.message); }
     }, 300);
     return () => clearTimeout(t);
-  }, [qty, qtyValid, p.eventId, p.max]);
+  }, [qty, qtyValid, p.eventId]);
 
   useEffect(() => {
     if (p.paymentFlag === 'cancelled') toast.info('Payment was not completed. You can pay from the batch list below.');
@@ -102,13 +120,25 @@ export function GenerateForm(p: GenerateFormProps) {
                   <Label>Ticket type</Label>
                   <Select value={ticketTypeId} onValueChange={setTicketTypeId}>
                     <SelectTrigger><SelectValue placeholder="Select ticket type" /></SelectTrigger>
-                    <SelectContent>{p.ticketTypes.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>{p.ticketTypes.map((t) => <SelectItem key={t.id} value={t.id} disabled={t.available < 1}>{t.name} · {t.available < 1 ? 'sold out' : `${fmt(t.available)} left`}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="qty">Quantity</Label>
                   <Input id="qty" inputMode="numeric" value={quantity} onChange={(e) => setQuantity(e.target.value.replace(/[^0-9]/g, ''))} aria-invalid={!qtyValid} />
-                  <p className="text-xs text-muted-foreground">Up to {p.max.toLocaleString('en-NG')} per batch.</p>
+                  {qtyError ? (
+                    <p className="text-xs text-destructive" role="alert">{qtyError}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">You can generate up to <b>{fmt(maxAllowed)}</b> now.</p>
+                  )}
+                  <div className="space-y-0.5 text-xs text-muted-foreground">
+                    <p>Per batch limit: {fmt(p.max)}</p>
+                    <p>Left for this ticket type: {fmt(stockLeft)}</p>
+                    <p>Attendee capacity left: {p.attendeeRemaining == null ? 'no limit' : fmt(p.attendeeRemaining)}</p>
+                  </div>
+                  {maxAllowed > 0 && qty !== maxAllowed && (
+                    <Button type="button" variant="link" className="h-auto p-0 text-xs" onClick={() => setQuantity(String(maxAllowed))}>Use maximum ({fmt(maxAllowed)})</Button>
+                  )}
                 </div>
               </div>
 

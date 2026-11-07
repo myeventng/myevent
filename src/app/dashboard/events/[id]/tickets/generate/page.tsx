@@ -27,6 +27,7 @@ export default async function GenerateTicketsPage({
         eventId={o.event.id}
         eventTitle={o.event.title}
         eventEnded={o.eventEnded}
+        attendeeRemaining={o.attendeeRemaining}
         ticketTypes={o.ticketTypes}
         defaults={o.defaults}
         layouts={o.layouts}

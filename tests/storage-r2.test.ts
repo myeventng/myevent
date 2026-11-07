@@ -109,7 +109,8 @@ describe('ticket PDF storage routing', () => {
     expect(putPrivateObject).toHaveBeenCalledWith(key, expect.any(Buffer));
 
     expect(await s.signedUrl(key)).toBe('https://signed-r2');
-    expect(signPrivateGet).toHaveBeenCalledWith(key.slice(3), 300, expect.any(String));
+    // Regression: the object is stored and signed under the SAME key (was NoSuchKey when sign stripped the prefix).
+    expect(signPrivateGet).toHaveBeenCalledWith(key, 300, expect.any(String));
 
     expect(await s.signedUrl('oldUploadThingKey123')).toBe('https://signed-ut');
     expect(utSign).toHaveBeenCalled();
