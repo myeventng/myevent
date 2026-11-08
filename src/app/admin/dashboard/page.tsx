@@ -69,6 +69,8 @@ export default async function AdminDashboardPage() {
       totalEvents: 0,
       totalVenues: 0,
       totalTicketsSold: 0,
+      physicalTicketsIssued: 0,
+      physicalTicketsSoldOffline: 0,
       totalNotifications: 0,
       unreadNotifications: 0,
     },
@@ -161,7 +163,7 @@ export default async function AdminDashboardPage() {
           <StatsCard
             title="Tickets Sold"
             value={data.overview.totalTicketsSold.toLocaleString()}
-            description="All-time ticket sales"
+            description={`Online sales · ${data.overview.physicalTicketsIssued.toLocaleString()} physical issued, ${data.overview.physicalTicketsSoldOffline.toLocaleString()} sold offline`}
             icon={<Ticket className="w-4 h-4" />}
             change={{
               value: Math.round(data.overview.totalTicketsSold * 0.15),

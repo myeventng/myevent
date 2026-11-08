@@ -174,6 +174,12 @@ export function EventPreview({
     0
   );
 
+  // Physical (printed) stock is separate from online stock
+  const totalPhysical = ticketTypes.reduce(
+    (sum, ticket: any) => sum + (Number(ticket.physicalQuantity) || 0),
+    0
+  );
+
   // Get voting contest data
   const votingContest = formData.votingContest || {};
   const votePackages = votingContest.votePackages || [];
@@ -424,7 +430,8 @@ export function EventPreview({
                       {ticketTypes.length} ticket{' '}
                       {ticketTypes.length === 1 ? 'type' : 'types'},{' '}
                       {totalTickets} {totalTickets === 1 ? 'ticket' : 'tickets'}{' '}
-                      available
+                      available online
+                      {totalPhysical > 0 ? `, ${totalPhysical} reserved for physical sales` : ''}
                     </p>
                   </div>
                 </div>
@@ -1120,8 +1127,13 @@ export function EventPreview({
                         <p className="text-sm text-muted-foreground">
                           {ticket.quantity}{' '}
                           {ticket.quantity === 1 ? 'ticket' : 'tickets'}{' '}
-                          available
+                          available online
                         </p>
+                        {Number((ticket as any).physicalQuantity) > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            + {(ticket as any).physicalQuantity} reserved for physical (offline) sales
+                          </p>
+                        )}
                       </CardContent>
                     </Card>
                   ))}

@@ -111,6 +111,13 @@ export function AdminTicketsTable({
   // Separate state for filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [userTypeFilter, setUserTypeFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+
+  // Physical (printed) tickets are issued by admins/organizers and sold
+  // offline; they have no buyer account, so they must never be treated as
+  // guest purchases.
+  const isPhysical = (ticket: any) =>
+    ticket.source === 'ADMIN_PHYSICAL' || ticket.source === 'ORGANIZER_PHYSICAL';
 
   const isSuperAdmin = userRole === 'ADMIN' && userSubRole === 'SUPER_ADMIN';
 
@@ -144,9 +151,17 @@ export function AdminTicketsTable({
       filtered = filtered.filter((ticket) => ticket.status === statusFilter);
     }
 
-    // User type filter
+    // Source filter (online sale vs printed/physical)
+    if (sourceFilter !== 'all') {
+      filtered = filtered.filter((ticket) =>
+        sourceFilter === 'physical' ? isPhysical(ticket) : !isPhysical(ticket)
+      );
+    }
+
+    // User type filter (physical tickets have no buyer, so they are neither)
     if (userTypeFilter !== 'all') {
       filtered = filtered.filter((ticket) => {
+        if (isPhysical(ticket)) return false;
         const isGuest = !ticket.userId || extractGuestInfo(ticket);
         return userTypeFilter === 'guest' ? isGuest : !isGuest;
       });
@@ -182,7 +197,7 @@ export function AdminTicketsTable({
     }
 
     return filtered;
-  }, [data, statusFilter, userTypeFilter, globalFilter]);
+  }, [data, statusFilter, userTypeFilter, sourceFilter, globalFilter]);
 
   // Calculate statistics with guest tracking
   const stats = useMemo(() => {
@@ -192,10 +207,14 @@ export function AdminTicketsTable({
       usedTickets: filteredData.filter((t) => t.status === 'USED').length,
       refundedTickets: filteredData.filter((t) => t.status === 'REFUNDED').length,
       cancelledTickets: filteredData.filter((t) => t.status === 'CANCELLED').length,
-      guestTickets: filteredData.filter((t) => !t.userId || extractGuestInfo(t)).length,
-      authenticatedTickets: filteredData.filter((t) => t.userId && !extractGuestInfo(t)).length,
+      onlineTickets: filteredData.filter((t) => !isPhysical(t)).length,
+      physicalTickets: filteredData.filter((t) => isPhysical(t)).length,
+      guestTickets: filteredData.filter((t) => !isPhysical(t) && (!t.userId || extractGuestInfo(t))).length,
+      authenticatedTickets: filteredData.filter((t) => !isPhysical(t) && t.userId && !extractGuestInfo(t)).length,
+      // Revenue is online sales only; printed tickets are sold offline and
+      // tracked in the organizer's offline inventory instead.
       totalRevenue: filteredData
-        .filter((t) => t.status !== 'REFUNDED' && t.status !== 'CANCELLED')
+        .filter((t) => !isPhysical(t) && t.status !== 'REFUNDED' && t.status !== 'CANCELLED')
         .reduce((total, ticket) => total + ticket.ticketType.price, 0),
     };
   }, [filteredData]);
@@ -286,6 +305,7 @@ export function AdminTicketsTable({
   const resendAllTicketEmails = async () => {
     try {
       const ticketsWithEmails = filteredData.filter((ticket) => {
+        if (isPhysical(ticket)) return false;
         const guestInfo = extractGuestInfo(ticket);
         return ticket.user?.email || guestInfo?.email;
       });
@@ -399,11 +419,12 @@ export function AdminTicketsTable({
   const clearAllFilters = () => {
     setStatusFilter('all');
     setUserTypeFilter('all');
+    setSourceFilter('all');
     setGlobalFilter('');
   };
 
   // Check if any filter is active
-  const isFilterActive = statusFilter !== 'all' || userTypeFilter !== 'all' || globalFilter !== '';
+  const isFilterActive = statusFilter !== 'all' || userTypeFilter !== 'all' || sourceFilter !== 'all' || globalFilter !== '';
 
   // Table columns definition
   const columns: ColumnDef<any>[] = [
@@ -471,6 +492,7 @@ export function AdminTicketsTable({
       id: 'user',
       header: 'Customer',
       accessorFn: (row) => {
+        if (isPhysical(row)) return 'Physical ticket';
         const guestInfo = extractGuestInfo(row);
         return row.user?.name || guestInfo?.name || 'Guest User';
       },
@@ -480,7 +502,14 @@ export function AdminTicketsTable({
 
         return (
           <div>
-            {user ? (
+            {isPhysical(row.original) ? (
+              <div className="flex items-center gap-1">
+                <Badge variant="outline" className="border-purple-300 bg-purple-50 text-purple-700">
+                  Physical
+                </Badge>
+                <span className="text-xs text-muted-foreground">Sold offline</span>
+              </div>
+            ) : user ? (
               <>
                 <div className="flex items-center gap-1">
                   <UserCheck className="h-3 w-3 text-green-600" />
@@ -528,7 +557,7 @@ export function AdminTicketsTable({
         const ticket = row.original;
         const isDeleting = deletingTicketId === ticket.id;
         const guestInfo = extractGuestInfo(ticket);
-        const hasEmail = ticket.user?.email || guestInfo?.email;
+        const hasEmail = !isPhysical(ticket) && (ticket.user?.email || guestInfo?.email);
 
         return (
           <div className="flex items-center gap-2">
@@ -611,7 +640,7 @@ export function AdminTicketsTable({
                           </p>
                           <p>
                             <span className="font-medium">Customer:</span>{' '}
-                            {ticket.user?.name || guestInfo?.name || 'Guest User'}
+                            {isPhysical(ticket) ? 'Physical ticket (sold offline)' : ticket.user?.name || guestInfo?.name || 'Guest User'}
                           </p>
                           <p>
                             <span className="font-medium">Status:</span>{' '}
@@ -663,8 +692,9 @@ export function AdminTicketsTable({
   // Card component for individual tickets
   const TicketCard = ({ ticket }: { ticket: any }) => {
     const guestInfo = extractGuestInfo(ticket);
-    const isGuest = !ticket.userId || !!guestInfo;
-    const hasEmail = ticket.user?.email || guestInfo?.email;
+    const physical = isPhysical(ticket);
+    const isGuest = !physical && (!ticket.userId || !!guestInfo);
+    const hasEmail = !physical && (ticket.user?.email || guestInfo?.email);
 
     return (
       <Card className="hover:shadow-md transition-shadow">
@@ -777,7 +807,19 @@ export function AdminTicketsTable({
               </div>
             </div>
 
-            {ticket.user ? (
+            {physical ? (
+              <div className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg border border-purple-200">
+                <Ticket className="w-4 h-4 text-purple-600" />
+                <div>
+                  <p className="font-medium text-sm text-purple-800">
+                    Physical ticket
+                  </p>
+                  <p className="text-xs text-purple-600">
+                    Printed and sold offline — no buyer account
+                  </p>
+                </div>
+              </div>
+            ) : ticket.user ? (
               <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
                 <UserCheck className="w-4 h-4 text-green-600" />
                 <div>
@@ -907,6 +949,11 @@ export function AdminTicketsTable({
                   Guests
                 </p>
                 <p className="text-2xl font-bold">{stats.guestTickets}</p>
+                {stats.physicalTickets > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    +{stats.physicalTickets} physical
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>
@@ -991,6 +1038,18 @@ export function AdminTicketsTable({
                 <SelectItem value="all">All Users</SelectItem>
                 <SelectItem value="guest">Guest Users</SelectItem>
                 <SelectItem value="authenticated">Authenticated Users</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Ticket source Filter */}
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Filter by source" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Online + Physical</SelectItem>
+                <SelectItem value="online">Online sales</SelectItem>
+                <SelectItem value="physical">Physical (offline)</SelectItem>
               </SelectContent>
             </Select>
 

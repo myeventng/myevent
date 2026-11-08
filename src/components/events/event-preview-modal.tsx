@@ -105,6 +105,12 @@ export function EventPreviewModal({
       0
     ) || 0;
 
+  const totalPhysical =
+    event.ticketTypes?.reduce(
+      (sum: number, ticket: any) => sum + (Number(ticket.physicalQuantity) || 0),
+      0
+    ) || 0;
+
   // Calculate voting contest stats
   const contestantCount = event.votingContest?.contestants?.length || 0;
   const totalVotes = event.votingContest?.votes?.length || 0;
@@ -381,7 +387,8 @@ export function EventPreviewModal({
                           ? 'type'
                           : 'types'}
                         , {totalTickets}{' '}
-                        {totalTickets === 1 ? 'ticket' : 'tickets'} available
+                        {totalTickets === 1 ? 'ticket' : 'tickets'} available online
+                        {totalPhysical > 0 ? `, ${totalPhysical} reserved for physical sales` : ''}
                       </p>
                     </div>
                   </div>
@@ -738,8 +745,13 @@ export function EventPreviewModal({
                                   : formatPrice(ticket.price)}
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                {ticket.quantity} available
+                                {ticket.quantity} available online
                               </p>
+                              {Number(ticket.physicalQuantity) > 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                  + {ticket.physicalQuantity} physical
+                                </p>
+                              )}
                             </div>
                           </div>
                         </div>

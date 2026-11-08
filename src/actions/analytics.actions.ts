@@ -18,6 +18,8 @@ interface DashboardStats {
     totalEvents: number;
     totalVenues: number;
     totalTicketsSold: number;
+    physicalTicketsIssued: number;
+    physicalTicketsSoldOffline: number;
     totalNotifications: number;
     unreadNotifications: number;
   };
@@ -89,6 +91,8 @@ export const getAdminDashboardStats = cache(
         totalEvents,
         totalVenues,
         ticketsSoldData,
+        physicalIssued,
+        offlineSoldAgg,
         totalNotifications,
         unreadNotifications,
         pendingEvents,
@@ -110,6 +114,17 @@ export const getAdminDashboardStats = cache(
         prisma.ticket.count({
           where: { source: 'ONLINE', status: { in: ['UNUSED', 'USED'] } },
         }),
+
+        // Physical (printed) tickets issued - reported separately from online sales
+        prisma.ticket.count({
+          where: {
+            source: { in: ['ADMIN_PHYSICAL', 'ORGANIZER_PHYSICAL'] },
+            status: { in: ['UNUSED', 'USED'] },
+          },
+        }),
+
+        // Physical tickets recorded as sold offline (signed ledger)
+        prisma.offlineSale.aggregate({ _sum: { quantity: true } }),
 
         // Total notifications
         prisma.notification.count(),
@@ -140,6 +155,8 @@ export const getAdminDashboardStats = cache(
           totalEvents,
           totalVenues,
           totalTicketsSold: ticketsSoldData,
+          physicalTicketsIssued: physicalIssued,
+          physicalTicketsSoldOffline: Math.max(0, offlineSoldAgg._sum.quantity ?? 0),
           totalNotifications,
           unreadNotifications,
         },

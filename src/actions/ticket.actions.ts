@@ -308,6 +308,17 @@ export async function getEventTicketStats(
 
     const physicalInv = await getEventPhysicalInventory(eventId);
 
+    // Door view = every ticket that can be scanned (online + physical). `overview` stays online-only
+    // because it feeds sales figures; scanner/attendance screens use `door`.
+    const doorStats = await prisma.ticket.groupBy({
+      by: ["status"],
+      where: { ticketType: { eventId } },
+      _count: true,
+    });
+    const doorTotal = doorStats.reduce((s, d) => s + d._count, 0);
+    const doorUsed = doorStats.find((d) => d.status === "USED")?._count || 0;
+    const doorUnused = doorStats.find((d) => d.status === "UNUSED")?._count || 0;
+
     // Get orders statistics
     const orderStats = await prisma.order.groupBy({
       by: ["paymentStatus"],
@@ -416,6 +427,12 @@ export async function getEventTicketStats(
             totalTickets > 0
               ? Math.round((usedTickets / totalTickets) * 100)
               : 0,
+        },
+        door: {
+          totalTickets: doorTotal,
+          usedTickets: doorUsed,
+          unusedTickets: doorUnused,
+          attendanceRate: doorTotal > 0 ? Math.round((doorUsed / doorTotal) * 100) : 0,
         },
         physical: {
           issued: physicalStats
@@ -1089,6 +1106,7 @@ export async function getFilteredAdminTickets(
     dateFrom?: string;
     dateTo?: string;
     isGuest?: boolean; // NEW: Filter for guest purchases
+    source?: "ONLINE" | "PHYSICAL";
   },
 ): Promise<ActionResponse<any>> {
   const headersList = await headers();
@@ -1132,11 +1150,19 @@ export async function getFilteredAdminTickets(
       whereClause.userId = filters.userId;
     }
 
+    // Filter by how the ticket was issued: sold online vs generated physical tickets.
+    if (filters?.source === "ONLINE") {
+      whereClause.source = "ONLINE";
+    } else if (filters?.source === "PHYSICAL") {
+      whereClause.source = { in: ["ADMIN_PHYSICAL", "ORGANIZER_PHYSICAL"] };
+    }
+
     // NEW: Filter by guest purchases
     if (filters?.isGuest !== undefined) {
       if (filters.isGuest) {
-        // Show only guest tickets (no userId)
+        // Show only guest tickets (no userId). Physical tickets also have no user but are not guests.
         whereClause.userId = null;
+        if (!whereClause.source) whereClause.source = "ONLINE";
       } else {
         // Show only authenticated tickets (has userId)
         whereClause.userId = { not: null };

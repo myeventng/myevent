@@ -369,14 +369,22 @@ export function EventAnalyticsModal({
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">
-                        {eventStats.overview.attendanceRate}%
+                        {(eventStats.door ?? eventStats.overview).attendanceRate}%
                       </div>
                       <div className="flex items-center text-xs text-muted-foreground">
                         <span>
-                          {eventStats.overview.usedTickets} of{' '}
-                          {eventStats.overview.totalTickets}
+                          {(eventStats.door ?? eventStats.overview).usedTickets} of{' '}
+                          {(eventStats.door ?? eventStats.overview).totalTickets} scanned
+                          {eventStats.physical && eventStats.physical.issued > 0
+                            ? ' (online + physical)'
+                            : ''}
                         </span>
                       </div>
+                      {eventStats.physical && eventStats.physical.issued > 0 && (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Physical scanned: {eventStats.physical.used} of {eventStats.physical.issued}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
 

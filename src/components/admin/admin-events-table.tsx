@@ -458,6 +458,10 @@ export function AdminEventsTable({
             (sum: number, type: any) => sum + type.quantity,
             0
           );
+          const totalPhysical = ticketTypes.reduce(
+            (sum: number, type: any) => sum + (Number(type.physicalQuantity) || 0),
+            0
+          );
 
           return (
             <div>
@@ -465,7 +469,7 @@ export function AdminEventsTable({
                 {ticketTypes.length} type{ticketTypes.length !== 1 ? 's' : ''}
               </div>
               <div className="text-sm text-muted-foreground">
-                {totalTickets} available
+                {totalTickets} online{totalPhysical > 0 ? ` · ${totalPhysical} physical` : ''}
               </div>
             </div>
           );

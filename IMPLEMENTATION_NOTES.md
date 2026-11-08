@@ -68,3 +68,10 @@ Offline figures are inventory + organizer-recorded revenue only: they never feed
 
 Also fixed: the organizer events table computed revenue/sold from ALL tickets (so printed tickets inflated it); it now uses online tickets only. Scanner overview cards still count online + physical (both are scannable).
 Migration: `20261107120000_offline_sales` (additive).
+
+## Online vs offline (physical) visibility audit
+- Scanner page + analytics attendance use `stats.door` (online + physical, everything scannable). `overview` stays online-only (sales).
+- Admin tickets table: Source filter (Online/Physical), Physical badge; physical tickets are never "Guest", get no email actions, and are excluded from the revenue card. `getFilteredAdminTickets` accepts `source`.
+- Event preview (form) and preview modal show online stock plus "reserved for physical" stock; admin/featured events tables show `N online · M physical`.
+- Admin dashboard: Tickets Sold stays online-only and now also shows physical issued / sold offline (ledger sum).
+- Public/customer pages remain online-only; physical stock is never exposed.

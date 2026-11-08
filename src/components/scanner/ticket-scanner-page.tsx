@@ -35,11 +35,19 @@ interface ValidationRecord {
 }
 
 interface StatsData {
-  overview: {
+  // Door view: every ticket that can be scanned (online + physical).
+  door: {
     totalTickets: number;
     usedTickets: number;
     unusedTickets: number;
     attendanceRate: number;
+  };
+  overview: {
+    totalTickets: number;
+  };
+  physical?: {
+    issued: number;
+    used: number;
   };
 }
 
@@ -128,8 +136,13 @@ export function TicketScannerPage({ eventId, eventTitle, scannerMode }: TicketSc
               <div className="flex items-center gap-2">
                 <Users className="h-5 w-5 text-blue-500" />
                 <div>
-                  <div className="text-2xl font-bold">{stats.overview.totalTickets}</div>
+                  <div className="text-2xl font-bold">{stats.door.totalTickets}</div>
                   <div className="text-sm text-muted-foreground">Total Tickets</div>
+                  {stats.physical && stats.physical.issued > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      {stats.overview.totalTickets} online · {stats.physical.issued} physical
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -140,7 +153,7 @@ export function TicketScannerPage({ eventId, eventTitle, scannerMode }: TicketSc
               <div className="flex items-center gap-2">
                 <CheckCircle className="h-5 w-5 text-green-500" />
                 <div>
-                  <div className="text-2xl font-bold">{stats.overview.usedTickets}</div>
+                  <div className="text-2xl font-bold">{stats.door.usedTickets}</div>
                   <div className="text-sm text-muted-foreground">Validated</div>
                 </div>
               </div>
@@ -152,7 +165,7 @@ export function TicketScannerPage({ eventId, eventTitle, scannerMode }: TicketSc
               <div className="flex items-center gap-2">
                 <Clock className="h-5 w-5 text-orange-500" />
                 <div>
-                  <div className="text-2xl font-bold">{stats.overview.unusedTickets}</div>
+                  <div className="text-2xl font-bold">{stats.door.unusedTickets}</div>
                   <div className="text-sm text-muted-foreground">Pending</div>
                 </div>
               </div>
@@ -164,7 +177,7 @@ export function TicketScannerPage({ eventId, eventTitle, scannerMode }: TicketSc
               <div className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-purple-500" />
                 <div>
-                  <div className="text-2xl font-bold">{stats.overview.attendanceRate}%</div>
+                  <div className="text-2xl font-bold">{stats.door.attendanceRate}%</div>
                   <div className="text-sm text-muted-foreground">Attendance</div>
                 </div>
               </div>
