@@ -4,14 +4,14 @@ import { OrganizerAnalytics } from "@/components/organizer/organizer-analytics";
 import { getServerSideAuth } from "@/lib/auth-server";
 import { getOrganizerStats } from "@/actions/ticket.actions";
 import { Badge } from "@/components/ui/badge";
-import { getPlatformFee } from "@/lib/platform-settings";
+import { getMyEffectiveCommissionPercent } from "@/actions/commission.actions";
 import { redirect } from "next/navigation";
 
 async function getInitialData() {
   try {
     const [statsResponse, platformFee] = await Promise.all([
       getOrganizerStats(),
-      getPlatformFee(),
+      getMyEffectiveCommissionPercent(),
     ]);
 
     return {
@@ -44,17 +44,6 @@ export default async function Dashboard() {
 
   // If user is an organizer, render the organizer dashboard
   if (isOrganizer || isAdmin) {
-    // Get initial stats server-side for organizers
-    let initialStats = null;
-    try {
-      const statsResponse = await getOrganizerStats();
-      if (statsResponse.success) {
-        initialStats = statsResponse.data;
-      }
-    } catch (error) {
-      console.error("Error loading initial stats:", error);
-    }
-
     const initials = session.user.name
       .split(" ")
       .map((n) => n[0])

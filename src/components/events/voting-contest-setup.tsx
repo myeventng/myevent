@@ -58,7 +58,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { getPlatformFee } from "@/lib/platform-settings";
+import { getMyEffectiveCommissionPercent } from "@/actions/commission.actions";
 import { toast } from "sonner";
 
 // Schema for vote package
@@ -128,7 +128,7 @@ export function VotingContestSetup({
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [platformFeePercentage, setPlatformFeePercentage] = useState(10);
+  const [platformFeePercentage, setPlatformFeePercentage] = useState(0);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -161,15 +161,14 @@ export function VotingContestSetup({
     },
   });
 
-  // Load platform fee from lib (no auth required)
+  // Load the commission rate that applies to this organizer (not just the general rate)
   useEffect(() => {
     const loadPlatformFee = async () => {
       try {
-        const fee = await getPlatformFee();
+        const fee = await getMyEffectiveCommissionPercent();
         setPlatformFeePercentage(fee);
       } catch (error) {
         console.error("Error loading platform fee:", error);
-        setPlatformFeePercentage(10);
       }
     };
     loadPlatformFee();

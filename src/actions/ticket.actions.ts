@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { getCachedSetting } from "@/lib/platform-settings";
-import { aggregateOrderFinancials } from "@/lib/commission-service";
+import { aggregateOrderFinancials, resolveCommission, bpsToPercent } from "@/lib/commission-service";
 import { validateScan, getScannerMode } from "@/lib/scanner/validate";
 import { signScanSession, channelAllowed } from "@/lib/scanner/session";
 import { can, isOwnerOrAdmin, resolveEventAccess } from "@/lib/staff/access";
@@ -367,7 +367,10 @@ export async function getEventTicketStats(
     // Commission comes from the snapshots persisted on each order — never re-derived from today's rates.
     const eventFinancials = await aggregateOrderFinancials({ eventId: event.id });
     const platformFee = eventFinancials.netFeeNaira;
-    const platformFeePercentage = eventFinancials.effectivePercent ?? 0;
+    // Blended rate actually charged; before any revenue, the rate that applies to this event right now.
+    const platformFeePercentage =
+      eventFinancials.effectivePercent ??
+      bpsToPercent((await resolveCommission({ eventId })).bps);
     const organizerRevenue = netRevenue - platformFee;
 
     // Get ticket type breakdown
@@ -562,7 +565,9 @@ export async function getOrganizerStats(): Promise<ActionResponse<any>> {
     const netRevenue = totalRevenue - totalRefunded;
     const organizerFinancials = await aggregateOrderFinancials({ event: { userId: session.user.id } });
     const platformFee = organizerFinancials.netFeeNaira;
-    const platformFeePercentage = organizerFinancials.effectivePercent ?? 0;
+    const platformFeePercentage =
+      organizerFinancials.effectivePercent ??
+      bpsToPercent((await resolveCommission({ organizerId: session.user.id })).bps);
     const organizerEarnings = netRevenue - platformFee;
 
     return {

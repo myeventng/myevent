@@ -30,26 +30,12 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { getRevenueAnalytics } from "@/actions/analytics.actions";
-import { getPlatformFee } from "@/lib/platform-settings";
 import Link from "next/link";
 
 export function AdminRevenueAnalytics() {
   const [analytics, setAnalytics] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [timeRange, setTimeRange] = useState("30");
-  const [platformFeePercentage, setPlatformFeePercentage] = useState<number>(5);
-
-  // Load platform fee from lib (no auth required)
-  const fetchPlatformFee = async () => {
-    try {
-      const fee = await getPlatformFee();
-      setPlatformFeePercentage(fee);
-    } catch (error) {
-      console.error("Error fetching platform fee:", error);
-      // Keep default 5% if fetch fails
-    }
-  };
-
   const fetchAnalytics = async () => {
     setIsLoading(true);
     try {
@@ -67,15 +53,13 @@ export function AdminRevenueAnalytics() {
 
   useEffect(() => {
     const fetchData = async () => {
-      await fetchPlatformFee();
       await fetchAnalytics();
     };
     fetchData();
   }, []);
 
-  const calculatePlatformFee = (revenue: number) => {
-    return (revenue * platformFeePercentage) / 100;
-  };
+  // Blended effective rate from real order snapshots (commission varies per event/organizer).
+  const platformFeePercentage: number = analytics?.effectivePercent ?? 0;
 
   if (isLoading) {
     return (
@@ -92,7 +76,7 @@ export function AdminRevenueAnalytics() {
         <div>
           <h1 className="text-2xl font-bold">Revenue Analytics</h1>
           <p className="text-muted-foreground">
-            Platform revenue, fees ({platformFeePercentage}%), and financial
+            Platform revenue, fees ({platformFeePercentage}% effective), and financial
             performance overview
           </p>
         </div>
@@ -226,7 +210,7 @@ export function AdminRevenueAnalytics() {
               Monthly Revenue Trend
             </CardTitle>
             <CardDescription>
-              Revenue and platform fees ({platformFeePercentage}%) over the last
+              Revenue and platform fees ({platformFeePercentage}% effective) over the last
               12 months
             </CardDescription>
           </CardHeader>
@@ -293,11 +277,7 @@ export function AdminRevenueAnalytics() {
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <span>{event.tickets} tickets</span>
                         <span>
-                          ₦
-                          {calculatePlatformFee(
-                            event.revenue || 0,
-                          ).toLocaleString()}{" "}
-                          platform fee
+                          ₦{(event.fees ?? 0).toLocaleString()} platform fee
                         </span>
                       </div>
                     </div>

@@ -3,7 +3,6 @@ import { StatsCard } from '@/components/stats-card';
 import { getServerSideAuth } from '@/lib/auth-server';
 import { isSuperAdmin } from '@/lib/auth-utils';
 import { getAdminDashboardStats } from '@/actions/analytics.actions';
-import { getPlatformFee } from '@/lib/platform-settings';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -43,14 +42,6 @@ export default async function AdminDashboardPage() {
 
   const isUserSuperAdmin = isSuperAdmin(session.user);
 
-  // Fetch platform fee percentage
-  let platformFeePercentage = 0;
-  try {
-    platformFeePercentage = await getPlatformFee();
-  } catch (error) {
-    console.error('Error loading platform fee:', error);
-  }
-
   // Fetch real dashboard data
   let dashboardData = null;
   try {
@@ -74,6 +65,13 @@ export default async function AdminDashboardPage() {
       totalNotifications: 0,
       unreadNotifications: 0,
     },
+    financials: {
+      monthGross: 0,
+      monthPlatformFee: 0,
+      monthEffectivePercent: null as number | null,
+      allTimePlatformFee: 0,
+      allTimeEffectivePercent: null as number | null,
+    },
     pending: {
       events: 0,
       venues: 0,
@@ -83,9 +81,10 @@ export default async function AdminDashboardPage() {
 
   const data = dashboardData || defaultData;
 
-  // Calculate platform revenue using dynamic fee
-  const estimatedRevenue = data.overview.totalTicketsSold * 2500; // Assuming avg ticket price
-  const platformRevenue = (estimatedRevenue * platformFeePercentage) / 100;
+  // Real figures from order snapshots: commission differs per event/organizer, so show the effective rate.
+  const monthRevenue = data.financials.monthGross;
+  const platformRevenue = data.financials.monthPlatformFee;
+  const platformFeePercentage = data.financials.monthEffectivePercent;
 
   // Format currency
   const formatCurrency = (amount: number) => {
@@ -624,12 +623,12 @@ export default async function AdminDashboardPage() {
                       Revenue This Month
                     </span>
                     <span className="text-sm text-muted-foreground">
-                      {formatCurrency(estimatedRevenue)}
+                      {formatCurrency(monthRevenue)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">
-                      Platform Fee Collected ({platformFeePercentage}%)
+                      Platform Fee Collected{platformFeePercentage !== null ? ` (${platformFeePercentage}% effective)` : ''}
                     </span>
                     <span className="text-sm text-muted-foreground">
                       {formatCurrency(platformRevenue)}

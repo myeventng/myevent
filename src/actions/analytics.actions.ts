@@ -2,6 +2,7 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
+import { aggregateOrderFinancials } from '@/lib/commission-service';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import { cache } from 'react';
@@ -22,6 +23,14 @@ interface DashboardStats {
     physicalTicketsSoldOffline: number;
     totalNotifications: number;
     unreadNotifications: number;
+  };
+  // Real money, from persisted per-order snapshots (never estimated from ticket counts).
+  financials: {
+    monthGross: number;
+    monthPlatformFee: number;
+    monthEffectivePercent: number | null;
+    allTimePlatformFee: number;
+    allTimeEffectivePercent: number | null;
   };
   pending: {
     events: number;
@@ -50,10 +59,11 @@ interface EventAnalytics {
 interface RevenueAnalytics {
   totalRevenue: number;
   platformFees: number;
+  effectivePercent: number | null;
   organizerEarnings: number;
   refundedAmount: number;
   monthlyRevenue: { month: string; revenue: number; fees: number }[];
-  topEvents: { title: string; revenue: number; tickets: number }[];
+  topEvents: { title: string; revenue: number; tickets: number; fees: number }[];
 }
 
 interface UserAnalytics {
@@ -98,6 +108,8 @@ export const getAdminDashboardStats = cache(
         pendingEvents,
         pendingVenues,
         recentActivity,
+        monthFin,
+        allFin,
       ] = await Promise.all([
         // Total users
         prisma.user.count(),
@@ -147,6 +159,10 @@ export const getAdminDashboardStats = cache(
 
         // Recent activity
         getRecentPlatformActivity(),
+
+        // Real revenue / commission: this calendar month and all time
+        aggregateOrderFinancials({ createdAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) } }),
+        aggregateOrderFinancials({}),
       ]);
 
       const dashboardData: DashboardStats = {
@@ -159,6 +175,13 @@ export const getAdminDashboardStats = cache(
           physicalTicketsSoldOffline: Math.max(0, offlineSoldAgg._sum.quantity ?? 0),
           totalNotifications,
           unreadNotifications,
+        },
+        financials: {
+          monthGross: monthFin.netRevenueNaira,
+          monthPlatformFee: monthFin.netFeeNaira,
+          monthEffectivePercent: monthFin.effectivePercent,
+          allTimePlatformFee: allFin.netFeeNaira,
+          allTimeEffectivePercent: allFin.effectivePercent,
         },
         pending: {
           events: pendingEvents,
@@ -589,28 +612,10 @@ export async function getRevenueAnalytics(): Promise<
   try {
     await validateAdminPermission();
 
-    const [revenueData, refundedData, monthlyRevenue, topEvents] =
+    const [financials, monthlyRevenue, topEvents] =
       await Promise.all([
-        // Total revenue and platform fees
-        prisma.order.aggregate({
-          where: {
-            paymentStatus: 'COMPLETED',
-          },
-          _sum: {
-            totalAmount: true,
-            platformFee: true,
-          },
-        }),
-
-        // Refunded amount
-        prisma.order.aggregate({
-          where: {
-            paymentStatus: 'REFUNDED',
-          },
-          _sum: {
-            totalAmount: true,
-          },
-        }),
+        // Gross, refunds, net platform fees (refunded orders return their fee) from persisted snapshots
+        aggregateOrderFinancials({}),
 
         // Monthly revenue
         getMonthlyRevenueData(),
@@ -619,17 +624,18 @@ export async function getRevenueAnalytics(): Promise<
         getTopEventsByRevenue(),
       ]);
 
-    const totalRevenue = revenueData._sum.totalAmount || 0;
+    const totalRevenue = financials.grossNaira;
     // Persisted per-order snapshots only; a 0% (or zero-fee) period must stay 0, never an invented default.
-    const platformFees = revenueData._sum.platformFee ?? 0;
-    const organizerEarnings = totalRevenue - platformFees;
-    const refundedAmount = refundedData._sum.totalAmount || 0;
+    const platformFees = financials.netFeeNaira;
+    const organizerEarnings = financials.organizerEarningsNaira;
+    const refundedAmount = financials.refundedNaira;
 
     return {
       success: true,
       data: {
         totalRevenue,
         platformFees,
+        effectivePercent: financials.effectivePercent,
         organizerEarnings,
         refundedAmount,
         monthlyRevenue: monthlyRevenue.data || [],
@@ -699,10 +705,12 @@ async function getTopEventsByRevenue(): Promise<ActionResponse<any[]>> {
           select: {
             totalAmount: true,
             quantity: true,
+            platformFee: true,
           },
         },
       },
-      take: 20,
+      // Only events that have paid orders; ranking happens below across ALL of them.
+      where: { orders: { some: { paymentStatus: 'COMPLETED' } } },
     });
 
     const eventsWithRevenue = topEvents
@@ -716,10 +724,14 @@ async function getTopEventsByRevenue(): Promise<ActionResponse<any[]>> {
           0
         );
 
+        // Real per-order fee snapshots (event/organizer rules and rate changes included).
+        const fees = event.orders.reduce((sum, order) => sum + (order.platformFee ?? 0), 0);
+
         return {
           title: event.title,
           revenue,
           tickets,
+          fees,
         };
       })
       .filter((event) => event.revenue > 0)

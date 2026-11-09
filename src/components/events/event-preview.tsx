@@ -42,7 +42,7 @@ import { getTags } from '@/actions/tag.actions';
 import { getVenueById } from '@/actions/venue-actions';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { EventType } from '@/generated/prisma';
-import { getPlatformFee } from '@/lib/platform-settings';
+import { getMyEffectiveCommissionPercent } from '@/actions/commission.actions';
 
 interface EventPreviewProps {
   formData: any;
@@ -70,7 +70,7 @@ export function EventPreview({
   const [tags, setTags] = useState<any[]>([]);
   const [venue, setVenue] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [platformFeePercentage, setPlatformFeePercentage] = useState(5);
+  const [platformFeePercentage, setPlatformFeePercentage] = useState(0);
   const isVotingContest = formData.eventType === EventType.VOTING_CONTEST;
   const isInviteOnly = formData.eventType === EventType.INVITE;
   const isStandardEvent = formData.eventType === EventType.STANDARD;
@@ -79,7 +79,8 @@ export function EventPreview({
   useEffect(() => {
     const loadPlatformFee = async () => {
       try {
-        const fee = await getPlatformFee();
+        // The rate that applies to THIS organizer/event (event rule > organizer rule > general)
+        const fee = await getMyEffectiveCommissionPercent((formData as any)?.id ?? null);
         setPlatformFeePercentage(fee);
       } catch (error) {
         console.error('Error loading platform fee:', error);

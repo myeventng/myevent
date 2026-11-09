@@ -52,7 +52,6 @@ interface EventAnalyticsModalProps {
 
 interface PlatformConfig {
   currency: string;
-  defaultPlatformFeePercentage: number;
   recentActivityHours: number;
   analyticsRefreshIntervalMs: number;
   showPlatformFeeBreakdown: boolean;
@@ -72,7 +71,6 @@ export function EventAnalyticsModal({
   const [isLoading, setIsLoading] = useState(false);
   const [platformConfig, setPlatformConfig] = useState<PlatformConfig>({
     currency: 'NGN',
-    defaultPlatformFeePercentage: 5,
     recentActivityHours: 24,
     analyticsRefreshIntervalMs: 30000,
     showPlatformFeeBreakdown: true,
@@ -86,7 +84,6 @@ export function EventAnalyticsModal({
     try {
       const [
         currency,
-        defaultFee,
         activityHours,
         refreshInterval,
         showFeeBreakdown,
@@ -95,7 +92,6 @@ export function EventAnalyticsModal({
         timeFormat,
       ] = await Promise.all([
         getCachedSetting('general.defaultCurrency'),
-        getCachedSetting('financial.defaultPlatformFeePercentage'),
         getCachedSetting('analytics.recentActivityHours'),
         getCachedSetting('analytics.refreshIntervalMs'),
         getCachedSetting('analytics.showPlatformFeeBreakdown'),
@@ -106,7 +102,6 @@ export function EventAnalyticsModal({
 
       setPlatformConfig({
         currency: currency || 'NGN',
-        defaultPlatformFeePercentage: defaultFee || 5,
         recentActivityHours: activityHours || 24,
         analyticsRefreshIntervalMs: refreshInterval || 30000,
         showPlatformFeeBreakdown: showFeeBreakdown !== false, // Default to true
@@ -524,8 +519,7 @@ export function EventAnalyticsModal({
                           <span className="text-sm">
                             Platform Fee (
                             {formatPercentage(
-                              eventStats.revenue.platformFeePercentage ||
-                                platformConfig.defaultPlatformFeePercentage
+                              eventStats.revenue.platformFeePercentage
                             )}
                             )
                           </span>
@@ -611,8 +605,7 @@ export function EventAnalyticsModal({
                             <span className="text-sm">Platform Fee Rate</span>
                             <span className="font-medium">
                               {formatPercentage(
-                                eventStats.revenue.platformFeePercentage ||
-                                  platformConfig.defaultPlatformFeePercentage
+                                eventStats.revenue.platformFeePercentage
                               )}
                             </span>
                           </div>
@@ -627,8 +620,7 @@ export function EventAnalyticsModal({
                             <span className="font-medium text-green-600">
                               {formatPercentage(
                                 100 -
-                                  (eventStats.revenue.platformFeePercentage ||
-                                    platformConfig.defaultPlatformFeePercentage)
+                                  eventStats.revenue.platformFeePercentage
                               )}
                             </span>
                           </div>

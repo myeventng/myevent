@@ -442,3 +442,26 @@ export async function getMyCommissionVisibility(): Promise<CommissionVisibility>
   const v = await getCommissionVisibility();
   return v;
 }
+
+/**
+ * The commission % that applies RIGHT NOW to the signed-in organizer (event rule > organizer rule >
+ * legacy organizer fee > general). With `eventId` it resolves for that event, but only for its owner
+ * or an admin; otherwise it falls back to the caller's own organizer-level rate. Used by forms and
+ * previews so they show the real rate instead of the general platform rate.
+ */
+export async function getMyEffectiveCommissionPercent(eventId?: string | null): Promise<number> {
+  const { resolveCommission } = await import('@/lib/commission-service');
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session) return bpsToPercent(await getGeneralCommissionBps());
+
+  let scopedEventId: string | null = null;
+  if (eventId) {
+    const ev = await prisma.event.findUnique({ where: { id: eventId }, select: { userId: true } });
+    if (ev && (ev.userId === session.user.id || session.user.role === 'ADMIN')) scopedEventId = eventId;
+  }
+  const resolved = await resolveCommission({
+    eventId: scopedEventId,
+    organizerId: scopedEventId ? undefined : session.user.id,
+  });
+  return bpsToPercent(resolved.bps);
+}

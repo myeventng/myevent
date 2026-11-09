@@ -47,8 +47,10 @@ import {
   getOrganizerStats,
   getEventTicketStats,
 } from "@/actions/ticket.actions";
-import { getPlatformFee } from "@/lib/platform-settings";
-import { getMyCommissionVisibility } from "@/actions/commission.actions";
+import {
+  getMyCommissionVisibility,
+  getMyEffectiveCommissionPercent,
+} from "@/actions/commission.actions";
 import {
   getOrganizerRevenueAnalytics,
   requestPayout,
@@ -98,9 +100,10 @@ export function OrganizerAnalytics({
   const [eventStats, setEventStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingEvent, setIsLoadingEvent] = useState(false);
-  const [currentPlatformFee, setPlatformFee] = useState(
-    initialPlatformFee ?? 0,
-  );
+  // Organizer-level rate that applies right now (event rule > organizer rule > general). Only used
+  // when there is no revenue yet; once there is, the blended rate from real orders is used.
+  const [baseRate, setPlatformFee] = useState(initialPlatformFee ?? 0);
+  const [eventBaseRate, setEventBaseRate] = useState<number | null>(null);
   // Admin-controlled: hides commission lines on the organizer dashboard (amounts are unchanged).
   const [showCommission, setShowCommission] = useState(true);
   useEffect(() => {
@@ -125,6 +128,18 @@ export function OrganizerAnalytics({
     return `${value.toFixed(1)}%`;
   };
 
+  // The rate shown everywhere: what was actually charged (server-computed from order snapshots, so
+  // event/organizer rules and rate changes are reflected) with the applicable rate as the fallback.
+  const currentPlatformFee =
+    stats && stats.overview.totalRevenue > 0
+      ? stats.overview.platformFeePercentage
+      : baseRate;
+  // Per-event rate (selected event drill-down).
+  const eventPlatformFee =
+    eventStats?.revenue && eventStats.revenue.totalRevenue > 0
+      ? eventStats.revenue.platformFeePercentage
+      : (eventBaseRate ?? currentPlatformFee);
+
   const loadStats = async () => {
     setIsLoading(true);
     try {
@@ -148,6 +163,9 @@ export function OrganizerAnalytics({
       if (response.success) {
         setEventStats(response.data);
         setSelectedEvent(eventId);
+        getMyEffectiveCommissionPercent(eventId)
+          .then(setEventBaseRate)
+          .catch(() => setEventBaseRate(null));
       } else {
         toast.error(response.message || "Failed to load event statistics");
       }
@@ -160,7 +178,7 @@ export function OrganizerAnalytics({
 
   const loadPlatformFee = async () => {
     try {
-      const feePercentage = await getPlatformFee();
+      const feePercentage = await getMyEffectiveCommissionPercent();
       setPlatformFee(feePercentage);
     } catch (error) {
       console.error("Error loading platform fee:", error);
@@ -256,24 +274,6 @@ export function OrganizerAnalytics({
     };
     initializeData();
   }, [initialStats]);
-
-  useEffect(() => {
-    if (stats && currentPlatformFee) {
-      const updatedStats = {
-        ...stats,
-        overview: {
-          ...stats.overview,
-          platformFee: Math.round(
-            stats.overview.netRevenue * (currentPlatformFee / 100),
-          ),
-          organizerEarnings:
-            stats.overview.netRevenue -
-            Math.round(stats.overview.netRevenue * (currentPlatformFee / 100)),
-        },
-      };
-      setStats(updatedStats);
-    }
-  }, [currentPlatformFee]);
 
   if (isLoading && !stats) {
     return (
@@ -410,9 +410,11 @@ export function OrganizerAnalytics({
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   Revenue Breakdown
-                  <Badge variant="outline" className="text-xs">
-                    Platform Fee: {formatPercentage(currentPlatformFee)}
-                  </Badge>
+                  {showCommission && (
+                    <Badge variant="outline" className="text-xs">
+                      Platform Fee: {formatPercentage(currentPlatformFee)}
+                    </Badge>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -452,6 +454,18 @@ export function OrganizerAnalytics({
                     </span>
                   </div>
                 </div>
+                {stats.overview.totalOfflineRevenue > 0 && (
+                  <div className="rounded-md bg-purple-50 p-3 text-sm">
+                    <div className="flex justify-between font-medium text-purple-800">
+                      <span>Offline sales (recorded by you)</span>
+                      <span>{formatCurrency(stats.overview.totalOfflineRevenue)}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-purple-700">
+                      Physical tickets you sold yourself. Not included in the figures
+                      above, no platform fee, and not part of payouts.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -483,12 +497,14 @@ export function OrganizerAnalytics({
                         : 0}
                     </span>
                   </div>
+                  {showCommission && (
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Platform Fee Rate</span>
                     <span className="font-medium text-orange-600">
                       {formatPercentage(currentPlatformFee)}
                     </span>
                   </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Total Completed Payouts</span>
                     <span className="font-medium text-green-600">
@@ -666,8 +682,10 @@ export function OrganizerAnalytics({
             <CardContent>
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="space-y-3">
+                  {showCommission && (
+                  <>
                   <div className="flex justify-between">
-                    <span className="text-sm">Current Platform Fee Rate</span>
+                    <span className="text-sm">Platform Fee Rate (effective)</span>
                     <span className="font-medium text-orange-600">
                       {formatPercentage(currentPlatformFee)}
                     </span>
@@ -678,6 +696,8 @@ export function OrganizerAnalytics({
                       {formatPercentage(100 - currentPlatformFee)}
                     </span>
                   </div>
+                  </>
+                  )}
                   {showCommission && (
                   <div className="flex justify-between">
                     <span className="text-sm">Total Fees Paid (All Time)</span>
@@ -693,10 +713,12 @@ export function OrganizerAnalytics({
                       Fee Calculation
                     </p>
                     <p className="text-xs text-blue-700 mt-1">
-                      Platform fee is calculated as{" "}
-                      {formatPercentage(currentPlatformFee)} of your net revenue
-                      (after refunds). This helps maintain and improve the
-                      platform services.
+                      Platform fee is calculated per order at the commission rate
+                      that applied when it was placed (an event-specific rate, your
+                      organizer rate, or the general rate), so the effective rate
+                      shown can differ between events and over time. Refunds
+                      return their share of the fee. Offline sales you record
+                      never attract a platform fee.
                     </p>
                   </div>
                 </div>
@@ -725,8 +747,8 @@ export function OrganizerAnalytics({
                     )}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Net amount after platform fees (
-                    {formatPercentage(currentPlatformFee)})
+                    Net amount after platform fees
+                    {showCommission ? ` (${formatPercentage(currentPlatformFee)})` : ""}
                   </p>
                 </div>
                 <div className="text-right">
@@ -827,7 +849,7 @@ export function OrganizerAnalytics({
                     <TableBody>
                       {revenueAnalytics.recentOrders.map((order: any) => {
                         const calculatedPlatformFee =
-                          order.platformFee ||
+                          order.platformFee ??
                           order.totalAmount * (currentPlatformFee / 100);
                         const buyerInfo = getBuyerInfo(order);
 
@@ -1024,8 +1046,9 @@ export function OrganizerAnalytics({
                     </div>
                     <div className="flex items-center text-xs text-muted-foreground">
                       <span>
-                        After {formatPercentage(currentPlatformFee)} platform
-                        fee
+                        {showCommission
+                          ? `After ${formatPercentage(eventPlatformFee)} platform fee`
+                          : "After platform fee"}
                       </span>
                     </div>
                   </CardContent>
@@ -1114,10 +1137,12 @@ export function OrganizerAnalytics({
               <Card>
                 <CardHeader>
                   <CardTitle>Revenue Details</CardTitle>
-                  <div className="text-sm text-muted-foreground">
-                    Platform fee calculated at{" "}
-                    {formatPercentage(currentPlatformFee)}
-                  </div>
+                  {showCommission && (
+                    <div className="text-sm text-muted-foreground">
+                      Platform fee calculated at{" "}
+                      {formatPercentage(eventPlatformFee)}
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
@@ -1144,7 +1169,7 @@ export function OrganizerAnalytics({
                     {showCommission && (
                     <div className="flex justify-between text-orange-600">
                       <span>
-                        Platform Fee ({formatPercentage(currentPlatformFee)})
+                        Platform Fee ({formatPercentage(eventPlatformFee)})
                       </span>
                       <span className="font-medium">
                         -{formatCurrency(eventStats.revenue.platformFee)}
