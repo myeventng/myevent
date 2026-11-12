@@ -21,7 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, CheckCircle2, XCircle, Mail, Server } from 'lucide-react';
 import { testEmailProviderAction } from '@/actions/platform-settings.actions';
 
-export type EmailProviderType = 'gmail' | 'ses';
+export type EmailProviderType = 'gmail' | 'ses' | 'resend';
 
 export interface EmailSettings {
   activeProvider: EmailProviderType;
@@ -37,6 +37,10 @@ export interface EmailSettings {
     region: string;
     accessKeyId: string;
     secretAccessKey: string;
+    fromAddress: string;
+  };
+  resend: {
+    apiKey: string;
     fromAddress: string;
   };
 }
@@ -88,7 +92,7 @@ export function EmailSettingsTab({ settings, onChange }: Props) {
           <h3 className="font-semibold">Active Email Provider</h3>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-3">
           {/* Gmail card */}
           <button
             type="button"
@@ -128,6 +132,27 @@ export function EmailSettingsTab({ settings, onChange }: Props) {
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               High-volume, cost-effective AWS email delivery.
+            </p>
+          </button>
+
+          {/* Resend card */}
+          <button
+            type="button"
+            onClick={() => update(['activeProvider'], 'resend')}
+            className={`rounded-lg border-2 p-4 text-left transition-all ${
+              settings.activeProvider === 'resend'
+                ? 'border-primary bg-primary/5'
+                : 'border-muted hover:border-muted-foreground/40'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-medium">Resend</span>
+              {settings.activeProvider === 'resend' && (
+                <Badge className="bg-primary text-primary-foreground text-xs">Active</Badge>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Simple API email delivery with an API key and a verified domain.
             </p>
           </button>
         </div>
@@ -296,6 +321,56 @@ export function EmailSettingsTab({ settings, onChange }: Props) {
         </div>
       )}
 
+      {/* ── Resend config ─────────────────────────────────────────────── */}
+      {settings.activeProvider === 'resend' && (
+        <div className="space-y-4 rounded-lg border p-5">
+          <div className="flex items-center gap-2">
+            <Server className="h-4 w-4 text-muted-foreground" />
+            <h3 className="font-semibold">Resend Configuration</h3>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="resendFrom">From Address</Label>
+            <Input
+              id="resendFrom"
+              type="email"
+              autoComplete="off"
+              value={settings.resend.fromAddress}
+              onChange={(e) => update(['resend', 'fromAddress'], e.target.value)}
+              placeholder="noreply@myevent.com.ng"
+            />
+            <p className="text-xs text-muted-foreground">
+              Must be on a domain you have verified at{' '}
+              <a href="https://resend.com/domains" target="_blank" rel="noreferrer" className="underline">
+                resend.com/domains
+              </a>
+              . (<code className="rounded bg-muted px-1 text-xs">onboarding@resend.dev</code> only delivers to your own
+              Resend account email — fine for a quick test, not for customers.)
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="resendKey">API Key</Label>
+            <Input
+              id="resendKey"
+              type="password"
+              autoComplete="new-password"
+              spellCheck={false}
+              value={settings.resend.apiKey}
+              onChange={(e) => update(['resend', 'apiKey'], e.target.value)}
+              placeholder="Leave blank to keep existing key (re_…)"
+            />
+            <p className="text-xs text-muted-foreground">
+              Create one at{' '}
+              <a href="https://resend.com/api-keys" target="_blank" rel="noreferrer" className="underline">
+                resend.com/api-keys
+              </a>{' '}
+              with <span className="font-medium">Sending access</span>. It is stored server-side and never shown again.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Test connection ───────────────────────────────────────────── */}
       <div className="flex items-center gap-4">
         <Button type="button" variant="outline" onClick={handleTest} disabled={testState.loading}>
@@ -304,7 +379,7 @@ export function EmailSettingsTab({ settings, onChange }: Props) {
           ) : (
             <Mail className="mr-2 h-4 w-4" />
           )}
-          Test {settings.activeProvider === 'ses' ? 'Amazon SES' : 'Gmail'} Connection
+          Test {settings.activeProvider === 'ses' ? 'Amazon SES' : settings.activeProvider === 'resend' ? 'Resend' : 'Gmail'} Connection
         </Button>
 
         {testState.result && (

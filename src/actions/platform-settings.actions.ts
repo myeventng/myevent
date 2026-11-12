@@ -33,7 +33,7 @@ interface PlatformSettings {
   };
   // ── NEW ──────────────────────────────────────────────────────────────
   email: {
-    activeProvider: EmailProviderType; // 'gmail' | 'ses'
+    activeProvider: EmailProviderType; // 'gmail' | 'ses' | 'resend'
     fromName: string;
     // Gmail / SMTP
     gmail: {
@@ -48,6 +48,11 @@ interface PlatformSettings {
       region: string;
       accessKeyId: string;
       secretAccessKey: string; // stored encrypted (never returned to client)
+      fromAddress: string;
+    };
+    // Resend
+    resend: {
+      apiKey: string; // secret (never returned to client)
       fromAddress: string;
     };
   };
@@ -99,6 +104,10 @@ const defaultSettings: PlatformSettings = {
       secretAccessKey: '',
       fromAddress: '',
     },
+    resend: {
+      apiKey: '',
+      fromAddress: '',
+    },
   },
 };
 
@@ -143,6 +152,11 @@ function buildFlatSettings(settings: PlatformSettings) {
     ...(isRealSecret(settings.email.ses.secretAccessKey)
       ? [{ key: 'email.ses.secretAccessKey', value: settings.email.ses.secretAccessKey.trim() }]
       : []),
+    // Resend
+    { key: 'email.resend.fromAddress', value: (settings.email.resend?.fromAddress ?? '').trim() },
+    ...(isRealSecret(settings.email.resend?.apiKey)
+      ? [{ key: 'email.resend.apiKey', value: settings.email.resend.apiKey.trim() }]
+      : []),
   ];
 }
 
@@ -176,6 +190,7 @@ function scrubSecrets(settings: PlatformSettings): PlatformSettings {
   const s = JSON.parse(JSON.stringify(settings)) as PlatformSettings;
   if (s.email.gmail.password) s.email.gmail.password = '••••••••';
   if (s.email.ses.secretAccessKey) s.email.ses.secretAccessKey = '••••••••';
+  if (s.email.resend?.apiKey) s.email.resend.apiKey = '••••••••';
   if (s.financial.paystackSecretKey) s.financial.paystackSecretKey = '••••••••';
   return s;
 }
@@ -245,8 +260,8 @@ export async function testEmailProviderAction(
   provider: EmailProviderType
 ): Promise<ActionResponse<{ message: string }>> {
   try {
-    await validateAdminPermission();
-    const result = await testEmailProvider(provider);
+    const session = await validateAdminPermission();
+    const result = await testEmailProvider(provider, (session as any)?.user?.email);
     return {
       success: result.success,
       message: result.message,

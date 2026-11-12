@@ -1,5 +1,5 @@
 // src/lib/email/email-provider.ts
-// Universal email provider — Gmail (SMTP via Nodemailer) and Amazon SES.
+// Universal email provider — Gmail (SMTP via Nodemailer), Amazon SES and Resend.
 // The active provider is read from PlatformSettings at runtime, so the super admin
 // can switch without a deployment.
 //
@@ -13,11 +13,12 @@ import {
   SendEmailCommand,
   SendRawEmailCommand,
 } from '@aws-sdk/client-ses';
+import { Resend } from 'resend';
 import { prisma } from '@/lib/prisma';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type EmailProviderType = 'gmail' | 'ses';
+export type EmailProviderType = 'gmail' | 'ses' | 'resend';
 
 export interface SendEmailPayload {
   to: string | string[];
@@ -138,7 +139,12 @@ function readSESConfig(settings: Record<string, string>): SESConfig {
   if (!cfg.fromAddress) {
     throw new Error('SES From Address is not configured.');
   }
-  if (!/^(AKIA|ASIA)[A-Z0-9]{16}$/.test(cfg.accessKeyId)) {
+  if (cfg.accessKeyId.startsWith('ASIA')) {
+    throw new Error(
+      'SES Access Key ID starts with ASIA (a temporary key that needs a session token). Use a permanent IAM user key that starts with AKIA.'
+    );
+  }
+  if (!/^AKIA[A-Z0-9]{16}$/.test(cfg.accessKeyId)) {
     throw new Error(
       'SES IAM Access Key ID is invalid — it should look like AKIAXXXXXXXXXXXXXXXX (not an email address).'
     );
@@ -226,6 +232,64 @@ async function sendViaSES(
   return { success: true, messageId: response.MessageId };
 }
 
+// ─── Resend provider ──────────────────────────────────────────────────────────
+
+interface ResendConfig {
+  apiKey: string;
+  fromAddress: string;
+}
+
+function readResendConfig(settings: Record<string, string>): ResendConfig {
+  const cfg: ResendConfig = {
+    apiKey: (settings['email.resend.apiKey'] || process.env.RESEND_API_KEY || '').trim(),
+    fromAddress: (settings['email.resend.fromAddress'] || process.env.RESEND_FROM_ADDRESS || '').trim(),
+  };
+  if (!cfg.apiKey) {
+    throw new Error('Resend API key is not configured. Add it in Settings → Email.');
+  }
+  if (!/^re_[A-Za-z0-9_\-]{8,}$/.test(cfg.apiKey)) {
+    throw new Error('Resend API key is invalid — it should start with "re_".');
+  }
+  if (!cfg.fromAddress) {
+    throw new Error('Resend From Address is not configured (use an address on a domain verified in Resend).');
+  }
+  return cfg;
+}
+
+/** Resend wants the sender as an address or "Name <address>"; a pre-formatted `from` is passed through. */
+function resendFrom(payload: SendEmailPayload, settings: Record<string, string>, cfg: ResendConfig): string {
+  const fromName = settings['email.fromName'] || process.env.EMAIL_FROM_NAME || 'MyEvent.com.ng';
+  return payload.from || formatFrom(fromName, cfg.fromAddress);
+}
+
+async function sendViaResend(
+  payload: SendEmailPayload,
+  settings: Record<string, string>
+): Promise<EmailResult> {
+  const cfg = readResendConfig(settings);
+  const resend = new Resend(cfg.apiKey);
+
+  // The Resend SDK returns { data, error } instead of throwing for API errors.
+  const { data, error } = await resend.emails.send({
+    from: resendFrom(payload, settings, cfg),
+    to: Array.isArray(payload.to) ? payload.to : [payload.to],
+    subject: payload.subject,
+    html: payload.html,
+    text: payload.text,
+    replyTo: payload.replyTo,
+    attachments: payload.attachments?.map((a) => ({
+      filename: a.filename,
+      content: typeof a.content === 'string' && a.encoding !== 'base64' ? Buffer.from(a.content) : a.content,
+      contentType: a.contentType,
+    })),
+  });
+
+  if (error) {
+    throw Object.assign(new Error(error.message || 'Resend rejected the email'), { name: error.name });
+  }
+  return { success: true, messageId: data?.id };
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -246,7 +310,9 @@ export async function sendEmail(payload: SendEmailPayload): Promise<EmailResult>
     result =
       provider === 'ses'
         ? await sendViaSES(payload, settings)
-        : await sendViaGmail(payload, settings);
+        : provider === 'resend'
+          ? await sendViaResend(payload, settings)
+          : await sendViaGmail(payload, settings);
 
     console.log(`✅ Email sent via ${provider} (MessageId: ${result.messageId})`);
   } catch (error) {
@@ -292,10 +358,39 @@ async function recordEmailLog(
   }
 }
 
+/**
+ * AWS answers a bad/expired/deleted key (or a temporary ASIA key sent without its session token)
+ * with a vague "security token ... is invalid". Say what to actually do about it.
+ */
+function friendlyProviderError(e: any): string {
+  const raw: string = e?.message || (typeof e === 'string' ? e : 'Unknown email error');
+  const name: string = e?.name || e?.Code || '';
+  if (
+    /security token included in the request is invalid/i.test(raw) ||
+    /InvalidClientTokenId|SignatureDoesNotMatch|UnrecognizedClientException/i.test(name + raw)
+  ) {
+    return (
+      'Amazon SES rejected the AWS credentials (invalid Access Key ID / Secret). ' +
+      'Create a fresh IAM access key with SES send permission and re-enter both values in ' +
+      'Admin → Settings → Email. Keys saved there override the AWS_SES_* environment variables. ' +
+      `(AWS said: ${raw})`
+    );
+  }
+  if (/restricted_api_key|invalid_api_key|API key is invalid/i.test(name + raw)) {
+    return `Resend rejected the API key. Create a new key (with "Sending access") at resend.com/api-keys and re-enter it in Admin → Settings → Email. (Resend said: ${raw})`;
+  }
+  if (/domain is not verified|not verified|testing emails to your own email|validation_error/i.test(name + raw) && /resend|domain|verified|own email/i.test(raw)) {
+    return `Resend refused the sender/recipient: verify your sending domain at resend.com/domains and use a From address on it (onboarding@resend.dev only delivers to your own Resend account email). (Resend said: ${raw})`;
+  }
+  if (/Email address is not verified|MessageRejected/i.test(name + raw)) {
+    return `Amazon SES refused the message — the From address/domain is not verified (or the account is still in sandbox and the recipient is unverified). (AWS said: ${raw})`;
+  }
+  return raw;
+}
+
 /** Turns an EmailResult error into a readable message. */
 export function emailErrorMessage(result: EmailResult): string {
-  const e: any = result.error;
-  return e?.message || (typeof e === 'string' ? e : 'Unknown email error');
+  return friendlyProviderError(result.error);
 }
 
 /**
@@ -303,10 +398,28 @@ export function emailErrorMessage(result: EmailResult): string {
  * Used by the admin UI "Test Connection" button.
  */
 export async function testEmailProvider(
-  provider: EmailProviderType
+  provider: EmailProviderType,
+  /** Where Resend's test message goes (defaults to the From address). */
+  testRecipient?: string
 ): Promise<{ success: boolean; message: string }> {
   try {
     const settings = await getEmailSettings();
+
+    if (provider === 'resend') {
+      const cfg = readResendConfig(settings);
+      const to = (testRecipient || cfg.fromAddress.replace(/^.*<|>$/g, '')).trim();
+      const resend = new Resend(cfg.apiKey);
+      const { data, error } = await resend.emails.send({
+        from: resendFrom({ to, subject: '', html: '' }, settings, cfg),
+        to: [to],
+        subject: 'MyEvent Resend Connection Test',
+        text: 'This is an automated test from MyEvent.com.ng admin panel.',
+      });
+      if (error) {
+        throw Object.assign(new Error(error.message), { name: error.name });
+      }
+      return { success: true, message: `Resend connection verified ✅ (test sent to ${to}, id: ${data?.id})` };
+    }
 
     if (provider === 'gmail') {
       const transporter = await buildGmailTransporter(settings);
@@ -338,7 +451,7 @@ export async function testEmailProvider(
   } catch (error: any) {
     return {
       success: false,
-      message: `Connection failed: ${error?.message || String(error)}`,
+      message: `Connection failed: ${friendlyProviderError(error)}`,
     };
   }
 }

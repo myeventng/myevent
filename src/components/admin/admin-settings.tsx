@@ -50,7 +50,7 @@ interface PlatformSettings {
     paystackSecretKey: string;
   };
   email: {
-    activeProvider: "gmail" | "ses";
+    activeProvider: "gmail" | "ses" | "resend";
     fromName: string;
     gmail: {
       host: string;
@@ -63,6 +63,10 @@ interface PlatformSettings {
       region: string;
       accessKeyId: string;
       secretAccessKey: string;
+      fromAddress: string;
+    };
+    resend: {
+      apiKey: string;
       fromAddress: string;
     };
   };
@@ -103,6 +107,10 @@ export function AdminSettings({
         accessKeyId: "",
         secretAccessKey: "",
         fromAddress: "noreply@myevent.com.ng",
+      },
+      resend: {
+        apiKey: "",
+        fromAddress: "",
       },
     },
   });

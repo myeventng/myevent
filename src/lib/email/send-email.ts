@@ -1,5 +1,5 @@
 // lib/email/send-email.ts
-import nodemailer from 'nodemailer';
+import { sendEmail } from '@/lib/email/email-provider';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import Handlebars from 'handlebars';
@@ -13,17 +13,6 @@ interface EmailTemplateData {
 
 export async function sendVerificationEmail(data: EmailTemplateData) {
   try {
-    // Create a nodemailer transporter
-    const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST,
-      port: parseInt(process.env.EMAIL_PORT || '587'),
-      secure: process.env.EMAIL_SECURE === 'true',
-      auth: {
-        user: process.env.NODEMAILER_USER,
-        pass: process.env.NODEMAILER_APP_PASSWORD,
-      },
-    });
-
     // Read the email template file
     const templatePath = join(
       process.cwd(),
@@ -43,14 +32,14 @@ export async function sendVerificationEmail(data: EmailTemplateData) {
         )}`,
     });
 
-    // Send the email
-    const info = await transporter.sendMail({
-      from: `"MyEvent.com.ng" <${process.env.EMAIL_FROM}>`,
+    // Send through the provider selected in Settings → Email
+    const info = await sendEmail({
       to: data.userEmail,
       subject: 'Verify Your Email Address - MyEvent.com.ng',
       html,
       text: `Hi ${data.userName},\n\nPlease verify your email address by clicking on the following link: ${data.verificationLink}\n\nThis link will expire in 24 hours.\n\nIf you didn't sign up for MyEvent.com.ng, you can safely ignore this email.\n\nRegards,\nThe MyEvent.com.ng Team`,
     });
+    if (!info.success) throw info.error ?? new Error('Email send failed');
 
     return { success: true, messageId: info.messageId };
   } catch (error) {

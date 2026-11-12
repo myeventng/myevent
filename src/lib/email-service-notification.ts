@@ -1,4 +1,4 @@
-import { Resend } from 'resend';
+import { sendEmail as sendViaProvider, emailErrorMessage } from '@/lib/email/email-provider';
 import { render } from '@react-email/render';
 import {
   EventApprovalEmail,
@@ -10,8 +10,6 @@ import {
   PayoutEmail,
 } from './notification-template';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 interface EmailOptions {
   to: string;
   subject: string;
@@ -20,20 +18,13 @@ interface EmailOptions {
 
 class EmailService {
   private async sendEmail({ to, subject, html }: EmailOptions) {
-    try {
-      const result = await resend.emails.send({
-        from: 'notifications@yourplatform.com',
-        to,
-        subject,
-        html,
-      });
-
-      console.log('✅ Email sent successfully:', result);
-      return { success: true, messageId: result.data?.id };
-    } catch (error) {
-      console.error('❌ Failed to send email:', error);
-      return { success: false, error };
+    // Uses whichever provider the admin selected in Settings → Email.
+    const result = await sendViaProvider({ to, subject, html });
+    if (!result.success) {
+      console.error('❌ Failed to send email:', emailErrorMessage(result));
+      return { success: false, error: result.error };
     }
+    return { success: true, messageId: result.messageId };
   }
 
   async sendEventApproval(email: string, event: any) {

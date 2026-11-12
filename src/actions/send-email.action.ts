@@ -3,7 +3,7 @@
 // expose it as a public endpoint that anyone could use to send arbitrary
 // emails (with arbitrary links) from the platform's mail account.
 
-import transporter from '@/lib/nodemailer';
+import { sendEmail } from '@/lib/email/email-provider';
 import {
   getAuthEmailHtml,
   getAuthEmailText,
@@ -36,21 +36,18 @@ export async function sendEmailAction({
     footerNote: meta.footerNote,
   };
 
-  const mailOptions = {
-    from: process.env.NODEMAILER_USER
-      ? `"MyEvent.com.ng" <${process.env.NODEMAILER_USER}>`
-      : undefined,
+  // Goes through the provider the super admin selected (Gmail / SES / Resend);
+  // sendEmail never throws and uses that provider's configured sender.
+  const result = await sendEmail({
     to,
     subject: `MyEvent.com.ng - ${subject}`,
     html: getAuthEmailHtml(template),
     text: getAuthEmailText(template),
-  };
+  });
 
-  try {
-    await transporter.sendMail(mailOptions);
-    return { success: true };
-  } catch (err) {
-    console.error('[SendEmail]:', err);
+  if (!result.success) {
+    console.error('[SendEmail]:', result.error);
     return { success: false };
   }
+  return { success: true };
 }
