@@ -50,7 +50,7 @@ interface PlatformSettings {
     paystackSecretKey: string;
   };
   email: {
-    activeProvider: "gmail" | "ses" | "resend";
+    activeProvider: "gmail" | "ses" | "resend" | "zeptomail";
     fromName: string;
     gmail: {
       host: string;
@@ -67,6 +67,11 @@ interface PlatformSettings {
     };
     resend: {
       apiKey: string;
+      fromAddress: string;
+    };
+    zeptomail: {
+      apiToken: string;
+      region: string;
       fromAddress: string;
     };
   };
@@ -110,6 +115,11 @@ export function AdminSettings({
       },
       resend: {
         apiKey: "",
+        fromAddress: "",
+      },
+      zeptomail: {
+        apiToken: "",
+        region: "cpaas",
         fromAddress: "",
       },
     },

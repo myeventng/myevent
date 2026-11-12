@@ -55,6 +55,12 @@ interface PlatformSettings {
       apiKey: string; // secret (never returned to client)
       fromAddress: string;
     };
+    // Zoho ZeptoMail
+    zeptomail: {
+      apiToken: string; // Send Mail Token — secret (never returned to client)
+      region: string; // cpaas | com | eu | in | com.au | jp | ca | sa
+      fromAddress: string;
+    };
   };
 }
 
@@ -108,6 +114,11 @@ const defaultSettings: PlatformSettings = {
       apiKey: '',
       fromAddress: '',
     },
+    zeptomail: {
+      apiToken: '',
+      region: 'cpaas',
+      fromAddress: '',
+    },
   },
 };
 
@@ -157,6 +168,12 @@ function buildFlatSettings(settings: PlatformSettings) {
     ...(isRealSecret(settings.email.resend?.apiKey)
       ? [{ key: 'email.resend.apiKey', value: settings.email.resend.apiKey.trim() }]
       : []),
+    // ZeptoMail
+    { key: 'email.zeptomail.region', value: (settings.email.zeptomail?.region || 'cpaas').trim() },
+    { key: 'email.zeptomail.fromAddress', value: (settings.email.zeptomail?.fromAddress ?? '').trim() },
+    ...(isRealSecret(settings.email.zeptomail?.apiToken)
+      ? [{ key: 'email.zeptomail.apiToken', value: settings.email.zeptomail.apiToken.trim() }]
+      : []),
   ];
 }
 
@@ -191,6 +208,7 @@ function scrubSecrets(settings: PlatformSettings): PlatformSettings {
   if (s.email.gmail.password) s.email.gmail.password = '••••••••';
   if (s.email.ses.secretAccessKey) s.email.ses.secretAccessKey = '••••••••';
   if (s.email.resend?.apiKey) s.email.resend.apiKey = '••••••••';
+  if (s.email.zeptomail?.apiToken) s.email.zeptomail.apiToken = '••••••••';
   if (s.financial.paystackSecretKey) s.financial.paystackSecretKey = '••••••••';
   return s;
 }

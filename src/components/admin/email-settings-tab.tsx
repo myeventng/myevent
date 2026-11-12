@@ -21,7 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, CheckCircle2, XCircle, Mail, Server } from 'lucide-react';
 import { testEmailProviderAction } from '@/actions/platform-settings.actions';
 
-export type EmailProviderType = 'gmail' | 'ses' | 'resend';
+export type EmailProviderType = 'gmail' | 'ses' | 'resend' | 'zeptomail';
 
 export interface EmailSettings {
   activeProvider: EmailProviderType;
@@ -43,7 +43,23 @@ export interface EmailSettings {
     apiKey: string;
     fromAddress: string;
   };
+  zeptomail: {
+    apiToken: string;
+    region: string;
+    fromAddress: string;
+  };
 }
+
+const ZEPTO_REGIONS: Array<{ value: string; label: string }> = [
+  { value: 'cpaas', label: 'Zoho CPaaS (Host: cpaas.zoho.com)' },
+  { value: 'com', label: 'Classic ZeptoMail — Global/US (zeptomail.com)' },
+  { value: 'eu', label: 'Europe (zeptomail.eu)' },
+  { value: 'in', label: 'India (zeptomail.in)' },
+  { value: 'com.au', label: 'Australia (zeptomail.com.au)' },
+  { value: 'jp', label: 'Japan (zeptomail.jp)' },
+  { value: 'ca', label: 'Canada (zeptomail.ca)' },
+  { value: 'sa', label: 'Saudi Arabia (zeptomail.sa)' },
+];
 
 interface Props {
   settings: EmailSettings;
@@ -92,7 +108,7 @@ export function EmailSettingsTab({ settings, onChange }: Props) {
           <h3 className="font-semibold">Active Email Provider</h3>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {/* Gmail card */}
           <button
             type="button"
@@ -153,6 +169,27 @@ export function EmailSettingsTab({ settings, onChange }: Props) {
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               Simple API email delivery with an API key and a verified domain.
+            </p>
+          </button>
+
+          {/* ZeptoMail card */}
+          <button
+            type="button"
+            onClick={() => update(['activeProvider'], 'zeptomail')}
+            className={`rounded-lg border-2 p-4 text-left transition-all ${
+              settings.activeProvider === 'zeptomail'
+                ? 'border-primary bg-primary/5'
+                : 'border-muted hover:border-muted-foreground/40'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-medium">ZeptoMail</span>
+              {settings.activeProvider === 'zeptomail' && (
+                <Badge className="bg-primary text-primary-foreground text-xs">Active</Badge>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Zoho&apos;s transactional email service (Send Mail Token).
             </p>
           </button>
         </div>
@@ -371,6 +408,71 @@ export function EmailSettingsTab({ settings, onChange }: Props) {
         </div>
       )}
 
+      {/* ── ZeptoMail config ──────────────────────────────────────────── */}
+      {settings.activeProvider === 'zeptomail' && (
+        <div className="space-y-4 rounded-lg border p-5">
+          <div className="flex items-center gap-2">
+            <Server className="h-4 w-4 text-muted-foreground" />
+            <h3 className="font-semibold">ZeptoMail Configuration</h3>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="zeptoRegion">Data Centre Region</Label>
+            <Select
+              value={settings.zeptomail.region || 'cpaas'}
+              onValueChange={(v) => update(['zeptomail', 'region'], v)}
+            >
+              <SelectTrigger id="zeptoRegion">
+                <SelectValue placeholder="Select region" />
+              </SelectTrigger>
+              <SelectContent>
+                {ZEPTO_REGIONS.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>
+                    {r.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Choose &ldquo;Zoho CPaaS&rdquo; if the SMTP/API tab of your agent shows Host: cpaas.zoho.com. Otherwise pick the ZeptoMail region you log in on. A token only works on its own host.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="zeptoFrom">From Address</Label>
+            <Input
+              id="zeptoFrom"
+              type="email"
+              autoComplete="off"
+              value={settings.zeptomail.fromAddress}
+              onChange={(e) => update(['zeptomail', 'fromAddress'], e.target.value)}
+              placeholder="noreply@myevent.com.ng"
+            />
+            <p className="text-xs text-muted-foreground">
+              Must be on a domain verified in the same Mail Agent as the token.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="zeptoToken">Send Mail Token</Label>
+            <Input
+              id="zeptoToken"
+              type="password"
+              autoComplete="new-password"
+              spellCheck={false}
+              value={settings.zeptomail.apiToken}
+              onChange={(e) => update(['zeptomail', 'apiToken'], e.target.value)}
+              placeholder="Leave blank to keep existing token"
+            />
+            <p className="text-xs text-muted-foreground">
+              In Zoho: your Agent → <span className="font-medium">SMTP/API</span> → API Setup → copy the
+              <span className="font-medium"> API key</span> (the Send Mail Token) (pasting it with the <code className="rounded bg-muted px-1 text-xs">Zoho-enczapikey</code> prefix
+              is fine). It is stored server-side and never shown again.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Test connection ───────────────────────────────────────────── */}
       <div className="flex items-center gap-4">
         <Button type="button" variant="outline" onClick={handleTest} disabled={testState.loading}>
@@ -379,7 +481,7 @@ export function EmailSettingsTab({ settings, onChange }: Props) {
           ) : (
             <Mail className="mr-2 h-4 w-4" />
           )}
-          Test {settings.activeProvider === 'ses' ? 'Amazon SES' : settings.activeProvider === 'resend' ? 'Resend' : 'Gmail'} Connection
+          Test {settings.activeProvider === 'ses' ? 'Amazon SES' : settings.activeProvider === 'resend' ? 'Resend' : settings.activeProvider === 'zeptomail' ? 'ZeptoMail' : 'Gmail'} Connection
         </Button>
 
         {testState.result && (

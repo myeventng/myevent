@@ -1,5 +1,5 @@
 // src/lib/email/email-provider.ts
-// Universal email provider — Gmail (SMTP via Nodemailer), Amazon SES and Resend.
+// Universal email provider — Gmail (SMTP via Nodemailer), Amazon SES, Resend and Zoho ZeptoMail.
 // The active provider is read from PlatformSettings at runtime, so the super admin
 // can switch without a deployment.
 //
@@ -18,7 +18,7 @@ import { prisma } from '@/lib/prisma';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type EmailProviderType = 'gmail' | 'ses' | 'resend';
+export type EmailProviderType = 'gmail' | 'ses' | 'resend' | 'zeptomail';
 
 export interface SendEmailPayload {
   to: string | string[];
@@ -290,6 +290,116 @@ async function sendViaResend(
   return { success: true, messageId: data?.id };
 }
 
+// ─── Zoho ZeptoMail provider ──────────────────────────────────────────────────
+
+/** ZeptoMail data centres → API host (the account's region decides which one accepts the token). */
+export const ZEPTOMAIL_REGIONS: Record<string, string> = {
+  // Newer Zoho CPaaS console ("Agent → SMTP/API" shows Host: cpaas.zoho.com)
+  cpaas: 'cpaas.zoho.com',
+  // Classic ZeptoMail accounts
+  com: 'api.zeptomail.com',
+  eu: 'api.zeptomail.eu',
+  in: 'api.zeptomail.in',
+  'com.au': 'api.zeptomail.com.au',
+  jp: 'api.zeptomail.jp',
+  ca: 'api.zeptomail.ca',
+  sa: 'api.zeptomail.sa',
+};
+
+interface ZeptoConfig {
+  token: string;
+  host: string;
+  fromAddress: string;
+}
+
+function readZeptoConfig(settings: Record<string, string>): ZeptoConfig {
+  // The console shows the token as "Zoho-enczapikey <token>"; accept it with or without the prefix.
+  const token = (settings['email.zeptomail.apiToken'] || process.env.ZEPTOMAIL_TOKEN || '')
+    .trim()
+    .replace(/^zoho-enczapikey\s*/i, '')
+    .trim();
+  const region = (settings['email.zeptomail.region'] || process.env.ZEPTOMAIL_REGION || 'cpaas').trim().toLowerCase();
+  const fromAddress = (settings['email.zeptomail.fromAddress'] || process.env.ZEPTOMAIL_FROM_ADDRESS || '').trim();
+
+  if (!token) throw new Error('ZeptoMail Send Mail Token is not configured. Add it in Settings → Email.');
+  if (token.length < 20 || /\s/.test(token)) {
+    throw new Error('ZeptoMail Send Mail Token looks invalid — copy the whole token from Mail Agent → SMTP/API → API.');
+  }
+  const host = ZEPTOMAIL_REGIONS[region];
+  if (!host) throw new Error(`Unknown ZeptoMail region "${region}".`);
+  if (!fromAddress) {
+    throw new Error('ZeptoMail From Address is not configured (use an address on a domain verified in your Mail Agent).');
+  }
+  return { token, host, fromAddress };
+}
+
+/** "Name" <a@b.com> | Name <a@b.com> | a@b.com  →  { address, name } */
+function parseAddress(input: string): { address: string; name?: string } {
+  const m = input.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+  if (m) return { address: m[2].trim(), name: m[1].trim() || undefined };
+  return { address: input.trim() };
+}
+
+async function postToZeptoMail(
+  cfg: ZeptoConfig,
+  body: Record<string, unknown>
+): Promise<string | undefined> {
+  const res = await fetch(`https://${cfg.host}/v1.1/email`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Zoho-enczapikey ${cfg.token}`,
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(25_000),
+  });
+
+  const json: any = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = json?.error?.details?.[0]?.message || json?.error?.message || json?.message || res.statusText;
+    throw Object.assign(new Error(`ZeptoMail ${res.status}: ${detail}`), {
+      name: json?.error?.code || `HTTP_${res.status}`,
+    });
+  }
+  return json?.request_id as string | undefined;
+}
+
+async function sendViaZeptoMail(
+  payload: SendEmailPayload,
+  settings: Record<string, string>
+): Promise<EmailResult> {
+  const cfg = readZeptoConfig(settings);
+  const fromName = settings['email.fromName'] || process.env.EMAIL_FROM_NAME || 'MyEvent.com.ng';
+  const from = payload.from ? parseAddress(payload.from) : { address: cfg.fromAddress, name: fromName };
+
+  const recipients = (Array.isArray(payload.to) ? payload.to : [payload.to]).map((t) => ({
+    email_address: parseAddress(t),
+  }));
+
+  const requestId = await postToZeptoMail(cfg, {
+    from,
+    to: recipients,
+    subject: payload.subject,
+    htmlbody: payload.html,
+    ...(payload.text ? { textbody: payload.text } : {}),
+    ...(payload.replyTo ? { reply_to: [parseAddress(payload.replyTo)] } : {}),
+    ...(payload.attachments?.length
+      ? {
+          attachments: payload.attachments.map((a) => ({
+            name: a.filename,
+            mime_type: a.contentType || 'application/octet-stream',
+            content:
+              typeof a.content === 'string' && a.encoding === 'base64'
+                ? a.content
+                : Buffer.from(a.content as any).toString('base64'),
+          })),
+        }
+      : {}),
+  });
+  return { success: true, messageId: requestId };
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -312,7 +422,9 @@ export async function sendEmail(payload: SendEmailPayload): Promise<EmailResult>
         ? await sendViaSES(payload, settings)
         : provider === 'resend'
           ? await sendViaResend(payload, settings)
-          : await sendViaGmail(payload, settings);
+          : provider === 'zeptomail'
+            ? await sendViaZeptoMail(payload, settings)
+            : await sendViaGmail(payload, settings);
 
     console.log(`✅ Email sent via ${provider} (MessageId: ${result.messageId})`);
   } catch (error) {
@@ -382,6 +494,12 @@ function friendlyProviderError(e: any): string {
   if (/domain is not verified|not verified|testing emails to your own email|validation_error/i.test(name + raw) && /resend|domain|verified|own email/i.test(raw)) {
     return `Resend refused the sender/recipient: verify your sending domain at resend.com/domains and use a From address on it (onboarding@resend.dev only delivers to your own Resend account email). (Resend said: ${raw})`;
   }
+  if (/ZeptoMail (401|403)|SERR_|TM_3501|invalid.*token|token.*invalid/i.test(name + raw) && /zeptomail/i.test(raw)) {
+    return `ZeptoMail rejected the Send Mail Token. Copy the token from your Mail Agent (SMTP/API → API), make sure the Region matches where your ZeptoMail account lives, and re-enter it in Admin → Settings → Email. (ZeptoMail said: ${raw})`;
+  }
+  if (/zeptomail/i.test(raw) && /sender|from|domain|verified|not allowed/i.test(raw)) {
+    return `ZeptoMail refused the sender: use a From Address on a domain verified in the same Mail Agent as the token. (ZeptoMail said: ${raw})`;
+  }
   if (/Email address is not verified|MessageRejected/i.test(name + raw)) {
     return `Amazon SES refused the message — the From address/domain is not verified (or the account is still in sandbox and the recipient is unverified). (AWS said: ${raw})`;
   }
@@ -404,6 +522,19 @@ export async function testEmailProvider(
 ): Promise<{ success: boolean; message: string }> {
   try {
     const settings = await getEmailSettings();
+
+    if (provider === 'zeptomail') {
+      const cfg = readZeptoConfig(settings);
+      const to = (testRecipient || cfg.fromAddress).trim();
+      const fromName = settings['email.fromName'] || process.env.EMAIL_FROM_NAME || 'MyEvent.com.ng';
+      const requestId = await postToZeptoMail(cfg, {
+        from: { address: cfg.fromAddress, name: fromName },
+        to: [{ email_address: { address: to } }],
+        subject: 'MyEvent ZeptoMail Connection Test',
+        textbody: 'This is an automated test from MyEvent.com.ng admin panel.',
+      });
+      return { success: true, message: `ZeptoMail connection verified ✅ (test sent to ${to}, request: ${requestId ?? 'ok'})` };
+    }
 
     if (provider === 'resend') {
       const cfg = readResendConfig(settings);
