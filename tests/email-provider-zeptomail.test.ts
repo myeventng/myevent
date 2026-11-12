@@ -93,6 +93,20 @@ describe('ZeptoMail provider', () => {
     expect(emailErrorMessage(res)).toMatch(/ZeptoMail rejected the Send Mail Token/);
   });
 
+  it('reports an unverified sender as a ZeptoMail sender problem (not a Resend one)', async () => {
+    cfg({ 'email.zeptomail.fromAddress': 'noreply@event.com.ng' });
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      json: async () => ({ error: { code: 'TM_3301', message: 'Sender address not verified', details: [{ message: 'Sender address not verified' }] } }),
+    });
+    const res = await sendEmail({ to: 'a@b.com', subject: 's', html: 'h' });
+    const msg = emailErrorMessage(res);
+    expect(msg).toMatch(/ZeptoMail refused the sender address/);
+    expect(msg).not.toMatch(/Resend/);
+  });
+
   it('fails clearly without config / with a bad region, and never calls the API', async () => {
     cfg({ 'email.zeptomail.apiToken': '••••••••' });
     let res = await sendEmail({ to: 'a@b.com', subject: 's', html: 'h' });

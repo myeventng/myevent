@@ -488,17 +488,22 @@ function friendlyProviderError(e: any): string {
       `(AWS said: ${raw})`
     );
   }
+  // ZeptoMail errors are prefixed "ZeptoMail <status>:" by postToZeptoMail — handle them first so
+  // another provider's patterns can never claim them. A sender problem is checked before a token problem.
+  if (/^ZeptoMail /i.test(raw)) {
+    if (/sender|from address|domain|not verified|not allowed/i.test(raw)) {
+      return `ZeptoMail refused the sender address. Set From Address to an address on a domain that is verified in the same agent as the token (for this account: noreply@myevent.com.ng) — check it for typos. (ZeptoMail said: ${raw})`;
+    }
+    if (/ZeptoMail (401|403)|SERR_|TM_3501|invalid.*token|token.*invalid/i.test(name + raw)) {
+      return `ZeptoMail rejected the Send Mail Token. Copy the "API key" from your agent (SMTP/API → API Setup), make sure the Region matches your account (Zoho CPaaS shows Host: cpaas.zoho.com), and re-enter it in Admin → Settings → Email. (ZeptoMail said: ${raw})`;
+    }
+    return raw;
+  }
   if (/restricted_api_key|invalid_api_key|API key is invalid/i.test(name + raw)) {
     return `Resend rejected the API key. Create a new key (with "Sending access") at resend.com/api-keys and re-enter it in Admin → Settings → Email. (Resend said: ${raw})`;
   }
-  if (/domain is not verified|not verified|testing emails to your own email|validation_error/i.test(name + raw) && /resend|domain|verified|own email/i.test(raw)) {
+  if (/domain is not verified|testing emails to your own email|validation_error/i.test(name + raw)) {
     return `Resend refused the sender/recipient: verify your sending domain at resend.com/domains and use a From address on it (onboarding@resend.dev only delivers to your own Resend account email). (Resend said: ${raw})`;
-  }
-  if (/ZeptoMail (401|403)|SERR_|TM_3501|invalid.*token|token.*invalid/i.test(name + raw) && /zeptomail/i.test(raw)) {
-    return `ZeptoMail rejected the Send Mail Token. Copy the token from your Mail Agent (SMTP/API → API), make sure the Region matches where your ZeptoMail account lives, and re-enter it in Admin → Settings → Email. (ZeptoMail said: ${raw})`;
-  }
-  if (/zeptomail/i.test(raw) && /sender|from|domain|verified|not allowed/i.test(raw)) {
-    return `ZeptoMail refused the sender: use a From Address on a domain verified in the same Mail Agent as the token. (ZeptoMail said: ${raw})`;
   }
   if (/Email address is not verified|MessageRejected/i.test(name + raw)) {
     return `Amazon SES refused the message — the From address/domain is not verified (or the account is still in sandbox and the recipient is unverified). (AWS said: ${raw})`;
