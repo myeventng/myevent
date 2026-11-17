@@ -33,7 +33,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, MapPin } from 'lucide-react';
 import { createVenue } from '@/actions/venue-actions';
-import { getCities } from '@/actions/city-actions';
+import { useCities } from '@/lib/queries';
 import { toast } from 'sonner';
 import { City } from '@/generated/prisma';
 import { VenueWithCity, VenueWithCityAndUser } from '@/types';
@@ -67,8 +67,10 @@ export const CreateVenueModal = ({
   onVenueCreated,
 }: CreateVenueModalProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [cities, setCities] = useState<any[]>([]);
-  const [isLoadingCities, setIsLoadingCities] = useState(true);
+  // Cities come from the persisted cache; only fetched once the modal is first opened
+  const citiesQuery = useCities(isOpen);
+  const cities = citiesQuery.data ?? [];
+  const isLoadingCities = citiesQuery.isPending && isOpen;
   const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   const form = useForm<FormValues>({
@@ -84,28 +86,6 @@ export const CreateVenueModal = ({
       longitude: '',
     },
   });
-
-  // Fetch cities when modal opens
-  useEffect(() => {
-    const fetchCities = async () => {
-      if (isOpen) {
-        try {
-          setIsLoadingCities(true);
-          const response = await getCities();
-          if (response.success && response.data) {
-            setCities(response.data);
-          }
-        } catch (error) {
-          console.error('Error fetching cities:', error);
-          toast.error('Failed to load cities');
-        } finally {
-          setIsLoadingCities(false);
-        }
-      }
-    };
-
-    fetchCities();
-  }, [isOpen]);
 
   // Get user's current location
   const getCurrentLocation = () => {

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, memo, useMemo } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   useSession,
   signOut,
@@ -16,9 +16,9 @@ import {
   convertSessionUser,
   type AuthUser,
 } from '@/lib/auth-client';
-import { Menu, X, ChevronDown, User, Plus } from 'lucide-react';
+import { Menu, X, ChevronDown, User, Plus, Instagram, LogOut, LayoutDashboard } from 'lucide-react';
 import Image from 'next/image';
-import { Button } from '../ui/button';
+import { INSTAGRAM_URL, INSTAGRAM_HANDLE } from '@/lib/social';
 
 interface NavLink {
   name: string;
@@ -29,12 +29,17 @@ interface NavLink {
 
 // Memoized components for better performance
 const Logo = memo(() => (
-  <Link href="/" className="-m-1.5 p-1.5">
+  <Link
+    href="/"
+    className="flex items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+    aria-label="MyEvent home"
+  >
     <Image
       src="/assets/icons/logo-myevent.png"
-      alt="MyEvent Logo"
-      width={200}
-      height={80}
+      alt="MyEvent"
+      width={150}
+      height={71}
+      className="h-12 w-auto sm:h-14"
       priority
     />
   </Link>
@@ -42,22 +47,17 @@ const Logo = memo(() => (
 
 Logo.displayName = 'Logo';
 
-const MobileMenuButton = memo(
-  ({ onClick, scrolled }: { onClick: () => void; scrolled: boolean }) => (
-    <button
-      type="button"
-      className={`-m-2.5 inline-flex items-center justify-center rounded-md p-2.5 ${
-        scrolled ? 'text-white' : 'text-gray-700'
-      }`}
-      onClick={onClick}
-    >
-      <span className="sr-only">Open main menu</span>
-      <Menu className="h-6 w-6 text-white" aria-hidden="true" />
-    </button>
-  )
+const InstagramLink = ({ className = '' }: { className?: string }) => (
+  <a
+    href={INSTAGRAM_URL}
+    target="_blank"
+    rel="noopener noreferrer"
+    aria-label={`MyEvent on Instagram, ${INSTAGRAM_HANDLE}`}
+    className={`inline-flex h-10 w-10 items-center justify-center rounded-full border-2 border-[var(--me-line)] text-white transition-colors hover:border-[var(--me-magenta)] hover:bg-[var(--me-magenta)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${className}`}
+  >
+    <Instagram className="h-5 w-5" aria-hidden="true" />
+  </a>
 );
-
-MobileMenuButton.displayName = 'MobileMenuButton';
 
 // Helper functions
 const getCreateEventUrl = (authUser: AuthUser | undefined): string => {
@@ -84,22 +84,23 @@ const navigation: NavLink[] = [
   { name: 'Home', href: '/' },
   { name: 'Events', href: '/events' },
   { name: 'Blog', href: '/blog' },
+  { name: 'Contact', href: '/contact' },
 ];
 
 const MainHeader: React.FC = () => {
   const { data: session, isPending } = useSession();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
 
-  // Memoize auth user conversion
   const authUser: AuthUser | undefined = useMemo(
     () => (session?.user ? convertSessionUser(session.user) : undefined),
     [session?.user]
   );
 
-  // Memoize filtered navigation
   const filteredNav = useMemo(
     () =>
       authUser
@@ -108,37 +109,46 @@ const MainHeader: React.FC = () => {
     [authUser]
   );
 
-  // Memoize create event URL and text
   const createEventUrl = useMemo(() => getCreateEventUrl(authUser), [authUser]);
   const createEventText = useMemo(
-    () => getCreateEventText(authUser),
+    () => getCreateEventText(authUser).trim(),
     [authUser]
   );
 
-  // Optimized scroll handler with throttling
+  // Border appears once the page scrolls
   useEffect(() => {
-    let ticking = false;
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
-    const handleScroll = () => {
-      if (!ticking) {
-        requestAnimationFrame(() => {
-          const isScrolled = window.scrollY > 10;
-          if (isScrolled !== scrolled) {
-            setScrolled(isScrolled);
-          }
-          ticking = false;
-        });
-        ticking = true;
-      }
+  // Close menus on navigation
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    setAccountOpen(false);
+  }, [pathname]);
+
+  // Lock page scroll while the mobile menu is open, close on Escape
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileMenuOpen(false);
     };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [mobileMenuOpen]);
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [scrolled]);
+  const isActive = (href: string) =>
+    href === '/' ? pathname === '/' : pathname.startsWith(href);
 
   const handleLogout = async () => {
     setIsSigningOut(true);
-
     try {
       await signOut({
         fetchOptions: {
@@ -148,12 +158,10 @@ const MainHeader: React.FC = () => {
             setIsSigningOut(false);
           },
           onSuccess: () => {
-            // Clear storage efficiently
             if (typeof window !== 'undefined') {
               localStorage.clear();
               sessionStorage.clear();
             }
-
             toast.success("You've logged out. See you soon!");
             setIsSigningOut(false);
             router.push('/auth/login');
@@ -166,242 +174,278 @@ const MainHeader: React.FC = () => {
     }
   };
 
-  // Simplified loading state
+  // On the home page the header floats over the full-screen hero: transparent at the top of
+  // the page, solid as soon as the visitor scrolls (or opens the mobile menu).
+  const overHero = pathname === '/' && !scrolled && !mobileMenuOpen;
+  const shell = `fixed inset-x-0 top-0 z-50 border-b-2 transition-[background-color,border-color] duration-300 ${
+    overHero
+      ? 'border-transparent bg-transparent'
+      : `bg-[var(--me-bg)] ${scrolled ? 'border-[var(--me-line)]' : 'border-transparent'}`
+  }`;
+
   if (isPending) {
     return (
-      <header className="fixed top-0 left-0 right-0 z-50 bg-black/20 backdrop-blur-sm">
-        <nav className="mx-auto flex max-w-7xl items-center justify-between p-4 lg:px-8">
+      <header className={shell}>
+        <nav className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-4 lg:px-8">
           <Logo />
-          <div className="hidden lg:flex lg:flex-1 lg:justify-end">
-            <div className="w-20 h-8 bg-white/20 rounded animate-pulse" />
-          </div>
+          <div className="h-9 w-24 animate-pulse rounded-full bg-[var(--me-raised)]" />
         </nav>
       </header>
     );
   }
 
+  const navLinkClass = (href: string) =>
+    `relative px-1 py-2 text-[15px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-sm ${
+      isActive(href) ? 'text-white' : 'text-[var(--me-muted)] hover:text-white'
+    }`;
+
   return (
     <>
-      <header
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          scrolled ? 'bg-black/50 backdrop-blur-lg shadow-lg' : 'bg-transparent'
-        }`}
-      >
+      <header className={shell}>
         <nav
-          className="mx-auto flex max-w-7xl items-center justify-between p-4 lg:px-8"
-          aria-label="Global"
+          className="mx-auto flex h-[72px] max-w-7xl items-center justify-between gap-4 px-4 lg:px-8"
+          aria-label="Main"
         >
-          <div className="flex lg:flex-1">
-            <Logo />
-          </div>
+          <Logo />
 
-          <div className="flex lg:hidden">
-            <MobileMenuButton
-              onClick={() => setMobileMenuOpen(true)}
-              scrolled={scrolled}
-            />
-          </div>
-
-          <div className="hidden lg:flex lg:gap-x-12 lg:items-center">
+          {/* Desktop navigation */}
+          <div className="hidden items-center gap-8 lg:flex">
             {filteredNav.map((item) => (
               <Link
                 key={item.name}
                 href={item.href}
-                className={`text-lg font-semibold leading-6 transition-colors duration-200 ${
-                  scrolled
-                    ? 'text-white hover:text-purple-300'
-                    : 'text-white hover:text-purple-400'
-                }`}
+                aria-current={isActive(item.href) ? 'page' : undefined}
+                className={navLinkClass(item.href)}
               >
                 {item.name}
+                <span
+                  className={`absolute inset-x-0 -bottom-0.5 h-[3px] rounded-full bg-[var(--me-red)] transition-transform duration-200 origin-left ${
+                    isActive(item.href) ? 'scale-x-100' : 'scale-x-0'
+                  }`}
+                />
               </Link>
             ))}
-
-            {/* Create Event Button */}
-            <Link
-              href={createEventUrl}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full font-semibold text-sm transition-all duration-300 transform hover:scale-105 ${
-                scrolled
-                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg'
-                  : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-xl'
-              }`}
-            >
-              <Plus className="h-4 w-4" />
-              {createEventText}
-            </Link>
           </div>
 
-          <div className="hidden lg:flex lg:flex-1 lg:justify-end lg:gap-x-4">
+          {/* Desktop actions */}
+          <div className="hidden items-center gap-3 lg:flex">
+            <InstagramLink />
+            <Link
+              href={createEventUrl}
+              className="me-slide-right inline-flex items-center gap-1.5 rounded-full bg-[var(--me-red)] px-5 py-2.5 text-sm font-bold text-white shadow-[3px_3px_0_0_var(--me-violet)] hover:shadow-[3px_3px_0_0_var(--me-red)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              {createEventText}
+            </Link>
+
             {authUser ? (
-              <div className="relative group">
-                <button className="flex items-center text-sm font-semibold leading-6 group text-white transition-colors duration-200 hover:text-purple-300">
-                  <User className="h-5 w-5 mr-1" />
-                  {authUser.name || 'User'}
-                  <ChevronDown className="h-4 w-4 ml-1" />
+              <div
+                className="relative"
+                onBlur={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setAccountOpen(false);
+                  }
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setAccountOpen((o) => !o)}
+                  aria-expanded={accountOpen}
+                  aria-haspopup="menu"
+                  className="inline-flex items-center gap-2 rounded-full border-2 border-[var(--me-line)] py-1.5 pl-2 pr-3 text-sm font-semibold text-white transition-colors hover:border-[var(--me-violet)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                >
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--me-violet)]">
+                    <User className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <span className="max-w-[9rem] truncate">
+                    {authUser.name || 'Account'}
+                  </span>
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${accountOpen ? 'rotate-180' : ''}`}
+                    aria-hidden="true"
+                  />
                 </button>
-                <div className="absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
-                  <div className="px-4 py-2 border-b">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {authUser.name}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {authUser.subRole
-                        ? `${
-                            authUser.subRole.charAt(0).toUpperCase() +
+                {accountOpen && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 mt-3 w-60 overflow-hidden rounded-xl border-2 border-[var(--me-line)] bg-[var(--me-surface)] shadow-[6px_6px_0_0_var(--me-violet)]"
+                  >
+                    <div className="border-b border-[var(--me-line)] px-4 py-3">
+                      <p className="truncate text-sm font-bold text-white">
+                        {authUser.name}
+                      </p>
+                      <p className="text-xs text-[var(--me-muted)]">
+                        {authUser.subRole
+                          ? authUser.subRole.charAt(0).toUpperCase() +
                             authUser.subRole.slice(1)
-                          }`
-                        : authUser.role}
-                    </p>
+                          : authUser.role}
+                      </p>
+                    </div>
+                    <Link
+                      role="menuitem"
+                      href={getProfileUrl(authUser)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-white hover:bg-[var(--me-raised)]"
+                    >
+                      <User className="h-4 w-4" aria-hidden="true" /> Profile
+                    </Link>
+                    <Link
+                      role="menuitem"
+                      href={getDashboardUrl(authUser)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-white hover:bg-[var(--me-raised)]"
+                    >
+                      <LayoutDashboard className="h-4 w-4" aria-hidden="true" /> Dashboard
+                    </Link>
+                    <button
+                      role="menuitem"
+                      type="button"
+                      onClick={handleLogout}
+                      disabled={isSigningOut}
+                      className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-white hover:bg-[var(--me-raised)] disabled:opacity-50"
+                    >
+                      <LogOut className="h-4 w-4" aria-hidden="true" />
+                      {isSigningOut ? 'Signing out...' : 'Sign out'}
+                    </button>
                   </div>
-                  <Link
-                    href={getProfileUrl(authUser)}
-                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                  >
-                    Profile
-                  </Link>
-                  <Link
-                    href={getDashboardUrl(authUser)}
-                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                  >
-                    Dashboard
-                  </Link>
-                  <button
-                    onClick={handleLogout}
-                    disabled={isSigningOut}
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 transition-colors"
-                  >
-                    {isSigningOut ? 'Signing out...' : 'Sign out'}
-                  </button>
-                </div>
+                )}
               </div>
             ) : (
               <>
-                <Button
-                  type="button"
-                  onClick={() => router.push('/auth/login')}
-                  size="lg"
-                  variant="outline"
-                  className="border-white text-white hover:bg-white/10 bg-transparent backdrop-blur-sm transition-all duration-300"
+                <Link
+                  href="/auth/login"
+                  className="rounded-full px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[var(--me-raised)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 >
                   Log in
-                </Button>
+                </Link>
                 <Link
                   href="/auth/register"
-                  className={`rounded-md px-3.5 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all duration-300 ${
-                    scrolled
-                      ? 'bg-indigo-500 hover:bg-indigo-400'
-                      : 'bg-indigo-600 hover:bg-indigo-500'
-                  }`}
+                  className="rounded-full border-2 border-[var(--me-violet)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--me-violet)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 >
                   Sign up
                 </Link>
               </>
             )}
           </div>
+
+          {/* Mobile actions */}
+          <div className="flex items-center gap-2 lg:hidden">
+            <InstagramLink />
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open menu"
+              aria-expanded={mobileMenuOpen}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[var(--me-red)] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              <Menu className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </div>
         </nav>
       </header>
 
-      {/* Mobile menu */}
+      {/* Mobile menu: full-screen panel */}
       {mobileMenuOpen && (
-        <div className="lg:hidden">
-          <div className="fixed inset-0 z-50" />
-          <div className="fixed inset-y-0 right-0 z-50 w-full overflow-y-auto bg-black/90 backdrop-blur-lg px-6 py-6 sm:max-w-sm sm:ring-1 sm:ring-gray-900/10">
-            <div className="flex items-center justify-between">
-              <Link href="/" className="-m-1.5 p-1.5">
-                <span className="text-xl font-bold text-white">MyEvent</span>
-              </Link>
-              <button
-                type="button"
-                className="-m-2.5 rounded-md p-2.5 text-white"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                <span className="sr-only">Close menu</span>
-                <X className="h-6 w-6" aria-hidden="true" />
-              </button>
-            </div>
-            <div className="mt-6 flow-root">
-              <div className="-my-6 divide-y divide-gray-500/30">
-                <div className="space-y-2 py-6">
-                  {filteredNav.map((item) => (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      className="-mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 text-white hover:bg-white/10 transition-colors"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      {item.name}
-                    </Link>
-                  ))}
+        <div
+          className="fixed inset-0 z-[60] flex flex-col bg-[var(--me-bg-deep)] lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menu"
+        >
+          <div className="flex h-[72px] shrink-0 items-center justify-between border-b-2 border-[var(--me-line)] px-4">
+            <Logo />
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              aria-label="Close menu"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border-2 border-[var(--me-line)] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              <X className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </div>
 
-                  {/* Mobile Create Event Button */}
+          <div className="flex-1 overflow-y-auto px-4 py-6">
+            <ul className="space-y-1">
+              {filteredNav.map((item) => (
+                <li key={item.name}>
                   <Link
-                    href={createEventUrl}
-                    className="-mx-3 flex items-center gap-2 rounded-lg px-3 py-2 text-base font-semibold leading-7 bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 transition-all"
+                    href={item.href}
                     onClick={() => setMobileMenuOpen(false)}
+                    aria-current={isActive(item.href) ? 'page' : undefined}
+                    className={`font-display flex items-center justify-between rounded-xl px-4 py-4 text-3xl font-extrabold transition-colors ${
+                      isActive(item.href)
+                        ? 'bg-[var(--me-surface)] text-white'
+                        : 'text-[var(--me-muted)] hover:bg-[var(--me-surface)] hover:text-white'
+                    }`}
                   >
-                    <Plus className="h-4 w-4" />
-                    {createEventText}
+                    {item.name}
+                    {isActive(item.href) && (
+                      <span className="h-3 w-3 rounded-full bg-[var(--me-red)]" aria-hidden="true" />
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+
+            <Link
+              href={createEventUrl}
+              onClick={() => setMobileMenuOpen(false)}
+              className="me-slide-right mt-6 flex items-center justify-center gap-2 rounded-full bg-[var(--me-red)] px-6 py-4 text-base font-bold text-white shadow-[4px_4px_0_0_var(--me-violet)] hover:shadow-[4px_4px_0_0_var(--me-red)]"
+            >
+              <Plus className="h-5 w-5" aria-hidden="true" />
+              {createEventText}
+            </Link>
+
+            <div className="mt-8 space-y-1 border-t-2 border-[var(--me-line)] pt-6">
+              {authUser ? (
+                <>
+                  <p className="px-4 pb-2 text-sm text-[var(--me-muted)]">
+                    Signed in as{' '}
+                    <span className="font-semibold text-white">{authUser.name}</span>
+                  </p>
+                  <Link href={getProfileUrl(authUser)} onClick={() => setMobileMenuOpen(false)} className="block rounded-xl px-4 py-3 text-lg font-semibold text-white hover:bg-[var(--me-surface)]">
+                    Profile
+                  </Link>
+                  <Link href={getDashboardUrl(authUser)} onClick={() => setMobileMenuOpen(false)} className="block rounded-xl px-4 py-3 text-lg font-semibold text-white hover:bg-[var(--me-surface)]">
+                    Dashboard
+                  </Link>
+                  {(isSuperAdmin(authUser) || isAdmin(authUser)) && (
+                    <Link href="/admin/dashboard" onClick={() => setMobileMenuOpen(false)} className="block rounded-xl px-4 py-3 text-lg font-semibold text-white hover:bg-[var(--me-surface)]">
+                      Admin panel
+                    </Link>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleLogout();
+                      setMobileMenuOpen(false);
+                    }}
+                    disabled={isSigningOut}
+                    className="block w-full rounded-xl px-4 py-3 text-left text-lg font-semibold text-white hover:bg-[var(--me-surface)] disabled:opacity-50"
+                  >
+                    {isSigningOut ? 'Signing out...' : 'Sign out'}
+                  </button>
+                </>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <Link href="/auth/login" onClick={() => setMobileMenuOpen(false)} className="rounded-full border-2 border-[var(--me-line)] px-4 py-3 text-center text-base font-semibold text-white">
+                    Log in
+                  </Link>
+                  <Link href="/auth/register" onClick={() => setMobileMenuOpen(false)} className="rounded-full border-2 border-[var(--me-violet)] bg-[var(--me-violet)] px-4 py-3 text-center text-base font-semibold text-white">
+                    Sign up
                   </Link>
                 </div>
-                <div className="py-6">
-                  {authUser ? (
-                    <>
-                      <Link
-                        href={getProfileUrl(authUser)}
-                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10 transition-colors"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        Profile
-                      </Link>
-                      <Link
-                        href={getDashboardUrl(authUser)}
-                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10 transition-colors"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        Dashboard
-                      </Link>
-                      {(isSuperAdmin(authUser) || isAdmin(authUser)) && (
-                        <Link
-                          href="/admin/dashboard"
-                          className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10 transition-colors"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Admin Panel
-                        </Link>
-                      )}
-                      <button
-                        onClick={() => {
-                          handleLogout();
-                          setMobileMenuOpen(false);
-                        }}
-                        disabled={isSigningOut}
-                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10 w-full text-left disabled:opacity-50 transition-colors"
-                      >
-                        {isSigningOut ? 'Signing out...' : 'Sign out'}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <Link
-                        href="/auth/login"
-                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 text-white hover:bg-white/10 transition-colors"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        Log in
-                      </Link>
-                      <Link
-                        href="/auth/register"
-                        className="-mx-3 block rounded-lg px-3 py-2.5 text-base font-semibold leading-7 bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        Sign up
-                      </Link>
-                    </>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
           </div>
+
+          <a
+            href={INSTAGRAM_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex shrink-0 items-center justify-center gap-2 border-t-2 border-[var(--me-line)] py-4 text-sm font-semibold text-white"
+          >
+            <Instagram className="h-5 w-5 text-[var(--me-magenta)]" aria-hidden="true" />
+            Follow {INSTAGRAM_HANDLE} on Instagram
+          </a>
         </div>
       )}
     </>

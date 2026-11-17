@@ -35,6 +35,7 @@ import {
   CreditCard,
   ShoppingCart, // Added ShoppingCart icon for orders
   Mail,
+  MessageSquare,
   Percent,
   Printer,
   UserPlus,
@@ -283,6 +284,22 @@ export function Sidebar({
           title: 'Categories',
           href: '/admin/dashboard/blog-categories',
           icon: <Blocks className="w-4 h-4" />,
+        },
+      ],
+    },
+    {
+      title: 'Inbox',
+      icon: <Mail className="w-5 h-5" />,
+      children: [
+        {
+          title: 'Contact Messages',
+          href: '/admin/dashboard/messages',
+          icon: <MessageSquare className="w-4 h-4" />,
+        },
+        {
+          title: 'Newsletter',
+          href: '/admin/dashboard/subscribers',
+          icon: <Mail className="w-4 h-4" />,
         },
       ],
     },

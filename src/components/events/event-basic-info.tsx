@@ -25,8 +25,9 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { getCategories } from '@/actions/category-actions';
-import { getTags, createTag } from '@/actions/tag.actions';
+import { createTag } from '@/actions/tag.actions';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys, useCategories, useMajorCategories, useTags } from '@/lib/queries';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Plus, Loader2, Vote, Calendar } from 'lucide-react';
@@ -69,9 +70,35 @@ export function EventBasicInfo({
   updateFormData,
   onNext,
 }: EventBasicInfoProps) {
-  const [categories, setCategories] = useState<any[]>([]);
-  const [tags, setTags] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Categories and tags come from the persisted cache: instant after the first visit,
+  // and re-checked in the background so a category added a moment ago still shows up.
+  const queryClient = useQueryClient();
+  const categoriesQuery = useCategories();
+  const majorQuery = useMajorCategories();
+  const tagsQuery = useTags();
+  const [createdTags, setCreatedTags] = useState<any[]>([]);
+  const categories = categoriesQuery.data ?? [];
+  const tags = [
+    ...(tagsQuery.data ?? []),
+    ...createdTags.filter((t) => !(tagsQuery.data ?? []).some((x: any) => x.id === t.id)),
+  ];
+  const isLoading = categoriesQuery.isPending || tagsQuery.isPending;
+
+  // Major category (Clubbing, Comedy, ...) is picked first, then a category inside it. Only the
+  // category is saved on the event; the major category is read through it. Categories that are
+  // not under a major category yet are grouped as "Other" so nothing becomes unreachable.
+  const majors: Array<{ id: string; name: string }> = majorQuery.data ?? [];
+  const [pickedMajor, setPickedMajor] = useState<string | null>(null);
+  const hasUngrouped = categories.some((c: any) => !c.majorCategoryId);
+  const OTHER = 'other';
+  const groupOf = (c: any) => c?.majorCategoryId ?? OTHER;
+  const selectedCategoryId = (formData.categoryId as string | undefined) || '';
+  const [liveCategoryId, setLiveCategoryId] = useState(selectedCategoryId);
+  const currentCategory = categories.find((c: any) => c.id === liveCategoryId);
+  const activeMajor = pickedMajor ?? (currentCategory ? groupOf(currentCategory) : '');
+  const categoryChoices = activeMajor
+    ? categories.filter((c: any) => groupOf(c) === activeMajor)
+    : [];
 
   // Tag creation state
   const [showCreateTag, setShowCreateTag] = useState(false);
@@ -109,33 +136,11 @@ export function EventBasicInfo({
     },
   });
 
-  // Fetch categories and tags
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-
-        // Fetch categories
-        const categoriesResponse = await getCategories();
-        if (categoriesResponse.success && categoriesResponse.data) {
-          setCategories(categoriesResponse.data);
-        }
-
-        // Fetch tags
-        const tagsResponse = await getTags();
-        if (tagsResponse.success && tagsResponse.data) {
-          setTags(tagsResponse.data);
-        }
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        toast.error('Failed to load categories and tags');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
+    if (categoriesQuery.isError || tagsQuery.isError) {
+      toast.error('Failed to load categories and tags');
+    }
+  }, [categoriesQuery.isError, tagsQuery.isError]);
 
   // Handle form submission
   const onSubmit = (values: FormValues) => {
@@ -186,7 +191,8 @@ export function EventBasicInfo({
 
       if (response.success && response.data) {
         // Add new tag to the list
-        setTags((prev) => [...prev, response.data]);
+        setCreatedTags((prev) => [...prev, response.data]);
+        queryClient.invalidateQueries({ queryKey: queryKeys.tags });
 
         // Auto-select the newly created tag
         const currentTags = form.getValues('tagIds') as string[];
@@ -313,39 +319,85 @@ export function EventBasicInfo({
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <FormField
-              control={form.control}
-              name="categoryId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Category</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value || ''}
-                    disabled={isLoading}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a category" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {categories.map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormDescription>
-                    {isVotingContest
-                      ? 'Categorize your contest to help voters find it.'
-                      : 'Categorize your event to help attendees find it.'}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="space-y-6">
+              <FormItem>
+                <FormLabel>Type of event</FormLabel>
+                <Select
+                  onValueChange={(value) => {
+                    setPickedMajor(value);
+                    // the chosen category belongs to the previous group, so clear it
+                    form.setValue('categoryId', '');
+                    setLiveCategoryId('');
+                  }}
+                  value={activeMajor}
+                  disabled={isLoading || majorQuery.isPending}
+                >
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a type" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {majors.map((major) => (
+                      <SelectItem key={major.id} value={major.id}>
+                        {major.name}
+                      </SelectItem>
+                    ))}
+                    {hasUngrouped && <SelectItem value={OTHER}>Other</SelectItem>}
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  Where people will find it: Clubbing, Comedy, Live Music and so on.
+                </FormDescription>
+              </FormItem>
+
+              <FormField
+                control={form.control}
+                name="categoryId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        setLiveCategoryId(value);
+                      }}
+                      value={field.value || ''}
+                      disabled={isLoading || !activeMajor}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={
+                              activeMajor ? 'Select a category' : 'Pick a type first'
+                            }
+                          />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {categoryChoices.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">
+                            No categories under this type yet.
+                          </div>
+                        ) : (
+                          categoryChoices.map((category: any) => (
+                            <SelectItem key={category.id} value={category.id}>
+                              {category.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      {isVotingContest
+                        ? 'Categorize your contest to help voters find it.'
+                        : 'Categorize your event to help attendees find it.'}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             {/* Only show these fields for standard events */}
             {isStandardEvent && (

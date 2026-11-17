@@ -7,6 +7,8 @@ import { headers } from 'next/headers';
 
 interface CategoryInput {
   name: string;
+  /** Major category this category sits under (Clubbing, Comedy, ...). Empty clears it. */
+  majorCategoryId?: string | null;
 }
 
 interface UpdateCategoryInput extends CategoryInput {
@@ -45,10 +47,26 @@ const validateUserPermission = async () => {
   return { success: true };
 };
 
+const MAJOR_SELECT = { select: { id: true, name: true, slug: true } } as const;
+
+/** The fixed list of major categories, in display order. */
+export async function getMajorCategories(): Promise<ActionResponse<any[]>> {
+  try {
+    const majors = await prisma.majorCategory.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+    return { success: true, data: majors };
+  } catch (error) {
+    console.error('Error fetching major categories:', error);
+    return { success: false, message: 'Failed to fetch major categories' };
+  }
+}
+
 export async function getCategories(): Promise<ActionResponse<any[]>> {
   try {
     const categories = await prisma.category.findMany({
       orderBy: { name: 'asc' },
+      include: { majorCategory: MAJOR_SELECT },
     });
 
     return {
@@ -123,7 +141,9 @@ export async function createCategory(
     const newCategory = await prisma.category.create({
       data: {
         name: data.name,
+        majorCategoryId: data.majorCategoryId || null,
       },
+      include: { majorCategory: MAJOR_SELECT },
     });
 
     revalidatePath('/admin/categories');
@@ -191,7 +211,9 @@ export async function updateCategory(
       where: { id: data.id },
       data: {
         name: data.name,
+        majorCategoryId: data.majorCategoryId || null,
       },
+      include: { majorCategory: MAJOR_SELECT },
     });
 
     revalidatePath('/admin/categories');

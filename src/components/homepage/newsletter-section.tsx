@@ -6,28 +6,8 @@ import { Mail, Ticket, Calendar, Lightbulb } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-
-// Import the newsletter subscription action
-// Note: You'll need to create this action based on your implementation
-const subscribeToNewsletter = async (email: string) => {
-  // Mock implementation - replace with your actual newsletter subscription logic
-  try {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    // Mock success response
-    if (email.includes('@')) {
-      return { success: true, message: 'Successfully subscribed!' };
-    } else {
-      return { success: false, message: 'Please enter a valid email address.' };
-    }
-  } catch (error) {
-    return {
-      success: false,
-      message: 'Failed to subscribe. Please try again.',
-    };
-  }
-};
+import { subscribeToNewsletter } from '@/actions/newsletter-actions';
+import { CrowdBackdrop } from '@/components/brand/crowd-backdrop';
 
 export const NewsletterSection: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -50,7 +30,7 @@ export const NewsletterSection: React.FC = () => {
 
     try {
       setIsSubscribing(true);
-      const response = await subscribeToNewsletter(email.trim());
+      const response = await subscribeToNewsletter(email.trim(), 'home');
 
       if (response.success) {
         toast.success(
@@ -71,93 +51,68 @@ export const NewsletterSection: React.FC = () => {
   };
 
   return (
-    <section className="py-20 bg-gradient-to-br from-purple-600 via-blue-600 to-teal-500">
-      <div className="container mx-auto px-4 text-center">
-        <div className="max-w-3xl mx-auto">
-          <div className="mb-8">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-white/10 rounded-full mb-6 backdrop-blur-sm">
-              <Mail className="h-10 w-10 text-white" />
-            </div>
-            <h2 className="text-4xl font-bold text-white mb-4">
-              Stay in the Loop
-            </h2>
-            <p className="text-xl text-white/90 mb-8">
-              Get the latest event updates, exclusive offers, and insider tips
-              delivered straight to your inbox.
-            </p>
+    <section className="relative overflow-hidden bg-[var(--me-bg-deep)] py-16 sm:py-24">
+      <CrowdBackdrop />
+      <div className="relative mx-auto max-w-3xl px-4 text-center">
+        <div className="rounded-3xl border-2 border-[var(--me-line)] bg-[var(--me-surface)] p-6 shadow-[8px_8px_0_0_var(--me-violet)] sm:p-10">
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--me-red)]">
+            <Mail className="h-7 w-7 text-white" aria-hidden="true" />
           </div>
+          <h2 className="font-display text-3xl font-extrabold sm:text-4xl">
+            Never miss a good night
+          </h2>
+          <p className="mx-auto mt-3 max-w-lg text-lg text-[var(--me-muted)]">
+            New events, early ticket offers and planning tips, sent to your
+            inbox.
+          </p>
 
           <form
             onSubmit={handleSubscribe}
-            className="flex flex-col sm:flex-row gap-4 max-w-md mx-auto mb-6"
+            className="mx-auto mt-7 flex max-w-md flex-col gap-3 sm:flex-row"
           >
+            <label htmlFor="newsletter-email" className="sr-only">
+              Email address
+            </label>
             <Input
+              id="newsletter-email"
               type="email"
-              placeholder="Enter your email address"
+              placeholder="Your email address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
               disabled={isSubscribing}
-              className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-white/60 backdrop-blur-sm focus:bg-white/20 focus:border-white/40 transition-all duration-300"
+              className="h-12 flex-1 rounded-full border-2 border-[var(--me-line)] bg-[var(--me-bg)] px-5 text-white placeholder:text-[var(--me-muted)]"
             />
             <Button
               type="submit"
-              size="lg"
               disabled={isSubscribing}
-              className="bg-white text-black hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px]"
+              className="h-12 min-w-[130px] rounded-full bg-[var(--me-red)] px-6 font-bold text-white shadow-[3px_3px_0_0_var(--me-violet)] hover:bg-[var(--me-red)]"
             >
-              {isSubscribing ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin"></div>
-                  <span>Subscribing...</span>
-                </div>
-              ) : (
-                'Subscribe'
-              )}
+              {isSubscribing ? 'Subscribing...' : 'Subscribe'}
             </Button>
           </form>
 
-          <div className="text-center">
-            <p className="text-white/70 text-sm mb-2">
-              Join thousands of event enthusiasts who never miss out!
-            </p>
-            <p className="text-white/60 text-xs">
-              We respect your privacy. Unsubscribe at any time.
-            </p>
-          </div>
+          <p className="mt-4 text-sm text-[var(--me-muted)]">
+            We respect your privacy. Unsubscribe at any time.
+          </p>
 
-          {/* Newsletter Benefits */}
-          <div className="grid md:grid-cols-3 gap-6 mt-12 max-w-2xl mx-auto">
-            <div className="text-center">
-              <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Ticket className="h-6 w-6 text-white" />
-              </div>
-              <h3 className="text-white font-semibold mb-2">
-                Exclusive Offers
-              </h3>
-              <p className="text-white/70 text-sm">
-                Early bird discounts and special promotions
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Calendar className="h-6 w-6 text-white" />
-              </div>
-              <h3 className="text-white font-semibold mb-2">Event Updates</h3>
-              <p className="text-white/70 text-sm">
-                Be the first to know about new events
-              </p>
-            </div>
-            <div className="text-center">
-              <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                <Lightbulb className="h-6 w-6 text-white" />
-              </div>
-              <h3 className="text-white font-semibold mb-2">Insider Tips</h3>
-              <p className="text-white/70 text-sm">
-                Event planning and networking advice
-              </p>
-            </div>
-          </div>
+          <ul className="mt-8 grid gap-4 text-left sm:grid-cols-3">
+            {[
+              { icon: Ticket, color: 'var(--me-red)', title: 'Ticket offers', text: 'Early bird prices and promotions' },
+              { icon: Calendar, color: 'var(--me-violet)', title: 'New events', text: 'Hear about events first' },
+              { icon: Lightbulb, color: 'var(--me-magenta)', title: 'Planning tips', text: 'Advice for hosts and guests' },
+            ].map(({ icon: Icon, color, title, text }) => (
+              <li key={title} className="flex items-start gap-3 sm:flex-col sm:items-center sm:text-center">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: color }}>
+                  <Icon className="h-5 w-5 text-white" aria-hidden="true" />
+                </span>
+                <span>
+                  <span className="block font-bold">{title}</span>
+                  <span className="block text-sm text-[var(--me-muted)]">{text}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </section>

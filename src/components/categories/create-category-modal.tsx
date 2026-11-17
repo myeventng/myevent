@@ -22,14 +22,22 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import type { CategoryRow, MajorOption } from './types';
 import { Loader2 } from 'lucide-react';
 import { createCategory } from '@/actions/category-actions';
-import { Category } from '@/generated/prisma';
 import { toast } from 'sonner';
 
 // Form validation schema - corrected to match the Category model
 const formSchema = z.object({
   name: z.string().min(2, 'Category name must be at least 2 characters'),
+  majorCategoryId: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -37,13 +45,15 @@ type FormValues = z.infer<typeof formSchema>;
 interface CreateCategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCategoryCreated: (category: Category) => void;
+  onCategoryCreated: (category: CategoryRow) => void;
+  majorCategories: MajorOption[];
 }
 
 export const CreateCategoryModal = ({
   isOpen,
   onClose,
   onCategoryCreated,
+  majorCategories,
 }: CreateCategoryModalProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -51,13 +61,17 @@ export const CreateCategoryModal = ({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
+      majorCategoryId: '',
     },
   });
 
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
     try {
-      const response = await createCategory(values);
+      const response = await createCategory({
+        name: values.name,
+        majorCategoryId: values.majorCategoryId || null,
+      });
 
       if (response.success && response.data) {
         toast.success('Category created successfully');
@@ -96,6 +110,31 @@ export const CreateCategoryModal = ({
                   <FormControl>
                     <Input placeholder="Enter category name" {...field} />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="majorCategoryId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Major category</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ''}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose where it appears" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {majorCategories.map((major) => (
+                        <SelectItem key={major.id} value={major.id}>
+                          {major.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}

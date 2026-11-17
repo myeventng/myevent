@@ -1,8 +1,5 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import {
   Calendar,
   MapPin,
@@ -11,12 +8,12 @@ import {
   Trophy,
   Vote,
   Crown,
-  Medal,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { CompactRating } from '@/components/ui/ratings-display';
 import { EventType } from '@/generated/prisma';
 import Image from 'next/image';
+import Link from 'next/link';
 
 interface EventCardProps {
   event: {
@@ -82,278 +79,164 @@ export function EventCard({ event }: EventCardProps) {
       (current._count?.votes || 0) > (prev._count?.votes || 0) ? current : prev
   );
 
-  const getEventTypeIcon = () => {
-    switch (event.eventType) {
-      case EventType.VOTING_CONTEST:
-        return <Trophy className="h-4 w-4" />;
-      case EventType.INVITE:
-        return <Users className="h-4 w-4" />;
-      default:
-        return <Calendar className="h-4 w-4" />;
-    }
-  };
-
-  const getEventTypeBadge = () => {
-    switch (event.eventType) {
-      case EventType.VOTING_CONTEST:
-        return (
-          <Badge
-            variant="secondary"
-            className="bg-purple-100 text-purple-800 border-purple-300"
-          >
-            <Trophy className="h-3 w-3 mr-1" />
-            Contest
-          </Badge>
-        );
-      case EventType.INVITE:
-        return (
-          <Badge
-            variant="secondary"
-            className="bg-blue-100 text-blue-800 border-blue-300"
-          >
-            <Users className="h-3 w-3 mr-1" />
-            Invite Only
-          </Badge>
-        );
-      default:
-        return null;
-    }
-  };
-
   const getPrimaryActionText = () => {
-    if (isEventPast) return 'View Details';
-
+    if (isEventPast) return 'View details';
     switch (event.eventType) {
       case EventType.VOTING_CONTEST:
-        return isVotingActive ? 'Vote Now' : 'View Contest';
+        return isVotingActive ? 'Vote now' : 'View contest';
       case EventType.INVITE:
-        return 'View Details';
+        return 'View details';
       default:
-        return 'Book Now';
+        return 'Book now';
     }
   };
+
+  const image = event.imageUrls?.[0] || event.coverImageUrl;
+
+  const priceLabel = isVotingContest
+    ? event.votingContest?.votingType === 'FREE'
+      ? 'Free voting'
+      : 'Paid voting'
+    : isInviteOnly
+      ? 'Invite only'
+      : event.isFree
+        ? 'Free'
+        : `From ₦${minPrice.toLocaleString()}`;
 
   return (
-    <Card className="overflow-hidden hover:shadow-lg transition-shadow">
-      {/* Event Image */}
-      {event.coverImageUrl && (
-        <div className="aspect-[16/9] overflow-hidden relative">
+    <Link
+      href={`/events/${event.slug}`}
+      className="me-card group flex h-full flex-col overflow-hidden focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white"
+    >
+      <div className="relative aspect-[4/5] w-full overflow-hidden bg-[var(--me-raised)] sm:aspect-[16/11]">
+        {image ? (
           <Image
-            width={800}
-            height={450}
+            fill
             unoptimized
-            priority
-            quality={90}
-            src={event.imageUrls[0] || event.coverImageUrl}
-            alt={event.title}
-            className="w-full h-full object-cover"
+            src={image}
+            alt=""
+            sizes="(max-width: 640px) 92vw, (max-width: 1280px) 45vw, 25vw"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <Calendar className="h-12 w-12 text-[var(--me-line)]" aria-hidden="true" />
+          </div>
+        )}
 
-          {/* Overlay badges for voting contests */}
-          {isVotingContest && isVotingActive && (
-            <div className="absolute top-2 right-2">
-              <Badge className="bg-red-500 text-white border-red-600 animate-pulse">
-                <Vote className="h-3 w-3 mr-1" />
-                Live Voting
-              </Badge>
-            </div>
+        <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+          {event.category && (
+            <span className="rounded-full bg-[var(--me-bg-deep)] px-3 py-1 text-xs font-semibold text-white">
+              {event.category.name}
+            </span>
+          )}
+          {isVotingContest && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--me-violet)] px-3 py-1 text-xs font-semibold text-white">
+              <Trophy className="h-3 w-3" aria-hidden="true" /> Contest
+            </span>
+          )}
+          {isInviteOnly && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--me-magenta)] px-3 py-1 text-xs font-semibold text-white">
+              <Users className="h-3 w-3" aria-hidden="true" /> Invite only
+            </span>
           )}
         </div>
-      )}
 
-      <CardContent className="p-4 space-y-3">
-        {/* Event Type and Featured Badge */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {event.category && (
-              <Badge variant="secondary" className="text-xs">
-                {event.category.name}
-              </Badge>
+        {isVotingContest && isVotingActive && (
+          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--me-red)] px-3 py-1 text-xs font-bold text-white">
+            <Vote className="h-3 w-3" aria-hidden="true" /> Voting live
+          </span>
+        )}
+        {event.featured && !(isVotingContest && isVotingActive) && (
+          <span className="absolute right-3 top-3 rounded-full bg-[var(--me-red)] px-3 py-1 text-xs font-bold text-white">
+            Featured
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-1 flex-col gap-2 p-4 sm:p-5">
+        <p className="text-sm font-semibold text-[var(--me-red)]">
+          {format(new Date(event.startDateTime), 'EEE d MMM, h:mm a')}
+        </p>
+        <h3 className="font-display line-clamp-2 text-xl font-bold leading-snug text-white">
+          {event.title}
+        </h3>
+
+        <p className="flex items-center gap-1.5 text-sm text-[var(--me-muted)]">
+          <MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="line-clamp-1">
+            {event.venue.name}
+            {event.venue.city && `, ${event.venue.city.name}`}
+          </span>
+        </p>
+
+        {event.averageRating && event.ratingsCount ? (
+          <CompactRating rating={event.averageRating} count={event.ratingsCount} />
+        ) : null}
+
+        {isVotingContest && event.votingContest && (
+          <div className="space-y-1 text-sm text-[var(--me-muted)]">
+            <p className="flex items-center gap-1.5">
+              <Trophy className="h-4 w-4" aria-hidden="true" />
+              {totalContestants} contestants, {totalVotes.toLocaleString()} votes
+            </p>
+            {topContestant && (
+              <p className="flex items-center gap-1.5">
+                <Crown className="h-4 w-4 text-[var(--me-orange)]" aria-hidden="true" />
+                <span className="line-clamp-1">
+                  Leading: {topContestant.name}
+                </span>
+              </p>
             )}
-            {getEventTypeBadge()}
-          </div>
-          {event.featured && (
-            <Badge
-              variant="outline"
-              className="text-xs border-yellow-500 text-yellow-600"
-            >
-              Featured
-            </Badge>
-          )}
-        </div>
-
-        {/* Title and Rating */}
-        <div className="space-y-2">
-          <div className="flex items-start gap-2">
-            {getEventTypeIcon()}
-            <h3 className="font-semibold text-lg line-clamp-2 flex-1">
-              {event.title}
-            </h3>
-          </div>
-
-          {/* Rating Display */}
-          {event.averageRating && event.ratingsCount && (
-            <CompactRating
-              rating={event.averageRating}
-              count={event.ratingsCount}
-            />
-          )}
-        </div>
-
-        {/* Event Details */}
-        <div className="space-y-2 text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            <span>
-              {format(new Date(event.startDateTime), 'MMM d, yyyy • h:mm a')}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4" />
-            <span className="line-clamp-1">
-              {event.venue.name}
-              {event.venue.city && `, ${event.venue.city.name}`}
-            </span>
-          </div>
-
-          {/* Voting Contest Specific Info */}
-          {isVotingContest && event.votingContest && (
-            <>
-              <div className="flex items-center gap-2">
-                <Trophy className="h-4 w-4" />
-                <span>{totalContestants} contestants competing</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Vote className="h-4 w-4" />
-                <span>{totalVotes.toLocaleString()} total votes</span>
-              </div>
-
-              {topContestant && (
-                <div className="flex items-center gap-2">
-                  <Crown className="h-4 w-4 text-yellow-500" />
-                  <span className="line-clamp-1">
-                    Leading: {topContestant.name} (
-                    {topContestant._count?.votes || 0} votes)
-                  </span>
-                </div>
+            {!isVotingActive &&
+              !isEventPast &&
+              event.votingContest.votingStartDate && (
+                <p className="flex items-center gap-1.5 text-white">
+                  <Clock className="h-4 w-4" aria-hidden="true" />
+                  Voting starts{' '}
+                  {format(new Date(event.votingContest.votingStartDate), 'd MMM')}
+                </p>
               )}
+          </div>
+        )}
 
-              {!isVotingActive &&
-                !isEventPast &&
-                event.votingContest.votingStartDate && (
-                  <div className="flex items-center gap-2 text-amber-600">
-                    <Clock className="h-4 w-4" />
-                    <span>
-                      Voting starts{' '}
-                      {format(
-                        new Date(event.votingContest.votingStartDate),
-                        'MMM d'
-                      )}
-                    </span>
-                  </div>
-                )}
-            </>
-          )}
+        {!isVotingContest && isEventPast && (
+          <p className="flex items-center gap-1.5 text-sm text-white">
+            <Clock className="h-4 w-4" aria-hidden="true" /> Event ended
+          </p>
+        )}
 
-          {/* Standard Event Info */}
-          {!isVotingContest && isEventPast && (
-            <div className="flex items-center gap-2 text-amber-600">
-              <Clock className="h-4 w-4" />
-              <span>Event Ended</span>
-            </div>
-          )}
-        </div>
-
-        {/* Tags */}
         {event.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {event.tags.slice(0, 3).map((tag) => (
-              <Badge
+              <span
                 key={tag.id}
-                variant="outline"
-                className="text-xs"
-                style={{
-                  backgroundColor: tag.bgColor + '20',
-                  borderColor: tag.bgColor,
-                  color: tag.bgColor,
-                }}
+                className="rounded-full border border-[var(--me-line)] px-2.5 py-0.5 text-xs text-[var(--me-muted)]"
               >
                 {tag.name}
-              </Badge>
+              </span>
             ))}
             {event.tags.length > 3 && (
-              <Badge variant="outline" className="text-xs">
-                +{event.tags.length - 3} more
-              </Badge>
+              <span className="rounded-full border border-[var(--me-line)] px-2.5 py-0.5 text-xs text-[var(--me-muted)]">
+                +{event.tags.length - 3}
+              </span>
             )}
           </div>
         )}
 
-        {/* Price/Action Section */}
-        <div className="flex items-center justify-between pt-2">
-          <div className="text-lg font-semibold">
-            {isVotingContest ? (
-              <span className="text-purple-600">
-                {event.votingContest?.votingType === 'FREE'
-                  ? 'Free Voting'
-                  : 'Paid Voting'}
-              </span>
-            ) : isInviteOnly ? (
-              <span className="text-blue-600">Invite Only</span>
-            ) : event.isFree ? (
-              'Free'
-            ) : (
-              `From ₦${minPrice.toLocaleString()}`
-            )}
-          </div>
-
-          <Button
-            size="sm"
-            variant={
+        <div className="mt-auto flex items-center justify-between gap-3 pt-3">
+          <span className="text-base font-bold text-white">{priceLabel}</span>
+          <span
+            className={`rounded-full px-4 py-2 text-sm font-bold text-white ${
               isEventPast
-                ? 'outline'
-                : isVotingContest && isVotingActive
-                  ? 'default'
-                  : isVotingContest
-                    ? 'outline'
-                    : 'default'
-            }
-            className={
-              isVotingContest && isVotingActive
-                ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                : ''
-            }
-            asChild
+                ? 'border-2 border-[var(--me-line)]'
+                : 'bg-[var(--me-red)]'
+            }`}
           >
-            <a href={`/events/${event.slug}`}>
-              {isVotingContest && isVotingActive && (
-                <Vote className="h-4 w-4 mr-1" />
-              )}
-              {getPrimaryActionText()}
-            </a>
-          </Button>
+            {getPrimaryActionText()}
+          </span>
         </div>
-
-        {/* Voting Contest Status Indicator */}
-        {isVotingContest && (
-          <div className="text-xs text-center">
-            {isVotingActive ? (
-              <span className="text-green-600 font-medium">
-                🔴 Voting is live!
-              </span>
-            ) : isEventPast ? (
-              <span className="text-gray-600">Contest ended</span>
-            ) : event.votingContest?.votingStartDate &&
-              new Date() < new Date(event.votingContest.votingStartDate) ? (
-              <span className="text-blue-600">Voting opens soon</span>
-            ) : (
-              <span className="text-gray-600">Voting closed</span>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+    </Link>
   );
 }

@@ -38,7 +38,7 @@ export default async function PaymentSuccess({
 
     if (!voteOrder) {
       return (
-        <main className="mx-auto max-w-2xl py-44 px-4">
+        <main className="mx-auto max-w-2xl py-20 px-4">
           <h1 className="text-2xl font-bold mb-2">Order Not Found</h1>
           <p className="text-muted-foreground mb-6">
             We couldn&apos;t find your order. Please contact support if you need
@@ -135,7 +135,7 @@ export default async function PaymentSuccess({
 
   if (!order) {
     return (
-      <main className="mx-auto max-w-2xl py-44 px-4">
+      <main className="mx-auto max-w-2xl py-20 px-4">
         <h1 className="text-2xl font-bold mb-2">Order Not Found</h1>
         <p className="text-muted-foreground mb-6">
           We couldn&apos;t find your order. Please contact support if you need

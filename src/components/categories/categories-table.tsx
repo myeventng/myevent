@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Category } from '@/generated/prisma';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/queries';
+import type { CategoryRow, MajorOption } from './types';
+import { Badge } from '@/components/ui/badge';
 import {
   useReactTable,
   getCoreRowModel,
@@ -37,15 +40,25 @@ import { UpdateCategoryModal } from './update-category-modal';
 import { DeleteCategoryDialog } from './delete-category-dialog';
 
 interface CategoriesTableProps {
-  initialData: Category[];
+  initialData: CategoryRow[];
+  majorCategories: MajorOption[];
   userCanCreate: boolean;
 }
 
 export const CategoriesTable = ({
   initialData,
+  majorCategories,
   userCanCreate,
 }: CategoriesTableProps) => {
-  const [data, setData] = useState<Category[]>(initialData);
+  const queryClient = useQueryClient();
+  const [data, setData] = useState<CategoryRow[]>(initialData);
+
+  // The saved (localStorage) copies of the category lists are out of date after any change here
+  const refreshCachedLists = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.categories });
+    queryClient.invalidateQueries({ queryKey: queryKeys.eventFilters });
+    queryClient.invalidateQueries({ queryKey: ['events', 'home'] });
+  };
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
@@ -54,12 +67,12 @@ export const CategoriesTable = ({
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(
+  const [selectedCategory, setSelectedCategory] = useState<CategoryRow | null>(
     null
   );
 
   // Table column definitions
-  const columns: ColumnDef<Category>[] = [
+  const columns: ColumnDef<CategoryRow>[] = [
     {
       accessorKey: 'name',
       header: 'Category Name',
@@ -68,6 +81,19 @@ export const CategoriesTable = ({
       ),
     },
 
+    {
+      id: 'majorCategory',
+      header: 'Major category',
+      accessorFn: (row) => row.majorCategory?.name ?? '',
+      cell: ({ row }) => {
+        const name = row.original.majorCategory?.name;
+        return name ? (
+          <Badge variant="secondary">{name}</Badge>
+        ) : (
+          <span className="text-sm text-muted-foreground">Not assigned</span>
+        );
+      },
+    },
     {
       id: 'actions',
       cell: ({ row }) => {
@@ -119,11 +145,13 @@ export const CategoriesTable = ({
   });
 
   // Handlers for updating the table data after CRUD operations
-  const handleCategoryCreated = (newCategory: Category) => {
+  const handleCategoryCreated = (newCategory: CategoryRow) => {
     setData((prev) => [...prev, newCategory]);
+    refreshCachedLists();
   };
 
-  const handleCategoryUpdated = (updatedCategory: Category) => {
+  const handleCategoryUpdated = (updatedCategory: CategoryRow) => {
+    refreshCachedLists();
     setData((prev) =>
       prev.map((catgoryCategory) =>
         catgoryCategory.id === updatedCategory.id
@@ -134,6 +162,7 @@ export const CategoriesTable = ({
   };
 
   const handleCategoryDeleted = (deletedCategoryId: string) => {
+    refreshCachedLists();
     setData((prev) =>
       prev.filter((catgoryCategory) => catgoryCategory.id !== deletedCategoryId)
     );
@@ -258,6 +287,7 @@ export const CategoriesTable = ({
         isOpen={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
         onCategoryCreated={handleCategoryCreated}
+        majorCategories={majorCategories}
       />
 
       {selectedCategory && (
@@ -270,6 +300,7 @@ export const CategoriesTable = ({
             }}
             category={selectedCategory}
             onCategoryUpdated={handleCategoryUpdated}
+            majorCategories={majorCategories}
           />
 
           <DeleteCategoryDialog

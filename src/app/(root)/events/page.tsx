@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useInView } from 'react-intersection-observer';
 import {
   SlidersHorizontal,
@@ -27,17 +27,18 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
+import { BrandLoader } from '@/components/brand/brand-loader';
+import { EventBackdrop } from '@/components/brand/event-backdrop';
 import { PageTitleHero } from '@/components/events/clientside/page-title-hero';
 import { EventCard } from '@/components/events/clientside/event-card';
 import { EventsFilters } from '@/components/events/clientside/event-filter';
-import {
-  getEventsWithFilters,
-  getEventFilterOptions,
-} from '@/actions/event.actions';
+import { MajorCategoryPills } from '@/components/events/major-category-pills';
+import { useEventFilterOptions, useEventsInfinite } from '@/lib/queries';
 import { useDebounce } from '@/hooks/use-debounce';
 
 interface FilterState {
   search: string;
+  majorCategoryId: string;
   categoryId: string;
   cityId: string;
   tagIds: string[];
@@ -52,19 +53,18 @@ interface FilterState {
   votingType: string;
 }
 
-export default function EnhancedAllEventsPage() {
-  // Data state
-  const [events, setEvents] = useState<any[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [isError, setIsError] = useState(false);
+const EMPTY_FILTER_OPTIONS = { majorCategories: [], categories: [], cities: [], tags: [] } as {
+  majorCategories: any[];
+  categories: any[];
+  cities: any[];
+  tags: any[];
+};
 
+export default function EnhancedAllEventsPage() {
   // Filter state with new voting contest filters
   const [filters, setFilters] = useState<FilterState>({
     search: '',
+    majorCategoryId: '',
     categoryId: '',
     cityId: '',
     tagIds: [],
@@ -80,16 +80,6 @@ export default function EnhancedAllEventsPage() {
 
   // UI state
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [filterOptions, setFilterOptions] = useState<{
-    categories: any[];
-    cities: any[];
-    tags: any[];
-  }>({
-    categories: [],
-    cities: [],
-    tags: [],
-  });
-
   // Debounce search input
   const debouncedSearch = useDebounce(filters.search, 500);
 
@@ -99,105 +89,30 @@ export default function EnhancedAllEventsPage() {
     rootMargin: '100px',
   });
 
-  // Fetch events function with new filters
-  const fetchEvents = useCallback(
-    async (page: number = 1, reset: boolean = false) => {
-      try {
-        if (reset) {
-          setIsLoading(true);
-          setIsError(false);
-        } else {
-          setIsLoadingMore(true);
-        }
+  // Events and filter options come from the persisted cache: the first visit asks the
+  // server, later visits (and refreshes) show saved data straight away. Every filter
+  // combination is cached on its own, so going back to a filter you used is instant too.
+  const eventsQuery = useEventsInfinite({ ...filters, search: debouncedSearch });
+  const filterOptionsQuery = useEventFilterOptions();
 
-        const response = await getEventsWithFilters({
-          page,
-          limit: 12,
-          search: debouncedSearch,
-          categoryId: filters.categoryId,
-          cityId: filters.cityId,
-          tagIds: filters.tagIds,
-          dateRange: filters.dateRange,
-          priceRange: filters.priceRange,
-          sortBy: filters.sortBy,
-          sortOrder: filters.sortOrder,
-          featured: filters.featured,
-          eventTypes: filters.eventTypes,
-          votingStatus: filters.votingStatus,
-          votingType: filters.votingType,
-        });
-
-        if (!response.success) {
-          throw new Error(response.message || 'Failed to fetch events');
-        }
-
-        const {
-          events: newEvents,
-          totalCount,
-          hasMore: moreAvailable,
-        } = response.data!;
-
-        if (reset) {
-          setEvents(newEvents);
-        } else {
-          setEvents((prev) => [...prev, ...newEvents]);
-        }
-
-        setTotalCount(totalCount);
-        setHasMore(moreAvailable);
-        setCurrentPage(page);
-        setIsError(false);
-      } catch (error) {
-        console.error('Error fetching events:', error);
-        setIsError(true);
-      } finally {
-        setIsLoading(false);
-        setIsLoadingMore(false);
-      }
-    },
-    [
-      debouncedSearch,
-      filters.categoryId,
-      filters.cityId,
-      filters.tagIds,
-      filters.dateRange,
-      filters.priceRange,
-      filters.sortBy,
-      filters.sortOrder,
-      filters.featured,
-      filters.eventTypes,
-      filters.votingStatus,
-      filters.votingType,
-    ]
+  const events = useMemo(
+    () => eventsQuery.data?.pages.flatMap((page) => page.events) ?? [],
+    [eventsQuery.data]
   );
-
-  // Fetch filter options on mount
-  useEffect(() => {
-    const fetchFilterOptions = async () => {
-      try {
-        const response = await getEventFilterOptions();
-        if (response.success && response.data) {
-          setFilterOptions(response.data);
-        }
-      } catch (error) {
-        console.error('Error fetching filter options:', error);
-      }
-    };
-
-    fetchFilterOptions();
-  }, []);
-
-  // Fetch events when filters change
-  useEffect(() => {
-    fetchEvents(1, true);
-  }, [fetchEvents]);
+  const totalCount = eventsQuery.data?.pages[0]?.totalCount ?? 0;
+  const hasMore = eventsQuery.hasNextPage;
+  const isLoading = eventsQuery.isPending;
+  const isLoadingMore = eventsQuery.isFetchingNextPage;
+  const isError = eventsQuery.isError;
+  const filterOptions = filterOptionsQuery.data ?? EMPTY_FILTER_OPTIONS;
+  const { fetchNextPage } = eventsQuery;
 
   // Handle infinite scroll
   useEffect(() => {
     if (inView && hasMore && !isLoadingMore && !isLoading) {
-      fetchEvents(currentPage + 1, false);
+      fetchNextPage();
     }
-  }, [inView, hasMore, isLoadingMore, isLoading, currentPage, fetchEvents]);
+  }, [inView, hasMore, isLoadingMore, isLoading, fetchNextPage]);
 
   // Update filter function
   const updateFilter = useCallback((key: keyof FilterState, value: any) => {
@@ -208,6 +123,7 @@ export default function EnhancedAllEventsPage() {
   const clearAllFilters = useCallback(() => {
     setFilters({
       search: '',
+      majorCategoryId: '',
       categoryId: '',
       cityId: '',
       tagIds: [],
@@ -225,6 +141,7 @@ export default function EnhancedAllEventsPage() {
   // Get active filters count
   const getActiveFiltersCount = useCallback(() => {
     let count = 0;
+    if (filters.majorCategoryId) count++;
     if (filters.categoryId) count++;
     if (filters.cityId) count++;
     if (filters.tagIds.length > 0) count++;
@@ -238,6 +155,11 @@ export default function EnhancedAllEventsPage() {
   }, [filters]);
 
   const activeFiltersCount = getActiveFiltersCount();
+
+  // Picking a major category resets the category, which belongs to the previous group
+  const selectMajorCategory = useCallback((id: string) => {
+    setFilters((prev) => ({ ...prev, majorCategoryId: id, categoryId: '' }));
+  }, []);
 
   // Handle hero search
   const handleHeroSearch = () => {
@@ -267,14 +189,13 @@ export default function EnhancedAllEventsPage() {
   const eventTypeStats = getEventTypeStats();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[var(--me-bg)]">
       {/* Hero Section */}
       <PageTitleHero
-        title="Discover Amazing Events"
-        subtitle="🎉 Find Your Next Adventure"
-        description="From concerts and festivals to workshops and voting contests, discover events that match your interests and connect with your community."
+        title="Find your next event"
+        description="Concerts, festivals, workshops and voting contests across Nigeria."
         showSearch={true}
-        searchPlaceholder="Search events, contests, venues, or organizers..."
+        searchPlaceholder="Search events, contests, venues or organizers"
         searchValue={filters.search}
         onSearchChange={(value) => updateFilter('search', value)}
         onSearchSubmit={handleHeroSearch}
@@ -283,13 +204,18 @@ export default function EnhancedAllEventsPage() {
           totalLocations: uniqueCities,
           totalAttendees: Math.max(totalAttendees, 1000),
         }}
-        height="lg"
-        backgroundImage="/assets/images/events-hero-bg.jpg"
+        height="md"
       />
 
       {/* Filter Controls Section */}
-      <div className="bg-white border-b sticky top-0 z-40 shadow-sm">
+      <div className="sticky top-[72px] z-40 border-y-2 border-[var(--me-line)] bg-[var(--me-bg-deep)]">
         <div className="container mx-auto px-4 py-4">
+          <MajorCategoryPills
+            majorCategories={filterOptions.majorCategories}
+            selectedId={filters.majorCategoryId}
+            onSelect={selectMajorCategory}
+            className="mb-4 pb-1"
+          />
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
             {/* Results Info and Sort */}
             <div className="flex items-center gap-4">
@@ -313,7 +239,7 @@ export default function EnhancedAllEventsPage() {
                   {eventTypeStats.votingContests > 0 && (
                     <Badge
                       variant="outline"
-                      className="text-xs text-purple-600 border-purple-300"
+                      className="text-xs text-white border-[var(--me-violet)]"
                     >
                       <Trophy className="h-3 w-3 mr-1" />
                       {eventTypeStats.votingContests} Contests
@@ -322,7 +248,7 @@ export default function EnhancedAllEventsPage() {
                   {eventTypeStats.inviteEvents > 0 && (
                     <Badge
                       variant="outline"
-                      className="text-xs text-blue-600 border-blue-300"
+                      className="text-xs text-white border-[var(--me-magenta)]"
                     >
                       <Calendar className="h-3 w-3 mr-1" />
                       {eventTypeStats.inviteEvents} Invite Only
@@ -340,10 +266,10 @@ export default function EnhancedAllEventsPage() {
                   updateFilter('sortOrder', sortOrder);
                 }}
               >
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-44 rounded-full border-2 border-[var(--me-line)] bg-transparent text-white sm:w-52">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="me-theme">
                   <SelectItem value="startDateTime-asc">
                     Date: Earliest First
                   </SelectItem>
@@ -364,7 +290,7 @@ export default function EnhancedAllEventsPage() {
             {/* Filters Button */}
             <Sheet open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
               <SheetTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2">
+                <Button variant="outline" className="flex items-center gap-2 rounded-full border-2 border-[var(--me-violet)] bg-transparent text-white hover:bg-[var(--me-violet)] hover:text-white">
                   <SlidersHorizontal className="h-4 w-4" />
                   Filters
                   {activeFiltersCount > 0 && (
@@ -374,7 +300,7 @@ export default function EnhancedAllEventsPage() {
                   )}
                 </Button>
               </SheetTrigger>
-              <SheetContent className="w-full sm:max-w-md">
+              <SheetContent className="me-theme w-full overflow-y-auto sm:max-w-md">
                 <SheetHeader>
                   <SheetTitle>Filter Events</SheetTitle>
                   <SheetDescription>
@@ -400,6 +326,23 @@ export default function EnhancedAllEventsPage() {
               <span className="text-sm text-muted-foreground">
                 Active filters:
               </span>
+
+              {filters.majorCategoryId && (
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  Type:{' '}
+                  {
+                    filterOptions.majorCategories.find(
+                      (m: any) => m.id === filters.majorCategoryId
+                    )?.name
+                  }
+                  <button
+                    onClick={() => selectMajorCategory('')}
+                    className="ml-1 hover:bg-red-500 hover:text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
+                  >
+                    ×
+                  </button>
+                </Badge>
+              )}
 
               {filters.categoryId && (
                 <Badge variant="secondary" className="flex items-center gap-1">
@@ -543,27 +486,26 @@ export default function EnhancedAllEventsPage() {
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-8">
+      <div className="relative overflow-hidden">
+      <EventBackdrop variant="section" />
+      <div className="container relative mx-auto px-4 py-10">
         {/* Loading State */}
         {isLoading && (
-          <div className="flex justify-center items-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin" />
-            <span className="ml-2">Loading events...</span>
-          </div>
+          <BrandLoader label="Loading events" className="rounded-2xl" />
         )}
 
         {/* Error State */}
         {isError && (
-          <Card className="max-w-md mx-auto">
+          <Card className="mx-auto max-w-md border-2 border-[var(--me-line)] bg-[var(--me-surface)] text-white">
             <CardContent className="p-6 text-center">
-              <div className="text-red-500 mb-4">
+              <div className="mb-4 text-[var(--me-red)]">
                 <Calendar className="h-12 w-12 mx-auto" />
               </div>
-              <h3 className="font-semibold mb-2">Failed to Load Events</h3>
+              <h3 className="font-display mb-2 text-xl font-bold">We could not load events</h3>
               <p className="text-muted-foreground mb-4">
-                Something went wrong while loading events. Please try again.
+                Check your connection and try again.
               </p>
-              <Button onClick={() => fetchEvents(1, true)}>Try Again</Button>
+              <Button onClick={() => eventsQuery.refetch()} className="rounded-full bg-[var(--me-red)] font-bold">Try again</Button>
             </CardContent>
           </Card>
         )}
@@ -572,7 +514,7 @@ export default function EnhancedAllEventsPage() {
         {!isLoading && !isError && (
           <>
             {events.length === 0 ? (
-              <Card className="max-w-md mx-auto">
+              <Card className="mx-auto max-w-md border-2 border-[var(--me-line)] bg-[var(--me-surface)] text-white">
                 <CardContent className="p-6 text-center">
                   <div className="text-muted-foreground mb-4">
                     {filters.eventTypes.includes('VOTING_CONTEST') &&
@@ -582,7 +524,7 @@ export default function EnhancedAllEventsPage() {
                       <Calendar className="h-12 w-12 mx-auto" />
                     )}
                   </div>
-                  <h3 className="font-semibold mb-2">
+                  <h3 className="font-display mb-2 text-xl font-bold">
                     No{' '}
                     {filters.eventTypes.includes('VOTING_CONTEST') &&
                     filters.eventTypes.length === 1
@@ -596,14 +538,14 @@ export default function EnhancedAllEventsPage() {
                       : `No ${filters.eventTypes.includes('VOTING_CONTEST') && filters.eventTypes.length === 1 ? 'contests' : 'events'} are currently available. Check back later for new ones.`}
                   </p>
                   {activeFiltersCount > 0 && (
-                    <Button variant="outline" onClick={clearAllFilters}>
-                      Clear Filters
+                    <Button variant="outline" onClick={clearAllFilters} className="rounded-full border-2 border-[var(--me-violet)] bg-transparent text-white hover:bg-[var(--me-violet)] hover:text-white">
+                      Clear filters
                     </Button>
                   )}
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {events.map((event, index) => (
                   <EventCard key={`${event.id}-${index}`} event={event} />
                 ))}
@@ -628,14 +570,15 @@ export default function EnhancedAllEventsPage() {
             {/* End of Results */}
             {!hasMore && events.length > 0 && (
               <div className="text-center py-8 text-muted-foreground">
-                <p>You&apos;ve reached the end of the events list.</p>
+                <p>That is every event for now.</p>
                 <p className="text-sm mt-1">
-                  Showing all {events.length} events
+                  {events.length} events shown
                 </p>
               </div>
             )}
           </>
         )}
+      </div>
       </div>
     </div>
   );

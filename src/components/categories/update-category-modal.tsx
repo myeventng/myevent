@@ -31,13 +31,14 @@ import {
 import { Input } from '@/components/ui/input';
 import { Loader2 } from 'lucide-react';
 import { updateCategory } from '@/actions/category-actions';
-import { Category } from '@/generated/prisma';
+import type { CategoryRow, MajorOption } from './types';
 import { toast } from 'sonner';
 
 // Form validation schema
 const formSchema = z.object({
   id: z.string(),
   name: z.string().min(2, 'Category name must be at least 2 characters'),
+  majorCategoryId: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -45,8 +46,9 @@ type FormValues = z.infer<typeof formSchema>;
 interface UpdateCategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  category: Category;
-  onCategoryUpdated: (category: Category) => void;
+  category: CategoryRow;
+  onCategoryUpdated: (category: CategoryRow) => void;
+  majorCategories: MajorOption[];
 }
 
 export const UpdateCategoryModal = ({
@@ -54,6 +56,7 @@ export const UpdateCategoryModal = ({
   onClose,
   category,
   onCategoryUpdated,
+  majorCategories,
 }: UpdateCategoryModalProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -62,6 +65,7 @@ export const UpdateCategoryModal = ({
     defaultValues: {
       id: category.id,
       name: category.name,
+      majorCategoryId: category.majorCategoryId ?? '',
     },
   });
 
@@ -71,6 +75,7 @@ export const UpdateCategoryModal = ({
       form.reset({
         id: category.id,
         name: category.name,
+        majorCategoryId: category.majorCategoryId ?? '',
       });
     }
   }, [category, form]);
@@ -78,7 +83,11 @@ export const UpdateCategoryModal = ({
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
     try {
-      const response = await updateCategory(values);
+      const response = await updateCategory({
+        id: values.id,
+        name: values.name,
+        majorCategoryId: values.majorCategoryId || null,
+      });
 
       if (response.success && response.data) {
         toast.success('Category updated successfully');
@@ -118,6 +127,31 @@ export const UpdateCategoryModal = ({
                   <FormControl>
                     <Input placeholder="Enter category name" {...field} />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="majorCategoryId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Major category</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || ''}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Not under a major category" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {majorCategories.map((major) => (
+                        <SelectItem key={major.id} value={major.id}>
+                          {major.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}

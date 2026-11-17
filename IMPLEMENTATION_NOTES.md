@@ -92,3 +92,60 @@ Migration: `20261107120000_offline_sales` (additive).
 ## ZeptoMail email provider
 - Fourth option in Settings → Email (`email.activeProvider = zeptomail`). Keys: `email.zeptomail.apiToken` (Send Mail Token, secret/masked, kept when blank; pasting with the `Zoho-enczapikey` prefix is fine), `email.zeptomail.region` (com/eu/in/com.au/jp/ca/sa → `api.zeptomail.<region>`, whitelisted), `email.zeptomail.fromAddress`. Env fallbacks: `ZEPTOMAIL_TOKEN`, `ZEPTOMAIL_REGION`, `ZEPTOMAIL_FROM_ADDRESS`.
 - Plain `fetch` to `/v1.1/email` (no new package): html/text, reply-to, base64 PDF attachments. Test Connection mails the signed-in admin.
+
+## Contact page, FAQs and newsletter (Nov 2026)
+
+- Public pages: `/contact`, `/faqs` (content lives in `src/lib/faqs.ts`), `/newsletter/unsubscribe`.
+- Admin pages: `/admin/dashboard/messages` (contact inbox) and `/admin/dashboard/subscribers` (newsletter), under the sidebar group "Inbox". Available to ADMIN with STAFF or SUPER_ADMIN sub-role.
+- New tables: `ContactMessage`, `NewsletterSubscriber`, `NewsletterCampaign`
+  (migration `20261116000000_contact_newsletter`). Run `npx prisma migrate deploy` and `npx prisma generate`.
+- New contact messages email the address in Settings > General > Support email
+  (fallback: `CONTACT_NOTIFY_EMAIL` env var, then info@myevent.com.ng). Emails go through the
+  provider chosen in admin settings.
+- Both public forms are rate limited per IP (5 per hour) and the contact form has a honeypot field.
+
+---
+
+## Persisted data cache, full-screen hero, traced logo loader
+
+### Persisted cache (TanStack Query + localStorage)
+- `src/components/providers/query-provider.tsx` wraps the app (root layout). `src/lib/query-cache.ts` holds the
+  settings: key `myevent-cache`, `CACHE_VERSION`, 10 minute freshness, 24 hour max age.
+- `src/lib/queries/index.ts` has the hooks: `useFeaturedEvents`, `useHomeEvents`, `useEventFilterOptions`,
+  `useEventsInfinite`, `usePublishedBlogs`, `useCategories`, `useTags`, `useCities`, `useVenues`.
+  A query is saved to localStorage only when it sets `meta: PERSIST_META` (opt-in).
+- Behaviour: first visit asks the server; every later visit/refresh renders saved data instantly and
+  re-checks quietly in the background once the data is older than 10 minutes. Inside `/admin` and `/dashboard` the
+  saved copy is shown instantly but always re-checked, so edited lists are never stale.
+- Never saved: orders, users, subscribers, contact messages or any other private data.
+- After a deploy that changes the shape of cached data, bump `CACHE_VERSION`.
+- Wired into: home page, `/events` (infinite scroll, each filter combination cached), event form
+  (categories + tags), venue modal (cities). Admin tables are server-rendered pages and were not changed.
+
+### Hero and loader
+- `src/components/homepage/hero.tsx`: full-bleed featured-event slider (poster as background, cross-fade, progress
+  bars that advance the slide, arrows on desktop, swipe on mobile). The header floats over it
+  (`main-header.tsx`: transparent at the top of `/`, solid after scrolling).
+- Loader: `public/assets/brand/logo-loader.svg` is the logo traced to SVG and animated (ribbons draw in, fill, then the
+  wordmark rises). `BrandLoader fullScreen` covers the whole screen and is shown only until the first data arrives.
+- `public/assets/brand/logo-myevent.svg` is the static traced logo. `crowd-lines.svg` is the line-art crowd used by
+  `CrowdBackdrop` (events page title, newsletter, footer).
+
+### Hydration warning
+`suppressHydrationWarning` on `<html>` and `<body>` in `src/app/layout.tsx`: browser extensions (Grammarly,
+ColorZilla) add attributes before React loads and caused the repeated "tree hydrated but some attributes" error.
+
+## Major categories, slide-right buttons, hero fixes, more line art
+
+**Major categories** (same set as Shoobs: Clubbing, Comedy, Culture, Festivals, Live Music, Meet-ups, Online)
+- New `MajorCategory` model; `Category.majorCategoryId` (nullable). Events keep their `categoryId`; the major category is read through it, so no event data changes.
+- Migration: `prisma/migrations/20261117000000_major_categories`. Run `npx prisma migrate deploy` (production) or `npx prisma migrate dev`, then `npx prisma generate`.
+- Assign existing categories: `npm run categories:assign` (add `-- --dry-run` to preview, `-- --force` to re-assign ones that already have a major). The placement table is `CATEGORY_TO_MAJOR` in `src/lib/major-categories.ts`; unknown future names fall back to keyword rules, then to "no match" (reported, left unassigned). The script also adds an "Online Events" category under Online so that group is usable.
+- Used in: home Explore events pills, /events pills + filter sheet ("Type of event", and the Category list narrows to it), event create/edit form (pick type, then a category inside it), Admin > Categories (Major category column + selector in add/edit).
+- Cached lists are invalidated after any category change in admin. `CACHE_VERSION` is now '2' because the cached filter options changed shape.
+
+**Buttons**: `.me-slide-right` in globals.css (violet fill slides in from the left on hover/focus). Used on Get tickets (hero) and Host event (header desktop + mobile menu, hero empty state).
+
+**Hero**: long titles are shortened in JS (80 characters) instead of CSS line-clamp, which was clipping letter tails (g, y, p). Date and place icons are white.
+
+**Line art**: `hall-lines.svg` (Explore events background) and `audience-lines.svg` (spare, not placed yet), traced from the venue and conference photos.

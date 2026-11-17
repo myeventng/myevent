@@ -1,251 +1,114 @@
-'use client';
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
-import {
-  Mail,
-  Instagram,
-  Twitter,
-  Facebook,
-  Linkedin,
-  Github,
-  MapPin,
-  Phone,
-  ChevronDown,
-  ChevronUp,
-} from 'lucide-react';
+import Image from 'next/image';
+import { Mail, Instagram, MapPin, Phone } from 'lucide-react';
+import { CrowdBackdrop } from '@/components/brand/crowd-backdrop';
+import { INSTAGRAM_URL, INSTAGRAM_HANDLE } from '@/lib/social';
 
-// Accordion component for mobile view
-interface AccordionProps {
-  title: string;
-  children: React.ReactNode;
-  initialExpanded?: boolean;
-}
-
-const MobileAccordion: React.FC<AccordionProps> = ({
-  title,
-  children,
-  initialExpanded = false,
-}) => {
-  const [isExpanded, setIsExpanded] = useState(initialExpanded);
-
-  return (
-    <div className="border-b border-white/20 py-3 md:border-none">
-      <button
-        className="flex w-full justify-between items-center text-left"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <h3 className="text-lg font-bold">{title}</h3>
-        <span className="md:hidden">
-          {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-        </span>
-      </button>
-      <div
-        className={`mt-3 md:mt-4 overflow-hidden transition-all duration-300 md:block ${
-          isExpanded ? 'max-h-96' : 'max-h-0 md:max-h-none'
-        }`}
-      >
-        {children}
-      </div>
-    </div>
-  );
-};
+const linkClass =
+  'inline-block py-1 text-[var(--me-muted)] transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-sm';
 
 const Footer: React.FC = () => {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="relative">
-      {/* Gradient background */}
-      {/* <div className="absolute inset-0 bg-gradient-to-r from-purple-600 via-indigo-500 to-blue-600" /> */}
-      <div className="absolute inset-0 bg-purple-900" />
-      {/* Decorative swoosh */}
-      {/* <div
-        className="absolute top-0 left-0 right-0 h-8 bg-white"
-        style={{
-          clipPath: 'ellipse(50% 60% at 50% 0%)',
-        }}
-      /> */}
+    <footer className="relative overflow-hidden bg-[var(--me-bg-deep)] text-white">
+      <CrowdBackdrop className="opacity-20" />
 
-      {/* Bubble decorations */}
-      <div className="absolute animate top-1/4 left-10 w-16 h-16 rounded-full bg-white/30 opacity-20" />
-      <div className="absolute bottom-1/3 right-10 w-24 h-24 rounded-full bg-white/10 opacity-20" />
-      <div className="absolute top-1/2 left-1/4 w-32 h-32 rounded-full bg-white/10 opacity-20" />
-      <div className="absolute bottom-1/4 right-1/4 w-20 h-20 rounded-full bg-white/10 opacity-10" />
-
-      {/* Content */}
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 text-white z-10 mt-7">
-        <div className="md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-8">
-          {/* Column 1: About */}
-          <MobileAccordion title="Myevent.com.ng" initialExpanded={true}>
-            <div className="pb-4 md:pb-0">
-              <p className="mb-4 text-white/80">
-                Your one-stop platform for discovering, creating, and managing
-                events. Join us to connect with organizers and attendees in
-                Nigeria.
-              </p>
-              <div className="flex space-x-4 mt-4">
-                <a
-                  href="https://twitter.com"
-                  className="text-white/80 hover:text-white transition"
-                >
-                  <Twitter size={20} />
-                </a>
-                <a
-                  href="https://facebook.com"
-                  className="text-white/80 hover:text-white transition"
-                >
-                  <Facebook size={20} />
-                </a>
-                <a
-                  href="https://instagram.com"
-                  className="text-white/80 hover:text-white transition"
-                >
-                  <Instagram size={20} />
-                </a>
-                <a
-                  href="https://linkedin.com"
-                  className="text-white/80 hover:text-white transition"
-                >
-                  <Linkedin size={20} />
-                </a>
-                <a
-                  href="https://github.com"
-                  className="text-white/80 hover:text-white transition"
-                >
-                  <Github size={20} />
-                </a>
-              </div>
-            </div>
-          </MobileAccordion>
-
-          {/* Column 2: Quick Links */}
-          <MobileAccordion title="Quick Links">
-            <ul className="space-y-2 text-white/80 pb-4 md:pb-0">
-              <li>
-                <Link href="/" className="hover:text-white transition">
-                  Home
-                </Link>
-              </li>
-              <li>
-                <Link href="/events" className="hover:text-white transition">
-                  Events
-                </Link>
-              </li>
-              <li>
-                <Link href="/about" className="hover:text-white transition">
-                  About Us
-                </Link>
-              </li>
-              <li>
-                <Link href="/contact" className="hover:text-white transition">
-                  Contact
-                </Link>
-              </li>
-              <li>
-                <Link href="/blog" className="hover:text-white transition">
-                  Blog
-                </Link>
-              </li>
-              <li>
-                <Link href="/faqs" className="hover:text-white transition">
-                  FAQs
-                </Link>
-              </li>
-            </ul>
-          </MobileAccordion>
-
-          {/* Column 3: Legal */}
-          <MobileAccordion title="Legal">
-            <ul className="space-y-2 text-white/80 pb-4 md:pb-0">
-              <li>
-                <Link href="/terms" className="hover:text-white transition">
-                  Terms of Service
-                </Link>
-              </li>
-              <li>
-                <Link href="/privacy" className="hover:text-white transition">
-                  Privacy Policy
-                </Link>
-              </li>
-              <li>
-                <Link href="/cookies" className="hover:text-white transition">
-                  Cookie Policy
-                </Link>
-              </li>
-              <li>
-                <Link href="/refund" className="hover:text-white transition">
-                  Refund Policy
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/accessibility"
-                  className="hover:text-white transition"
-                >
-                  Accessibility
-                </Link>
-              </li>
-            </ul>
-          </MobileAccordion>
-
-          {/* Column 4: Contact */}
-          <MobileAccordion title="Contact Us">
-            <div className="pb-4 md:pb-0">
-              <ul className="space-y-3 text-white/80">
-                <li className="flex items-start">
-                  <MapPin size={20} className="mr-2 mt-1 flex-shrink-0" />
-                  <span>
-                    49B Thuja Ville, NNPC ESTATE,
-                    <br />
-                    Utako, Abuja, Nigeria
-                  </span>
-                </li>
-                <li className="flex items-center">
-                  <Phone size={20} className="mr-2 flex-shrink-0" />
-                  <span>+234 (906) 635-5861</span>
-                </li>
-                <li className="flex items-center">
-                  <Mail size={20} className="mr-2 flex-shrink-0" />
-                  <Link href="mailto:info@myevent.com.ng">
-                    info@myevent.com.ng
-                  </Link>
-                </li>
-              </ul>
-            </div>
-          </MobileAccordion>
+      <div className="relative mx-auto max-w-7xl px-4 pb-10 pt-16 sm:px-6 lg:px-8">
+        {/* Call to action */}
+        <div className="mb-14 flex flex-col items-start justify-between gap-6 rounded-3xl border-2 border-[var(--me-line)] bg-[var(--me-surface)] p-6 shadow-[8px_8px_0_0_var(--me-red)] sm:p-10 md:flex-row md:items-center">
+          <div>
+            <h2 className="font-display text-3xl font-extrabold sm:text-4xl">
+              Got an event? Sell the tickets here.
+            </h2>
+            <p className="mt-2 max-w-xl text-[var(--me-muted)]">
+              Create your event page, sell tickets online and scan guests in at
+              the door.
+            </p>
+          </div>
+          <Link
+            href="/events/create"
+            className="inline-flex shrink-0 items-center rounded-full bg-[var(--me-red)] px-7 py-3.5 text-base font-bold text-white shadow-[4px_4px_0_0_var(--me-violet)] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          >
+            Host your event
+          </Link>
         </div>
 
-        {/* Separator */}
-        <div className="h-px bg-white/20 my-8" />
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+          {/* About + social */}
+          <div className="sm:col-span-2 lg:col-span-1">
+            <Link href="/" aria-label="MyEvent home" className="inline-block">
+              <Image
+                src="/assets/icons/logo-myevent.png"
+                alt="MyEvent"
+                width={150}
+                height={71}
+                className="h-14 w-auto"
+              />
+            </Link>
+            <p className="mt-4 max-w-xs text-[var(--me-muted)]">
+              Discover events, buy tickets and vote in contests across Nigeria.
+            </p>
+            <a
+              href={INSTAGRAM_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-5 inline-flex items-center gap-2 rounded-full border-2 border-[var(--me-line)] px-4 py-2 text-sm font-semibold transition-colors hover:border-[var(--me-magenta)] hover:bg-[var(--me-magenta)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              <Instagram className="h-5 w-5" aria-hidden="true" />
+              {INSTAGRAM_HANDLE}
+            </a>
+          </div>
 
-        {/* Copyright and bottom links */}
-        <div className="flex flex-col md:flex-row justify-between items-center text-sm text-white/70">
-          <p>© {currentYear} Myevent.com.ng. All rights reserved.</p>
+          <nav aria-label="Explore">
+            <h3 className="font-display mb-3 text-lg font-bold">Explore</h3>
+            <ul>
+              <li><Link href="/" className={linkClass}>Home</Link></li>
+              <li><Link href="/events" className={linkClass}>Events</Link></li>
+              <li><Link href="/blog" className={linkClass}>Blog</Link></li>
+              <li><Link href="/events/create" className={linkClass}>Host an event</Link></li>
+              <li><Link href="/faqs" className={linkClass}>FAQs</Link></li>
+              <li><Link href="/contact" className={linkClass}>Contact</Link></li>
+            </ul>
+          </nav>
 
-          <div className="flex space-x-4 mt-4 md:mt-0">
-            <Link href="/sitemap" className="hover:text-white transition">
-              Sitemap
-            </Link>
-            <Link href="/help" className="hover:text-white transition">
-              Help Center
-            </Link>
-            <Link href="/careers" className="hover:text-white transition">
-              Careers
-            </Link>
+          <nav aria-label="Legal">
+            <h3 className="font-display mb-3 text-lg font-bold">Legal</h3>
+            <ul>
+              <li><Link href="/terms" className={linkClass}>Terms of service</Link></li>
+              <li><Link href="/privacy" className={linkClass}>Privacy policy</Link></li>
+              <li><Link href="/cookies" className={linkClass}>Cookie policy</Link></li>
+            </ul>
+          </nav>
+
+          <div>
+            <h3 className="font-display mb-3 text-lg font-bold">Contact</h3>
+            <ul className="space-y-3 text-[var(--me-muted)]">
+              <li className="flex items-start gap-2">
+                <MapPin className="mt-1 h-5 w-5 shrink-0 text-[var(--me-red)]" aria-hidden="true" />
+                <span>
+                  49B Thuja Ville, NNPC Estate,
+                  <br />
+                  Utako, Abuja, Nigeria
+                </span>
+              </li>
+              <li className="flex items-center gap-2">
+                <Phone className="h-5 w-5 shrink-0 text-[var(--me-violet)]" aria-hidden="true" />
+                <a href="tel:+2349066355861" className="hover:text-white">+234 906 635 5861</a>
+              </li>
+              <li className="flex items-center gap-2">
+                <Mail className="h-5 w-5 shrink-0 text-[var(--me-magenta)]" aria-hidden="true" />
+                <a href="mailto:info@myevent.com.ng" className="hover:text-white">info@myevent.com.ng</a>
+              </li>
+            </ul>
           </div>
         </div>
-      </div>
 
-      {/* Wave pattern at bottom */}
-      {/* <div
-        className="relative h-12 bg-gradient-to-r from-purple-600 via-indigo-500 to-blue-600"
-        style={{
-          maskImage:
-            "url(\"data:image/svg+xml;utf8,<svg viewBox='0 0 1200 120' xmlns='http://www.w3.org/2000/svg'><path d='M0,0V46.29c47.79,22.2,103.59,32.17,158,28,70.36-5.37,136.33-33.31,206.8-37.5C438.64,32.43,512.34,53.67,583,72.05c69.27,18,138.3,24.88,209.4,13.08,36.15-6,69.85-17.84,104.45-29.34C989.49,25,1113-14.29,1200,52.47V0Z' fill='%23FFFFFF'></path></svg>\")",
-          maskSize: 'cover',
-          maskRepeat: 'no-repeat',
-        }}
-      /> */}
+        <div className="mt-12 border-t-2 border-[var(--me-line)] pt-6 text-sm text-[var(--me-muted)]">
+          <p>© {currentYear} Myevent.com.ng. All rights reserved.</p>
+        </div>
+      </div>
     </footer>
   );
 };

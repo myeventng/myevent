@@ -92,13 +92,13 @@ export function BlogGrid({
     <div className="space-y-8">
       {/* Filter */}
       <div className="flex items-center gap-4">
-        <Filter className="w-5 h-5 text-gray-500" />
+        <Filter className="h-5 w-5 text-[var(--me-violet)]" aria-hidden="true" />
         <Select value={categoryFilter} onValueChange={handleCategoryChange}>
-          <SelectTrigger className="w-64">
+          <SelectTrigger className="w-64 rounded-full border-2 border-[var(--me-line)] bg-transparent text-white">
             <SelectValue placeholder="Filter by category" />
           </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
+          <SelectContent className="me-theme">
+            <SelectItem value="all">All categories</SelectItem>
             {categories.map((category) => (
               <SelectItem key={category.id} value={category.id}>
                 <div className="flex items-center gap-2">
@@ -115,7 +115,7 @@ export function BlogGrid({
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
         {blogs.map((blog, index) => (
           <BlogCard
             key={blog.id}
@@ -128,7 +128,7 @@ export function BlogGrid({
       {/* Loading / Load More */}
       {loading && (
         <div className="flex justify-center py-8">
-          <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+          <Loader2 className="w-6 h-6 animate-spin text-[var(--me-red)]" />
         </div>
       )}
 
@@ -138,17 +138,17 @@ export function BlogGrid({
             onClick={loadMore}
             variant="outline"
             size="lg"
-            className="hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300"
+            className="rounded-full border-2 border-[var(--me-violet)] bg-transparent text-white hover:bg-[var(--me-violet)] hover:text-white"
           >
-            Load More Posts
+            Load more articles
           </Button>
         </div>
       )}
 
       {blogs.length === 0 && !loading && (
         <div className="text-center py-16">
-          <p className="text-xl text-gray-500">No blog posts found</p>
-          <p className="text-gray-400 mt-2">Try adjusting your filters</p>
+          <p className="font-display text-2xl font-bold text-white">No articles found</p>
+          <p className="mt-2 text-[var(--me-muted)]">Try a different category.</p>
         </div>
       )}
     </div>

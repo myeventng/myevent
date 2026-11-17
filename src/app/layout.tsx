@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
+import '@fontsource-variable/bricolage-grotesque';
 import './globals.css';
 import { Toaster } from '@/components/ui/sonner';
+import { QueryProvider } from '@/components/providers/query-provider';
 //project
 
 
@@ -73,12 +75,16 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // suppressHydrationWarning: browser extensions (Grammarly, ColorZilla, password managers...)
+  // add attributes to <html>/<body> before React loads. Without it React logs a
+  // "tree hydrated but some attributes didn't match" error on every page load.
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
+        suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <QueryProvider>{children}</QueryProvider>
         <Toaster position="top-center" richColors />
       </body>
     </html>

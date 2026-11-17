@@ -158,3 +158,237 @@
 .animate-fade-in {
   animation: fade-in 0.6s ease-out;
 }
+
+/* ==========================================================================
+   MyEvent client-site theme
+   Solid colours only (no gradients). Palette is taken from the logo:
+   red, violet and purple on a deep purple base.
+   Scoped to .me-theme so admin / dashboard screens are not affected.
+   ========================================================================== */
+:root {
+  --me-bg: #1b0b2e; /* page background, deep purple */
+  --me-bg-deep: #12061f; /* footer, loader, inset areas */
+  --me-surface: #261245; /* cards */
+  --me-raised: #331a5c; /* hovered cards, inputs, chips */
+  --me-line: #4a2a7a; /* borders */
+  --me-red: #e5173f; /* primary action */
+  --me-violet: #9b4dff; /* secondary accent */
+  --me-magenta: #e0209f; /* highlight accent */
+  --me-orange: #ff5a1f; /* sparing pop */
+  --me-text: #ffffff;
+  --me-muted: #c4b3e3;
+}
+
+.me-theme {
+  --background: var(--me-bg);
+  --foreground: var(--me-text);
+  --card: var(--me-surface);
+  --card-foreground: var(--me-text);
+  --popover: var(--me-surface);
+  --popover-foreground: var(--me-text);
+  --primary: var(--me-red);
+  --primary-foreground: #ffffff;
+  --secondary: var(--me-raised);
+  --secondary-foreground: var(--me-text);
+  --muted: var(--me-raised);
+  --muted-foreground: var(--me-muted);
+  --accent: var(--me-raised);
+  --accent-foreground: var(--me-text);
+  --destructive: #ff5c7a;
+  --border: var(--me-line);
+  --input: var(--me-line);
+  --ring: var(--me-violet);
+  background-color: var(--me-bg);
+  color: var(--me-text);
+}
+
+.font-display {
+  font-family: 'Bricolage Grotesque Variable', var(--font-geist-sans), system-ui,
+    sans-serif;
+  font-optical-sizing: auto;
+}
+
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Horizontal card rail (mobile overflow, like Shoobs). Cards keep full size
+   and the next card peeks in so people know they can swipe. */
+.me-rail {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 1rem;
+  padding-inline: 1rem;
+  padding-bottom: 1.25rem;
+  -webkit-overflow-scrolling: touch;
+}
+.me-rail > * {
+  flex: 0 0 auto;
+  width: 72vw;
+  max-width: 19rem;
+  scroll-snap-align: start;
+}
+@media (min-width: 640px) {
+  .me-rail > * {
+    width: 18rem;
+  }
+}
+/* From large screens the rail becomes a plain four-column grid. */
+@media (min-width: 1024px) {
+  .me-rail--grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    overflow: visible;
+    padding-inline: 0;
+    gap: 1.5rem;
+  }
+  .me-rail--grid > * {
+    width: auto;
+    max-width: none;
+  }
+  .me-rail--grid3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Hard offset shadow: the one signature move of the theme. */
+.me-pop {
+  box-shadow: 6px 6px 0 0 var(--me-red);
+}
+.me-pop-violet {
+  box-shadow: 6px 6px 0 0 var(--me-violet);
+}
+
+/* Card hover: lift and reveal the offset shadow. */
+.me-card {
+  background-color: var(--me-surface);
+  border: 1px solid var(--me-line);
+  border-radius: 1rem;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+@media (hover: hover) {
+  .me-card:hover {
+    transform: translate(-3px, -3px);
+    box-shadow: 6px 6px 0 0 var(--me-red);
+    border-color: var(--me-red);
+  }
+}
+
+/* Loader + backdrop motion */
+@keyframes me-draw {
+  0% {
+    stroke-dashoffset: 400;
+  }
+  60%,
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes me-spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes me-bounce-dot {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-8px);
+    opacity: 1;
+  }
+}
+@keyframes me-twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+@keyframes me-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(var(--r, 0deg));
+  }
+  50% {
+    transform: translateY(-10px) rotate(var(--r, 0deg));
+  }
+}
+.me-twinkle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: me-twinkle 3s ease-in-out infinite;
+}
+.me-float {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: me-float 6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .me-twinkle,
+  .me-float {
+    animation: none;
+  }
+  .me-loader * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* Hero slider: the active progress bar fills over the slide time, then the slider advances */
+@keyframes me-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.me-progress {
+  transform-origin: left center;
+  animation-name: me-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .me-progress { animation: none; transform: scaleX(1); }
+}
+
+/* Slide-right button: a violet fill sweeps in from the left on hover or keyboard focus */
+.me-slide-right {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition: box-shadow 0.35s ease-out;
+}
+.me-slide-right::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  background: var(--me-violet);
+  transition: width 0.35s ease-out;
+  z-index: -1;
+}
+.me-slide-right:hover::before,
+.me-slide-right:focus-visible::before {
+  width: 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .me-slide-right,
+  .me-slide-right::before { transition: none; }
+}

@@ -234,7 +234,7 @@ export default async function EventPage({ params }: EventPageProps) {
         )}
 
         {/* Content container */}
-        <div className="relative container mx-auto px-4 py-8 md:py-12 pt-28 md:pt-32">
+        <div className="relative container mx-auto px-4 py-8 md:py-12 pt-8 md:pt-10">
           <div className="grid md:grid-cols-2 gap-8 items-start">
             {/* Left: Featured Image */}
             <div className="mb-6 md:mb-20 relative">

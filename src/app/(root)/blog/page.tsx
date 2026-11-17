@@ -1,7 +1,7 @@
 import { getPublishedBlogs, getBlogCategories } from '@/actions/blog-actions';
 import { BlogGrid } from '@/components/blog/blog-grid';
+import { EventBackdrop } from '@/components/brand/event-backdrop';
 import { Search } from 'lucide-react';
-import { Input } from '@/components/ui/input';
 
 export const metadata = {
   title: 'Event Insights & Tips | MyEvent.com.ng Blog',
@@ -27,55 +27,23 @@ export default async function BlogPage() {
       : [];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
-      {/* Hero Section */}
-      <section className="relative py-20 bg-black text-white overflow-hidden p-20">
-        {/* Background Image */}
-        <div
-          className="absolute inset-0 bg-cover bg-center z-0"
-          style={{
-            backgroundImage:
-              "url('https://images.unsplash.com/photo-1518972559570-0f042c55c98b?auto=format&fit=crop&w=1920&q=80')",
-          }}
-        >
-          <div className="absolute inset-0 bg-black/60" /> {/* Dark overlay */}
-        </div>
-
-        {/* Content */}
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mt-10 z-10">
-          <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-full text-sm font-semibold mb-6">
-            <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-            Event Industry Insights
-          </div>
-
-          <h1 className="text-5xl md:text-6xl font-bold mb-6">
-            Event{' '}
-            <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-              Insights
-            </span>{' '}
-            & Tips
+    <div className="min-h-screen bg-[var(--me-bg)]">
+      <section className="relative overflow-hidden py-14 sm:py-20">
+        <EventBackdrop variant="hero" />
+        <div className="relative mx-auto max-w-3xl px-4 text-center">
+          <h1 className="font-display text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">
+            Event tips and news
           </h1>
-
-          <p className="text-xl text-white/90 max-w-3xl mx-auto mb-8">
-            Discover expert tips, industry trends, and actionable insights to
-            make your events unforgettable. From planning to execution,
-            we&apos;ve got you covered.
+          <p className="mx-auto mt-4 max-w-2xl text-lg text-[var(--me-muted)]">
+            Advice for hosts and guests, plus what is happening in the Nigerian
+            events scene.
           </p>
-
-          {/* Search Bar */}
-          <div className="max-w-md mx-auto relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <Input
-              placeholder="Search blog posts..."
-              className="pl-12 h-12 text-lg border-2 border-white/50 bg-white/80 backdrop-blur-sm text-black"
-            />
-          </div>
         </div>
       </section>
 
-      {/* Blog Grid */}
-      <section className="py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="relative overflow-hidden pb-20">
+        <EventBackdrop variant="section" />
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {blogs.length > 0 ? (
             <BlogGrid
               initialBlogs={blogs}
@@ -83,15 +51,11 @@ export default async function BlogPage() {
               categories={categories}
             />
           ) : (
-            <div className="text-center py-16">
-              <div className="w-24 h-24 bg-gradient-to-r from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <Search className="w-12 h-12 text-gray-400" />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                No blog posts yet
-              </h3>
-              <p className="text-gray-600">
-                Check back soon for exciting content!
+            <div className="mx-auto max-w-md rounded-2xl border-2 border-dashed border-[var(--me-line)] px-6 py-16 text-center">
+              <Search className="mx-auto mb-4 h-12 w-12 text-[var(--me-violet)]" aria-hidden="true" />
+              <h3 className="font-display text-2xl font-bold">No articles yet</h3>
+              <p className="mt-2 text-[var(--me-muted)]">
+                New posts are on the way. Check back soon.
               </p>
             </div>
           )}

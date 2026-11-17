@@ -114,14 +114,14 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+    <div className="min-h-screen bg-[var(--me-bg)]">
       {/* Back Button */}
-      <div className="bg-white border-b">
+      <div className="border-b-2 border-[var(--me-line)] bg-[var(--me-bg-deep)]">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <Link href="/blog">
-            <Button variant="ghost" className="gap-2">
+            <Button variant="ghost" className="gap-2 rounded-full text-white hover:bg-[var(--me-raised)] hover:text-white">
               <ArrowLeft className="w-4 h-4" />
-              Back to Blog
+              All articles
             </Button>
           </Link>
         </div>
@@ -130,30 +130,29 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
       {/* Hero Section */}
       <section className="py-12">
         <div className="max-w-4xl mx-auto px-4">
-          <article className="bg-white rounded-2xl shadow-xl overflow-hidden">
+          <article className="rounded-2xl border-2 border-[var(--me-line)] bg-[var(--me-surface)] overflow-hidden shadow-[8px_8px_0_0_var(--me-violet)]">
             {/* Featured Image */}
             {blog.featuredImage && (
-              <div className="relative h-96 overflow-hidden">
+              <div className="relative aspect-[16/10] overflow-hidden sm:aspect-auto sm:h-96">
                 <Image
                   fill
                   src={blog.featuredImage}
                   alt={blog.title}
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
 
                 {/* Category Badge */}
                 <div
-                  className="absolute top-6 left-6 px-4 py-2 rounded-full text-white font-semibold shadow-lg"
-                  style={{ backgroundColor: blog.category.color }}
+                  className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full bg-[var(--me-bg-deep)] px-4 py-2 text-sm font-semibold text-white sm:left-6 sm:top-6"
                 >
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: blog.category.color }} aria-hidden="true" />
                   {blog.category.name}
                 </div>
 
                 {/* Share Button */}
                 <Button
                   size="icon"
-                  className="absolute top-6 right-6 bg-white/90 hover:bg-white text-gray-700"
+                  aria-label="Share" className="absolute right-4 top-4 rounded-full bg-[var(--me-red)] text-white hover:bg-[var(--me-red)] sm:right-6 sm:top-6"
                 >
                   <Share2 className="w-4 h-4" />
                 </Button>
@@ -161,14 +160,14 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             )}
 
             {/* Content */}
-            <div className="p-8">
+            <div className="p-5 sm:p-8">
               {/* Title */}
-              <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6 leading-tight">
+              <h1 className="font-display text-3xl font-extrabold leading-tight text-white mb-6 sm:text-5xl">
                 {blog.title}
               </h1>
 
               {/* Meta Information */}
-              <div className="flex flex-wrap items-center gap-6 text-gray-600 mb-8 pb-8 border-b">
+              <div className="flex flex-wrap items-center gap-6 text-[var(--me-muted)] mb-8 pb-8 border-b-2 border-[var(--me-line)]">
                 <div className="flex items-center gap-2">
                   <User className="w-5 h-5" />
                   <span className="font-medium">{blog.author.name}</span>
@@ -196,8 +195,8 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               {blog.tags.length > 0 && (
                 <div className="mb-8">
                   <div className="flex items-center gap-2 mb-3">
-                    <Tag className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm font-medium text-gray-500">
+                    <Tag className="w-4 h-4 text-[var(--me-muted)]" />
+                    <span className="text-sm font-medium text-[var(--me-muted)]">
                       Tags
                     </span>
                   </div>
@@ -213,7 +212,7 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
 
               {/* Content */}
               <div
-                className="prose prose-lg max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-p:leading-relaxed prose-a:text-blue-600 prose-strong:text-gray-900"
+                className="prose prose-lg prose-invert max-w-none prose-headings:font-display prose-headings:text-white prose-p:text-[var(--me-muted)] prose-p:leading-relaxed prose-a:text-[var(--me-violet)] prose-strong:text-white"
                 dangerouslySetInnerHTML={{
                   __html: blog.content.replace(/\n/g, '<br />'),
                 }}
@@ -223,20 +222,20 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
         </div>
       </section>
 
-      {/* Related Posts */}
+      {/* Keep reading */}
       {relatedPosts.length > 0 && (
         <section className="py-16">
           <div className="max-w-7xl mx-auto px-4">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                Related Posts
+            <div className="mb-8">
+              <h2 className="font-display text-3xl font-extrabold text-white mb-2">
+                Keep reading
               </h2>
-              <p className="text-gray-600">
+              <p className="text-[var(--me-muted)]">
                 More insights from the {blog.category.name} category
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
               {relatedPosts.map((post) => (
                 <BlogCard
                   key={post.id}

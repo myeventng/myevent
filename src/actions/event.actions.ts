@@ -802,6 +802,7 @@ export async function getEventsWithFilters({
   limit = 12,
   search = "",
   categoryId = "",
+  majorCategoryId = "",
   cityId = "",
   tagIds = [],
   dateRange = "",
@@ -818,6 +819,7 @@ export async function getEventsWithFilters({
   limit?: number;
   search?: string;
   categoryId?: string;
+  majorCategoryId?: string;
   cityId?: string;
   tagIds?: string[];
   dateRange?: string;
@@ -917,6 +919,11 @@ export async function getEventsWithFilters({
     // Add category filter
     if (categoryId) {
       where.categoryId = categoryId;
+    }
+
+    // Add major category filter (an event belongs to one through its category)
+    if (majorCategoryId) {
+      where.category = { is: { majorCategoryId } };
     }
 
     // Add city filter
@@ -1297,13 +1304,17 @@ export async function getEventsWithFilters({
 // Get filter options for the events page
 export async function getEventFilterOptions(): Promise<
   ActionResponse<{
+    majorCategories: any[];
     categories: any[];
     cities: any[];
     tags: any[];
   }>
 > {
   try {
-    const [categories, cities, tags] = await Promise.all([
+    const [majorCategories, categories, cities, tags] = await Promise.all([
+      prisma.majorCategory.findMany({
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      }),
       prisma.category.findMany({
         orderBy: { name: "asc" },
       }),
@@ -1340,6 +1351,7 @@ export async function getEventFilterOptions(): Promise<
     return {
       success: true,
       data: {
+        majorCategories,
         categories,
         cities,
         tags,

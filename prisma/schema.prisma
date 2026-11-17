@@ -638,11 +638,28 @@ model TicketValidation {
 }
 
 model Category {
-  id     String  @id @default(cuid())
-  name   String  @unique
-  events Event[]
+  id              String         @id @default(cuid())
+  name            String         @unique
+  events          Event[]
+  // The major category (Clubbing, Comedy, Live Music, ...) this category sits under.
+  // Null until it is assigned; unassigned categories still work, they just do not
+  // appear under a major category filter.
+  majorCategoryId String?
+  majorCategory   MajorCategory? @relation(fields: [majorCategoryId], references: [id], onDelete: SetNull)
 
   @@index([name])
+  @@index([majorCategoryId])
+}
+
+// The fixed set of top-level groups shown in the category filters on the site.
+model MajorCategory {
+  id         String     @id @default(cuid())
+  name       String     @unique
+  slug       String     @unique
+  sortOrder  Int        @default(0)
+  categories Category[]
+
+  @@index([sortOrder])
 }
 
 model City {
@@ -1469,4 +1486,66 @@ model OfflineSale {
   @@index([batchId])
   @@index([eventId, createdAt])
   @@index([ticketTypeId])
+}
+
+// ─── Contact form + newsletter ────────────────────────────────────────────────
+// Public /contact submissions, managed by admins in /admin/dashboard/messages.
+enum ContactStatus {
+  NEW
+  READ
+  REPLIED
+  ARCHIVED
+}
+
+model ContactMessage {
+  id        String        @id @default(cuid())
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  name      String
+  email     String
+  phone     String?
+  topic     String // e.g. "Buying tickets", "Hosting an event"
+  subject   String
+  message   String        @db.Text
+  status    ContactStatus @default(NEW)
+  adminNote String?       @db.Text
+  repliedAt DateTime?
+  repliedBy String? // admin user id
+
+  @@index([status, createdAt])
+  @@index([email])
+}
+
+// Newsletter subscribers, managed in /admin/dashboard/subscribers.
+enum SubscriberStatus {
+  ACTIVE
+  UNSUBSCRIBED
+}
+
+model NewsletterSubscriber {
+  id             String           @id @default(cuid())
+  email          String           @unique // always stored lower-case
+  status         SubscriberStatus @default(ACTIVE)
+  // Secret used in the unsubscribe link, so nobody can unsubscribe other people.
+  token          String           @unique @default(cuid())
+  source         String? // where they signed up, e.g. "home", "footer"
+  subscribedAt   DateTime         @default(now())
+  unsubscribedAt DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([status, subscribedAt])
+}
+
+// One row per newsletter an admin sent from the dashboard.
+model NewsletterCampaign {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  subject     String
+  body        String   @db.Text
+  sentCount   Int      @default(0)
+  failedCount Int      @default(0)
+  sentBy      String? // admin user id
+
+  @@index([createdAt])
 }

@@ -17,6 +17,7 @@ import { X, Star, Trophy, Calendar, Users, Vote } from 'lucide-react';
 
 interface FilterState {
   search: string;
+  majorCategoryId?: string;
   categoryId: string;
   cityId: string;
   tagIds: string[];
@@ -33,10 +34,11 @@ interface FilterState {
 
 interface EventsFiltersProps {
   filters: FilterState;
-  updateFilter: (key: keyof FilterState, value: any) => void;
+  updateFilter: (key: any, value: any) => void;
   clearAllFilters: () => void;
   filterOptions: {
-    categories: Array<{ id: string; name: string }>;
+    majorCategories?: Array<{ id: string; name: string }>;
+    categories: Array<{ id: string; name: string; majorCategoryId?: string | null }>;
     cities: Array<{ id: string; name: string }>;
     tags: Array<{ id: string; name: string; bgColor: string }>;
   };
@@ -74,8 +76,16 @@ export function EventsFilters({
     }
   };
 
+  // With a major category picked, only its categories are offered.
+  const visibleCategories = filters.majorCategoryId
+    ? filterOptions.categories.filter(
+        (c) => c.majorCategoryId === filters.majorCategoryId
+      )
+    : filterOptions.categories;
+
   const hasActiveFilters = () => {
     return (
+      filters.majorCategoryId ||
       filters.categoryId ||
       filters.cityId ||
       filters.tagIds.length > 0 ||
@@ -210,11 +220,38 @@ export function EventsFilters({
         </>
       )}
 
+      {/* Major category filter */}
+      {(filterOptions.majorCategories?.length ?? 0) > 0 && (
+        <div className="space-y-3">
+          <Label className="text-base font-medium">Type of event</Label>
+          <Select
+            value={filters.majorCategoryId || 'all'}
+            onValueChange={(value) => {
+              updateFilter('majorCategoryId', value === 'all' ? '' : value);
+              // a category from another group no longer applies
+              updateFilter('categoryId', '');
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="All types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All types</SelectItem>
+              {filterOptions.majorCategories!.map((major) => (
+                <SelectItem key={major.id} value={major.id}>
+                  {major.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Category Filter */}
       <div className="space-y-3">
         <Label className="text-base font-medium">Category</Label>
         <Select
-          value={filters.categoryId}
+          value={filters.categoryId || 'all'}
           onValueChange={(value) =>
             updateFilter('categoryId', value === 'all' ? '' : value)
           }
@@ -224,7 +261,7 @@ export function EventsFilters({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All categories</SelectItem>
-            {filterOptions.categories.map((category) => (
+            {visibleCategories.map((category) => (
               <SelectItem key={category.id} value={category.id}>
                 {category.name}
               </SelectItem>
@@ -391,6 +428,16 @@ export function EventsFilters({
         <div className="bg-muted/50 rounded-lg p-3 space-y-2">
           <p className="text-sm font-medium">Active Filters:</p>
           <div className="space-y-1 text-xs text-muted-foreground">
+            {filters.majorCategoryId && (
+              <div>
+                • Type:{' '}
+                {
+                  filterOptions.majorCategories?.find(
+                    (m) => m.id === filters.majorCategoryId
+                  )?.name
+                }
+              </div>
+            )}
             {filters.categoryId && (
               <div>
                 • Category:{' '}
