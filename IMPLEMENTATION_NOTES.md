@@ -166,3 +166,7 @@ Deploy: `npx prisma migrate deploy` then `npx prisma generate`.
 ## Darker background and readable small text
 
 `.me-theme` palette: bg `#160a26`, bg-deep `#0e0618`, surface `#211040`, raised `#2d1752` (posters stand out more). New `--me-red-text` (`#ff5273`) and `--me-violet-text` (`#b98aff`) for small text (4.5:1+); `--me-red` and `--me-violet` stay for buttons, fills and large text. Used on event tile/card date lines and the create-event page.
+
+## "For organisers" showcase on the landing page
+
+`src/components/homepage/organizer-showcase.tsx`, mounted in `homepage-client.tsx` between Explore events and the blog (lazy loaded, client only). Five tabs (online and physical tickets, three event types, dashboard and analytics, door scanning, team roles and offline sales), each with a mockup built in code with invented sample data (no images to download). The only animation is the analytics chart drawing in when its tab opens; it and the panel fade respect `prefers-reduced-motion` (CSS at the end of `globals.css`). The CTA links to `/events/create`. To change wording, edit the `FEATURES` array.

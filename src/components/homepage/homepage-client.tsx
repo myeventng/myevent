@@ -27,6 +27,14 @@ const ExploreEventsSection = dynamic(
   { ssr: false }
 );
 
+const OrganizerShowcase = dynamic(
+  () =>
+    import('@/components/homepage/organizer-showcase').then((mod) => ({
+      default: mod.OrganizerShowcase,
+    })),
+  { ssr: false }
+);
+
 const BlogSection = dynamic(
   () =>
     import('@/components/homepage/blog-section').then((mod) => ({
@@ -102,6 +110,8 @@ export function HomepageClient() {
               onCategoryChange={setMajorCategoryId}
             />
           )}
+
+          <OrganizerShowcase />
 
           {(blogs.data?.length ?? 0) > 0 && <BlogSection blogPosts={blogs.data ?? []} />}
 
