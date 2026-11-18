@@ -1,5 +1,6 @@
 import Footer from '@/components/layout/footer';
 import MainHeader from '@/components/layout/main-header';
+import { WhatsappWidget } from '@/components/layout/whatsapp-widget';
 
 export default function RootLayout({
   children,
@@ -11,6 +12,7 @@ export default function RootLayout({
       <MainHeader />
       <main className="flex-1 pt-[72px]">{children}</main>
       <Footer />
+      <WhatsappWidget />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
 } from '@/actions/event.actions';
 import { getPublishedBlogs } from '@/actions/blog-actions';
 import { getCategories, getMajorCategories } from '@/actions/category-actions';
+import { getWhatsappWidget } from '@/actions/whatsapp-actions';
 import { getCities } from '@/actions/city-actions';
 import { getTags } from '@/actions/tag.actions';
 import { getVenues } from '@/actions/venue-actions';
@@ -48,6 +49,7 @@ export const queryKeys = {
   tags: ['ref', 'tags'] as const,
   cities: ['ref', 'cities'] as const,
   venues: ['ref', 'venues'] as const,
+  whatsapp: ['site', 'whatsapp'] as const,
 };
 
 /* ----------------------------- events ----------------------------- */
@@ -204,6 +206,17 @@ export function useVenues(enabled = true) {
     queryKey: queryKeys.venues,
     queryFn: async () => unwrap(await getVenues(), 'Could not load venues'),
     enabled,
+    staleTime,
+    meta: PERSIST_META,
+  });
+}
+
+/** The WhatsApp chat widget settings (null when it is off). Saved in the browser like the rest. */
+export function useWhatsappWidget() {
+  const staleTime = useFreshness();
+  return useQuery({
+    queryKey: queryKeys.whatsapp,
+    queryFn: async () => unwrap(await getWhatsappWidget(), 'Could not load chat settings'),
     staleTime,
     meta: PERSIST_META,
   });

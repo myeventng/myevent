@@ -36,6 +36,7 @@ import {
   ShoppingCart, // Added ShoppingCart icon for orders
   Mail,
   MessageSquare,
+  MessageCircle,
   Percent,
   Printer,
   UserPlus,
@@ -300,6 +301,11 @@ export function Sidebar({
           title: 'Newsletter',
           href: '/admin/dashboard/subscribers',
           icon: <Mail className="w-4 h-4" />,
+        },
+        {
+          title: 'WhatsApp Chat',
+          href: '/admin/dashboard/whatsapp',
+          icon: <MessageCircle className="w-4 h-4" />,
         },
       ],
     },
