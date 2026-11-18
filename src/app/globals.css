@@ -398,25 +398,8 @@
   .me-theme .me-slide-right::before { transition: none; }
 }
 
-/* Organiser showcase: panel fade-in and the one chart "draw" animation. */
+/* Organiser showcase: stage fade-in when the feature changes. */
 @keyframes me-showcase-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
-}
-@keyframes me-chart-draw {
-  from { stroke-dashoffset: 1; }
-  to { stroke-dashoffset: 0; }
-}
-@keyframes me-chart-fill {
-  from { opacity: 0; }
-  to { opacity: 0.25; }
-}
-.me-theme .me-showcase-in { animation: me-showcase-in 0.35s ease-out both; }
-.me-theme .me-chart-line { stroke-dasharray: 1; animation: me-chart-draw 1.6s ease-out 0.2s both; }
-.me-theme .me-chart-fill { animation: me-chart-fill 1.2s ease-out 1s both; }
-@media (prefers-reduced-motion: reduce) {
-  .me-theme .me-showcase-in,
-  .me-theme .me-chart-line,
-  .me-theme .me-chart-fill { animation: none; }
-  .me-theme .me-chart-line { stroke-dasharray: none; }
 }

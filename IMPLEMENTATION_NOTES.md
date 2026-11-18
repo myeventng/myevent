@@ -167,6 +167,12 @@ Deploy: `npx prisma migrate deploy` then `npx prisma generate`.
 
 `.me-theme` palette: bg `#160a26`, bg-deep `#0e0618`, surface `#211040`, raised `#2d1752` (posters stand out more). New `--me-red-text` (`#ff5273`) and `--me-violet-text` (`#b98aff`) for small text (4.5:1+); `--me-red` and `--me-violet` stay for buttons, fills and large text. Used on event tile/card date lines and the create-event page.
 
-## "For organisers" showcase on the landing page
+## "For organisers" pinned scroll showcase
 
-`src/components/homepage/organizer-showcase.tsx`, mounted in `homepage-client.tsx` between Explore events and the blog (lazy loaded, client only). Five tabs (online and physical tickets, three event types, dashboard and analytics, door scanning, team roles and offline sales), each with a mockup built in code with invented sample data (no images to download). The only animation is the analytics chart drawing in when its tab opens; it and the panel fade respect `prefers-reduced-motion` (CSS at the end of `globals.css`). The CTA links to `/events/create`. To change wording, edit the `FEATURES` array.
+`src/components/homepage/organizer-showcase.tsx`, mounted in `homepage-client.tsx` between Explore events and the blog (lazy loaded, client only).
+
+- **Behaviour (RomTech style):** a tall track with a sticky frame. The frame stays pinned while the page scrolls through five features: left panel (icon, title, text, bullets that fade in one by one like the Starlink feature cards, clickable 01-05 list), right panel (the screens), and a "01 /05" badge across the seam. Uses framer-motion `useScroll`.
+- **Shuffle cards:** features with more than one card (online and physical tickets, three kinds of event, door scanning) show a card stack; as you scroll inside that feature the top card flicks to the back. Single-screen features (analytics, staff) show one screen.
+- **Mockups match the real UI:** light dashboard with the real organiser sidebar, Analytics tabs and cards (Total Revenue, Tickets Sold, Available Payout, Active Events, Revenue Breakdown, Performance Summary), Generate physical tickets form, event type cards (text from the create flow), Scanner mode card, Your team table. All numbers and names are sample data and the panel says so. On phones the sidebar is hidden, like the real app.
+- **Using real screenshots instead:** save images in `public/showcase/` and set `images: ['/showcase/analytics.webp']` on a feature in `FEATURES` (same count as its cards). The images replace that feature's mockups.
+- Reduced-motion visitors get no spring or fade (stack still changes). Wording, bullets and order: edit `FEATURES`. Scroll length per feature: `WEIGHTS` / `VH_PER_UNIT`.
