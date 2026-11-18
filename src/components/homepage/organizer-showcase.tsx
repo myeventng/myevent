@@ -81,13 +81,13 @@ function ScaleToFit({ w, h, children }: { w: number; h: number; children: ReactN
 
 const RED = '#e5173f';
 
-/** True on phones and small tablets, where the real app hides its sidebar too. */
+/** True on phones (below 768px), where the real app hides its sidebar too. Tablets keep the full dashboard. */
 const NarrowCtx = createContext(false);
 
 function useNarrowQuery() {
   const [narrow, setNarrow] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 1023px)');
+    const mq = window.matchMedia('(max-width: 767px)');
     const on = () => setNarrow(mq.matches);
     on();
     mq.addEventListener('change', on);
@@ -550,18 +550,18 @@ export function OrganizerShowcase() {
       {/* Tall track; the inner frame stays pinned while the page scrolls through it. */}
       <div ref={track} style={{ height: `${100 + TOTAL * VH_PER_UNIT}vh` }} className="relative">
         <div className="sticky top-[72px] h-[calc(100svh-72px)] px-3 pb-4 sm:px-6 lg:px-8">
-          <div className="relative mx-auto grid h-full max-w-7xl grid-rows-[auto_minmax(0,1fr)] gap-3 lg:grid-cols-[5fr_7fr] lg:grid-rows-1 lg:gap-6">
+          <div className="relative mx-auto grid h-full max-w-7xl grid-rows-[auto_minmax(0,1fr)] gap-3 lg:grid-cols-[4fr_6fr] xl:grid-cols-[5fr_7fr] lg:grid-rows-1 lg:gap-6">
             {/* Left: text panel */}
-            <div className="relative flex flex-col rounded-3xl border border-[var(--me-line)] bg-[var(--me-surface)] p-5 sm:p-7 lg:p-10">
+            <div className="relative flex min-h-0 flex-col rounded-3xl border border-[var(--me-line)] bg-[var(--me-surface)] p-5 sm:p-7 lg:p-8 xl:p-10">
               <div className="flex items-center gap-3">
                 <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--me-red)]"><Icon className="h-6 w-6 text-white" aria-hidden="true" /></span>
                 <span className="font-display text-sm italic text-[var(--me-muted)] lg:hidden">{pad(state.i + 1)} /{pad(FEATURES.length)}</span>
               </div>
 
-              <motion.div key={f.id} initial={reduce ? false : { opacity: 0, y: 28 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="mt-4 lg:mt-8 lg:pr-24" aria-live="polite">
-                <h3 className="font-display text-2xl font-extrabold leading-tight text-white sm:text-3xl lg:text-4xl">{f.title}</h3>
-                <p className="mt-2 hidden text-sm text-[var(--me-muted)] sm:block sm:text-base lg:mt-4">{f.text}</p>
-                <ul className="mt-5 hidden space-y-2.5 lg:block">
+              <motion.div key={f.id} initial={reduce ? false : { opacity: 0, y: 28 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="mt-4 min-h-0 overflow-hidden lg:mt-6 lg:pr-16 xl:mt-8 xl:pr-24" aria-live="polite">
+                <h3 className="font-display text-2xl font-extrabold leading-tight text-white sm:text-3xl xl:text-4xl">{f.title}</h3>
+                <p className="mt-2 hidden text-sm text-[var(--me-muted)] sm:block sm:text-base lg:mt-3 xl:mt-4">{f.text}</p>
+                <ul className="mt-4 hidden space-y-2 md:block lg:mt-5 lg:space-y-2.5 [@media(max-height:680px)]:hidden">
                   {f.bullets.map((b, bi) => (
                     <motion.li
                       key={b}
@@ -577,7 +577,7 @@ export function OrganizerShowcase() {
                 </ul>
               </motion.div>
 
-              <nav aria-label="Organiser features" className="mt-auto hidden pt-6 lg:block">
+              <nav aria-label="Organiser features" className="mt-auto hidden pt-4 lg:[@media(min-height:800px)]:block">
                 <ol className="space-y-1">
                   {FEATURES.map((x, i) => (
                     <li key={x.id}>
@@ -595,14 +595,14 @@ export function OrganizerShowcase() {
               </nav>
 
               {/* Number badge straddling the seam, like RomTech */}
-              <div className="pointer-events-none absolute -right-14 top-[46%] z-20 hidden h-36 w-36 flex-col justify-between rounded-3xl border border-[var(--me-line)] bg-[var(--me-raised)] p-4 shadow-[6px_6px_0_0_var(--me-violet)] lg:flex" aria-hidden="true">
-                <span className="font-display text-4xl font-extrabold italic text-white">{pad(state.i + 1)}</span>
-                <span className="self-end font-display text-xl italic text-[var(--me-muted)]">/{pad(FEATURES.length)}</span>
+              <div className="pointer-events-none absolute -right-10 top-[46%] z-20 hidden h-28 w-28 flex-col justify-between rounded-3xl border border-[var(--me-line)] bg-[var(--me-raised)] p-3 shadow-[5px_5px_0_0_var(--me-violet)] lg:flex xl:-right-14 xl:h-36 xl:w-36 xl:p-4 xl:shadow-[6px_6px_0_0_var(--me-violet)]" aria-hidden="true">
+                <span className="font-display text-3xl font-extrabold italic text-white xl:text-4xl">{pad(state.i + 1)}</span>
+                <span className="self-end font-display text-lg italic text-[var(--me-muted)] xl:text-xl">/{pad(FEATURES.length)}</span>
               </div>
             </div>
 
             {/* Right: stage */}
-            <div className="relative min-h-0 overflow-hidden rounded-3xl border border-[var(--me-line)] bg-gradient-to-br from-[var(--me-raised)] via-[var(--me-surface)] to-[#3a1670] p-3 sm:p-6 lg:p-8 lg:pl-14" role="img" aria-label={`${f.title}: example screens with sample data`}>
+            <div className="relative min-h-0 overflow-hidden rounded-3xl border border-[var(--me-line)] bg-gradient-to-br from-[var(--me-raised)] via-[var(--me-surface)] to-[#3a1670] p-3 sm:p-6 lg:p-6 lg:pl-12 xl:p-8 xl:pl-14" role="img" aria-label={`${f.title}: example screens with sample data`}>
               <div key={f.id} className="h-full w-full" style={{ animation: reduce ? undefined : 'me-showcase-in 0.4s ease-out both' }}>
                 <div className="flex h-full flex-col">
                   <div className="min-h-0 flex-1"><NarrowCtx.Provider value={narrow}><ShuffleStack feature={f} step={state.step} reduce={reduce} /></NarrowCtx.Provider></div>
