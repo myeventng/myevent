@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import Link from 'next/link';
-import { motion, useMotionValueEvent, useReducedMotion, useScroll } from 'framer-motion';
+import { motion, useMotionValue, useMotionValueEvent, useReducedMotion, useScroll, useTransform, type MotionValue } from 'framer-motion';
 import {
   BarChart3,
   Bell,
@@ -459,7 +459,9 @@ const FEATURES: Feature[] = [
 ];
 
 /** How much scroll each feature gets (more cards = longer). */
-const WEIGHTS = FEATURES.map((f) => (f.cards.length > 1 ? 0.55 * f.cards.length + 0.35 : 1));
+const WEIGHTS = FEATURES.map((f) => (f.cards.length > 1 ? 0.75 * f.cards.length + 0.5 : 1));
+/** Share of each feature's scroll spent holding on its first and last card, so flipping cards and changing feature never happen together. */
+const HOLD = 0.2;
 const TOTAL = WEIGHTS.reduce((a, b) => a + b, 0);
 const BOUNDS = WEIGHTS.reduce<number[]>((acc, w) => [...acc, acc[acc.length - 1] + w / TOTAL], [0]);
 const VH_PER_UNIT = 70;
@@ -468,14 +470,49 @@ const VH_PER_UNIT = 70;
 /* Shuffle stack                                                       */
 /* ================================================================== */
 
-function ShuffleStack({ feature, step, reduce }: { feature: Feature; step: number; reduce: boolean }) {
+/**
+ * One card of the stack. Its position is computed from `p` (a scroll-linked value, 0 to cards-1),
+ * so the card only moves while the user scrolls and stops exactly where they stop.
+ * t in [0,1): this card is flying from the front to the back; t in [1,k): resting, moving forward.
+ */
+function StackCard({ i, k, dh, peek, p, reduce, children }: { i: number; k: number; dh: number; peek: number; p: MotionValue<number>; reduce: boolean; children: ReactNode }) {
+  const m = useTransform(p, (v) => {
+    const pv = reduce ? Math.round(v) : v;
+    const t = (((pv - i) % k) + k) % k;
+    const leaving = t < 1;
+    const pos = leaving ? t * (k - 1) : k - t;
+    const arc = leaving ? Math.sin(Math.PI * t) : 0;
+    const dir = i % 2 ? -1 : 1;
+    return {
+      y: pos * peek,
+      x: dir * arc * 34,
+      scale: 1 - pos * 0.045,
+      rotate: dir * (Math.min(pos, 1) * 1.6 + arc * 5),
+      z: leaving ? (t < 0.5 ? k + 1 : 0) : k - Math.round(pos),
+      filter: `brightness(${1 - 0.18 * Math.min(pos, 1)})`,
+    };
+  });
+  const x = useTransform(m, (o) => o.x);
+  const y = useTransform(m, (o) => o.y);
+  const scale = useTransform(m, (o) => o.scale);
+  const rotate = useTransform(m, (o) => o.rotate);
+  const zIndex = useTransform(m, (o) => o.z);
+  const filter = useTransform(m, (o) => o.filter);
+  return (
+    <motion.div className="absolute left-0 top-0 w-full" style={{ height: dh, x, y, scale, rotate, zIndex, filter, transformOrigin: 'bottom center' }}>
+      {children}
+    </motion.div>
+  );
+}
+
+function ShuffleStack({ feature, p, reduce }: { feature: Feature; p: MotionValue<number>; reduce: boolean }) {
   const narrow = useContext(NarrowCtx);
   const dw = narrow ? feature.nw : feature.w;
   const dh = narrow ? feature.nh : feature.h;
   const k = feature.cards.length;
   const peek = 18;
   const nodes = feature.images
-    ? feature.images.map((src, i) => (
+    ? feature.images.map((src) => (
         // eslint-disable-next-line @next/next/no-img-element
         <img key={src} src={src} alt="" className="h-full w-full rounded-2xl border border-gray-200 object-cover shadow-2xl" loading="lazy" />
       ))
@@ -483,21 +520,11 @@ function ShuffleStack({ feature, step, reduce }: { feature: Feature; step: numbe
   return (
     <ScaleToFit w={dw} h={dh + (k - 1) * peek}>
       <div className="relative h-full w-full">
-        {nodes.map((node, i) => {
-          const pos = (i - step + k) % k;
-          return (
-            <motion.div
-              key={i}
-              className="absolute left-0 top-0 w-full"
-              style={{ height: dh, zIndex: k - pos, transformOrigin: 'bottom center' }}
-              initial={false}
-              animate={{ y: pos * peek, scale: 1 - pos * 0.045, rotate: pos === 0 ? 0 : (pos % 2 ? -1.6 : 1.6) }}
-              transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 220, damping: 22 }}
-            >
-              <div className="h-full w-full" style={{ filter: pos === 0 ? 'none' : 'brightness(0.82)' }}>{node}</div>
-            </motion.div>
-          );
-        })}
+        {nodes.map((node, i) => (
+          <StackCard key={i} i={i} k={k} dh={dh} peek={peek} p={p} reduce={reduce}>
+            <div className="h-full w-full">{node}</div>
+          </StackCard>
+        ))}
       </div>
     </ScaleToFit>
   );
@@ -515,13 +542,16 @@ export function OrganizerShowcase() {
   const narrow = useNarrowQuery();
 
   const { scrollYProgress } = useScroll({ target: track, offset: ['start start', 'end end'] });
+  const p = useMotionValue(0);
   useMotionValueEvent(scrollYProgress, 'change', (v) => {
     const t = Math.min(Math.max(v, 0), 0.9999);
     let i = 0;
     while (i < FEATURES.length - 1 && t >= BOUNDS[i + 1]) i++;
     const local = (t - BOUNDS[i]) / (BOUNDS[i + 1] - BOUNDS[i]);
     const k = FEATURES[i].cards.length;
-    const step = Math.min(k - 1, Math.floor(local * k));
+    const prog = k > 1 ? Math.min(Math.max((local - HOLD) / (1 - 2 * HOLD), 0), 1) * (k - 1) : 0;
+    p.set(prog);
+    const step = Math.round(prog);
     setState((s) => (s.i === i && s.step === step ? s : { i, step }));
   });
 
@@ -605,7 +635,7 @@ export function OrganizerShowcase() {
             <div className="relative min-h-0 overflow-hidden rounded-3xl border border-[var(--me-line)] bg-gradient-to-br from-[var(--me-raised)] via-[var(--me-surface)] to-[#3a1670] p-3 sm:p-6 lg:p-6 lg:pl-12 xl:p-8 xl:pl-14" role="img" aria-label={`${f.title}: example screens with sample data`}>
               <div key={f.id} className="h-full w-full" style={{ animation: reduce ? undefined : 'me-showcase-in 0.4s ease-out both' }}>
                 <div className="flex h-full flex-col">
-                  <div className="min-h-0 flex-1"><NarrowCtx.Provider value={narrow}><ShuffleStack feature={f} step={state.step} reduce={reduce} /></NarrowCtx.Provider></div>
+                  <div className="min-h-0 flex-1"><NarrowCtx.Provider value={narrow}><ShuffleStack feature={f} p={p} reduce={reduce} /></NarrowCtx.Provider></div>
                   {f.cards.length > 1 && (
                     <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs" aria-hidden="true">
                       {f.labels.map((l, li) => (
