@@ -172,7 +172,7 @@ export async function prepareBatch(
         ticketsPerPage: input.ticketsPerPage,
         showSerial: input.showSerial,
         organizerLabel: input.organizerLabel || null,
-        scannerMode: scannerSettings?.mode ?? 'UNIVERSAL',
+        scannerMode: scannerSettings?.mode ?? 'INBUILT_ONLY',
         status: needsPayment ? 'PENDING_PAYMENT' : 'READY',
         pricingTierId: quote.tierId,
         feeKobo,

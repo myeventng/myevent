@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
       venueText: [v?.name, v?.address, v?.city?.name].filter(Boolean).join(', '),
       ticketTypeName: type.name,
       organizerLabel: o.organizerLabel || null,
-      scanText: describeScan(o.codeFormat, scanner?.mode ?? 'UNIVERSAL'),
+      scanText: describeScan(o.codeFormat, scanner?.mode ?? 'INBUILT_ONLY'),
     },
   });
   return new NextResponse(new Uint8Array(pdf), { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'inline; filename="preview.pdf"', 'Cache-Control': 'private, no-store' } });

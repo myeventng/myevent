@@ -355,8 +355,8 @@ function ScannerModeCard() {
       <div className="border-b border-gray-100 px-4 py-3"><p className="text-base font-semibold">Scanner mode</p><p className="text-xs text-gray-500">Choose how entry tickets can be checked at this event.</p></div>
       <div className="space-y-3 p-4">
         <div className={`grid gap-2.5 ${narrow ? 'grid-cols-1' : 'grid-cols-2'}`}>
-          {opt(false, 'Inbuilt scanner only', 'Staff must use the camera scanner in the app.')}
-          {opt(true, 'Universal scanner (default)', 'Camera, hardware scanners and manual entry are accepted.')}
+          {opt(true, 'Inbuilt scanner only (default)', 'Staff must use the camera scanner in the app.')}
+          {opt(false, 'Universal scanner', 'Camera, hardware scanners and manual entry are accepted.')}
         </div>
         <table className="w-full text-[12px]">
           <thead className="text-left text-gray-500"><tr><th className="py-1.5 font-medium">Capability</th><th className="text-center font-medium">Inbuilt only</th><th className="text-center font-medium">Universal</th></tr></thead>
@@ -441,7 +441,7 @@ const FEATURES: Feature[] = [
     icon: ScanQrCode,
     title: 'Scan tickets at the door',
     text: 'Check guests in from a phone. Each ticket is validated once, so a used ticket cannot get in twice.',
-    bullets: ['Camera scanner in the app', 'Hardware scanners and manual entry (optional)', 'Live check-in counts'],
+    bullets: ['Built-in camera scanner, on by default', 'Optional hardware scanners and manual entry', 'Live check-in counts'],
     w: 520, h: 330, nw: 380, nh: 440,
     labels: ['At the door', 'Scanner settings'],
     cards: [<PhoneScannerCard key="p" />, <ScannerModeCard key="m" />],

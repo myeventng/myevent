@@ -30,11 +30,11 @@ export function ScannerModeForm({ eventId, initialMode, canEdit }: { eventId: st
         <RadioGroup value={mode} onValueChange={(v) => setMode(v as typeof mode)} disabled={!canEdit} className="grid gap-3 sm:grid-cols-2">
           <Label htmlFor="m-in" className="flex cursor-pointer items-start gap-3 rounded-md border p-4 has-[:checked]:border-primary">
             <RadioGroupItem id="m-in" value="INBUILT_ONLY" className="mt-1" />
-            <span><span className="block font-medium">Inbuilt scanner only</span><span className="block text-xs font-normal text-muted-foreground">Staff must use the camera scanner in the app. Hardware scanners and manual entry are blocked.</span></span>
+            <span><span className="block font-medium">Inbuilt scanner only (default)</span><span className="block text-xs font-normal text-muted-foreground">Staff must use the camera scanner in the app. Hardware scanners and manual entry are blocked.</span></span>
           </Label>
           <Label htmlFor="m-uni" className="flex cursor-pointer items-start gap-3 rounded-md border p-4 has-[:checked]:border-primary">
             <RadioGroupItem id="m-uni" value="UNIVERSAL" className="mt-1" />
-            <span><span className="block font-medium">Universal scanner (default)</span><span className="block text-xs font-normal text-muted-foreground">Camera, hardware barcode/QR scanners and manual code entry are all accepted.</span></span>
+            <span><span className="block font-medium">Universal scanner</span><span className="block text-xs font-normal text-muted-foreground">Camera, hardware barcode/QR scanners and manual code entry are all accepted.</span></span>
           </Label>
         </RadioGroup>
         <div className="overflow-x-auto">

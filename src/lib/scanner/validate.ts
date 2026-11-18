@@ -51,7 +51,7 @@ export interface ScanParams {
 
 export async function getScannerMode(eventId: string, db: Db = prisma): Promise<ScannerMode> {
   const s = await db.eventScannerSettings.findUnique({ where: { eventId }, select: { mode: true } });
-  return s?.mode ?? 'UNIVERSAL';
+  return s?.mode ?? 'INBUILT_ONLY';
 }
 
 const deny = (outcome: ScanOutcome, message: string): ScanResult => ({ success: false, outcome, message });

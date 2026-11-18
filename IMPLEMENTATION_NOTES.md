@@ -176,3 +176,9 @@ Deploy: `npx prisma migrate deploy` then `npx prisma generate`.
 - **Mockups match the real UI:** light dashboard with the real organiser sidebar, Analytics tabs and cards (Total Revenue, Tickets Sold, Available Payout, Active Events, Revenue Breakdown, Performance Summary), Generate physical tickets form, event type cards (text from the create flow), Scanner mode card, Your team table. All numbers and names are sample data and the panel says so. On phones the sidebar is hidden, like the real app.
 - **Using real screenshots instead:** save images in `public/showcase/` and set `images: ['/showcase/analytics.webp']` on a feature in `FEATURES` (same count as its cards). The images replace that feature's mockups.
 - Reduced-motion visitors get no spring or fade (stack still changes). Wording, bullets and order: edit `FEATURES`. Scroll length per feature: `WEIGHTS` / `VH_PER_UNIT`.
+
+## Inbuilt scanner is now the default
+
+New events (and any event without an explicit setting) use `INBUILT_ONLY`: camera scanner in the app, hardware scanners and manual entry blocked until the organiser switches to Universal. Changed: Prisma defaults for `EventScannerSettings.mode` and `TicketGenerationBatch.scannerMode`, the code fallbacks (`validate.ts`, `service.ts`, `scanner-settings.actions.ts`, the ticket preview route, the `TicketScanner` prop), the "(default)" label in the Scanner mode form, and the homepage showcase.
+
+Migration `20261118120000_scanner_default_inbuilt` first pins every existing event that has no setting to `UNIVERSAL` (so live events keep working with hardware scanners), then changes the column defaults. Deploy: `npx prisma migrate deploy` then `npx prisma generate`.

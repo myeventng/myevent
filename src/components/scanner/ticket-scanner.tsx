@@ -68,7 +68,7 @@ interface IDetectedBarcode {
 export function TicketScanner({
   eventId,
   eventTitle,
-  scannerMode = 'UNIVERSAL',
+  scannerMode = 'INBUILT_ONLY',
   onScanComplete,
 }: TicketScannerProps) {
   const universal = scannerMode === 'UNIVERSAL';

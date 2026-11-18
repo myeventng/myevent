@@ -24,7 +24,7 @@ export async function getScannerSettings(eventId: string): Promise<Result<{ mode
       prisma.eventScannerSettings.findUnique({ where: { eventId }, select: { mode: true } }),
       prisma.event.findUnique({ where: { id: eventId }, select: { title: true } }),
     ]);
-    return { success: true, data: { mode: s?.mode ?? 'UNIVERSAL', canEdit: access!.via === 'OWNER' || access!.via === 'ADMIN', eventTitle: ev?.title ?? '' } };
+    return { success: true, data: { mode: s?.mode ?? 'INBUILT_ONLY', canEdit: access!.via === 'OWNER' || access!.via === 'ADMIN', eventTitle: ev?.title ?? '' } };
   } catch (e) {
     return { success: false, message: e instanceof AccessDeniedError ? e.message : 'Could not load scanner settings' };
   }

@@ -1361,7 +1361,7 @@ model TicketGenerationBatch {
   ticketsPerPage Int               @default(4)
   showSerial     Boolean           @default(true) // codes-only: print small serial under each code
   organizerLabel String? // optional organizer branding text
-  scannerMode    ScannerMode       @default(UNIVERSAL) // snapshot of the event's scanner mode at generation time
+  scannerMode    ScannerMode       @default(INBUILT_ONLY) // snapshot of the event's scanner mode at generation time
   offlineSold    Int               @default(0) // physical tickets the organizer has recorded as sold offline (ledger: OfflineSale)
 
   status GenerationBatchStatus @default(PENDING_PAYMENT)
@@ -1456,7 +1456,7 @@ model EventScannerSettings {
   id          String      @id @default(cuid())
   eventId     String      @unique
   event       Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  mode        ScannerMode @default(UNIVERSAL)
+  mode        ScannerMode @default(INBUILT_ONLY)
   updatedById String?
   updatedAt   DateTime    @updatedAt
   createdAt   DateTime    @default(now())
