@@ -88,7 +88,7 @@ export function EventBackdrop({
 
         {/* Equaliser bars */}
         {showBars && (
-          <g fill="#331a5c">
+          <g fill="#2d1752">
             {bars.map((h, i) => (
               <rect
                 key={i}

@@ -166,13 +166,15 @@
    Scoped to .me-theme so admin / dashboard screens are not affected.
    ========================================================================== */
 :root {
-  --me-bg: #1b0b2e; /* page background, deep purple */
-  --me-bg-deep: #12061f; /* footer, loader, inset areas */
-  --me-surface: #261245; /* cards */
-  --me-raised: #331a5c; /* hovered cards, inputs, chips */
+  --me-bg: #160a26; /* page background, deep purple */
+  --me-bg-deep: #0e0618; /* footer, loader, inset areas */
+  --me-surface: #211040; /* cards */
+  --me-raised: #2d1752; /* hovered cards, inputs, chips */
   --me-line: #4a2a7a; /* borders */
-  --me-red: #e5173f; /* primary action */
-  --me-violet: #9b4dff; /* secondary accent */
+  --me-red: #e5173f; /* primary action, large text and fills */
+  --me-red-text: #ff5273; /* small red text: 4.5:1+ on the page background */
+  --me-violet: #9b4dff; /* secondary accent, fills and large text */
+  --me-violet-text: #b98aff; /* small violet text: 4.5:1+ on the page background */
   --me-magenta: #e0209f; /* highlight accent */
   --me-orange: #ff5a1f; /* sparing pop */
   --me-text: #ffffff;

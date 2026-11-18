@@ -81,7 +81,7 @@ export function ContactForm() {
           <label htmlFor="c-topic" className="mb-1.5 block text-sm font-semibold">What is this about?</label>
           <select id="c-topic" name="topic" defaultValue={CONTACT_TOPICS[0]} className={field}>
             {CONTACT_TOPICS.map((t) => (
-              <option key={t} value={t} className="bg-[#1b0b2e]">{t}</option>
+              <option key={t} value={t} className="bg-[#160a26]">{t}</option>
             ))}
           </select>
         </div>

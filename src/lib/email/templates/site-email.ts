@@ -3,8 +3,8 @@
 import { escapeHtml } from './auth-email';
 
 const C = {
-  bg: '#1b0b2e',
-  surface: '#261245',
+  bg: '#160a26',
+  surface: '#211040',
   red: '#e5173f',
   violet: '#9b4dff',
   ink: '#111827',

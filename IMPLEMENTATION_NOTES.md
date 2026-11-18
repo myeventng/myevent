@@ -162,3 +162,7 @@ Before this change an event had only a cover image, an optional social share ima
 - `CACHE_VERSION` is now `'3'` so browsers drop cached events without the new field.
 
 Deploy: `npx prisma migrate deploy` then `npx prisma generate`.
+
+## Darker background and readable small text
+
+`.me-theme` palette: bg `#160a26`, bg-deep `#0e0618`, surface `#211040`, raised `#2d1752` (posters stand out more). New `--me-red-text` (`#ff5273`) and `--me-violet-text` (`#b98aff`) for small text (4.5:1+); `--me-red` and `--me-violet` stay for buttons, fills and large text. Used on event tile/card date lines and the create-event page.

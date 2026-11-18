@@ -175,7 +175,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       })}
 
       {/* Flat dark layer so white text stays readable on any poster */}
-      <div className="absolute inset-0 bg-[#12061f]/55" aria-hidden="true" />
+      <div className="absolute inset-0 bg-[#0e0618]/55" aria-hidden="true" />
 
       {/* Text for each slide */}
       {slides.map((slide, i) => {

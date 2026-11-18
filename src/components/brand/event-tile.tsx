@@ -64,7 +64,7 @@ export function EventTile({
         )}
       </div>
       <div className="flex flex-1 flex-col gap-1.5 p-4">
-        <p className="text-sm font-semibold text-[var(--me-red)]">
+        <p className="text-sm font-semibold text-[var(--me-red-text)]">
           {format(new Date(event.startDateTime), 'EEE d MMM, h:mm a')}
         </p>
         <h3 className="font-display line-clamp-2 text-xl font-bold leading-snug text-white">

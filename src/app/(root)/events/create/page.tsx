@@ -60,7 +60,7 @@ export default async function BecomeEventHostPage() {
                 </div>
                 <h1 className="font-display text-4xl font-extrabold tracking-tight text-white sm:text-6xl">
                   Turn your idea into
-                  <span className="text-[var(--me-violet)]">
+                  <span className="text-[var(--me-violet-text)]">
                     {' '}
                     a sold-out event
                   </span>
@@ -445,7 +445,7 @@ export default async function BecomeEventHostPage() {
                   <Button
                     asChild
                     size="lg"
-                    className="bg-white text-[#1b0b2e] hover:bg-white shadow-[4px_4px_0_0_var(--me-red)] rounded-full px-8 py-3 text-lg font-semibold"
+                    className="bg-white text-[#160a26] hover:bg-white shadow-[4px_4px_0_0_var(--me-red)] rounded-full px-8 py-3 text-lg font-semibold"
                   >
                     <Link href="/dashboard/events/create">
                       <Trophy className="w-5 h-5 mr-2" />
@@ -456,7 +456,7 @@ export default async function BecomeEventHostPage() {
                   <Button
                     asChild
                     size="lg"
-                    className="bg-white text-[#1b0b2e] hover:bg-white shadow-[4px_4px_0_0_var(--me-red)] rounded-full px-8 py-3 text-lg font-semibold"
+                    className="bg-white text-[#160a26] hover:bg-white shadow-[4px_4px_0_0_var(--me-red)] rounded-full px-8 py-3 text-lg font-semibold"
                   >
                     <Link href="/auth/register?intent=organizer">
                       <Star className="w-5 h-5 mr-2" />
@@ -619,7 +619,7 @@ function StepCard({
         </div>
         <h3 className="text-white font-semibold text-lg mb-2">{title}</h3>
         <p className="text-[var(--me-muted)] text-sm mb-3">{description}</p>
-        <div className="flex items-center text-[var(--me-violet)] text-xs">
+        <div className="flex items-center text-[var(--me-violet-text)] text-xs">
           <Clock className="w-3 h-3 mr-1" />
           {time}
         </div>
