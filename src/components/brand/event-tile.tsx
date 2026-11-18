@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { EventImage } from '@/components/brand/event-image';
 import { Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -9,6 +9,7 @@ export interface TileEvent {
   slug: string;
   title: string;
   coverImageUrl?: string;
+  mobileImageUrl?: string | null;
   imageUrls?: string[];
   startDateTime: string;
   venue: { name: string; city?: { name: string } };
@@ -44,10 +45,9 @@ export function EventTile({
     >
       <div className="relative aspect-[4/5] w-full overflow-hidden bg-[var(--me-raised)]">
         {image ? (
-          <Image
+          <EventImage
             src={image}
-            alt=""
-            fill
+            mobileSrc={event.mobileImageUrl}
             sizes="(max-width: 1024px) 72vw, 25vw"
             priority={priority}
             className="object-cover transition-transform duration-500 group-hover:scale-105"

@@ -849,6 +849,10 @@ model Event {
   shareImageUrl    String?
   shareImageWidth  Int?
   shareImageHeight Int?
+  // Optional portrait image shown on phones (< 640px wide). Falls back to coverImageUrl.
+  mobileImageUrl    String?
+  mobileImageWidth  Int?
+  mobileImageHeight Int?
   startDateTime    DateTime        @default(now())
   endDateTime      DateTime        @default(now())
   isFree           Boolean         @default(false)

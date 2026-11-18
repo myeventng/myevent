@@ -12,7 +12,7 @@ import {
 import { format } from 'date-fns';
 import { CompactRating } from '@/components/ui/ratings-display';
 import { EventType } from '@/generated/prisma';
-import Image from 'next/image';
+import { EventImage } from '@/components/brand/event-image';
 import Link from 'next/link';
 
 interface EventCardProps {
@@ -24,6 +24,7 @@ interface EventCardProps {
     startDateTime: string;
     endDateTime: string;
     coverImageUrl?: string;
+    mobileImageUrl?: string | null;
     imageUrls: string[];
     isFree: boolean;
     venue: {
@@ -110,11 +111,10 @@ export function EventCard({ event }: EventCardProps) {
     >
       <div className="relative aspect-[4/5] w-full overflow-hidden bg-[var(--me-raised)] sm:aspect-[16/11]">
         {image ? (
-          <Image
-            fill
+          <EventImage
             unoptimized
             src={image}
-            alt=""
+            mobileSrc={event.mobileImageUrl}
             sizes="(max-width: 640px) 92vw, (max-width: 1280px) 45vw, 25vw"
             className="object-cover transition-transform duration-500 group-hover:scale-105"
           />

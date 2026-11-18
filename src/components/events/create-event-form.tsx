@@ -49,6 +49,7 @@ const baseEventSchema = z.object({
   coverImageUrl: z.string().min(1, 'Cover image is required'),
   imageUrls: z.array(z.string()).default([]),
   shareImageUrl: z.string().optional().nullable(),
+  mobileImageUrl: z.string().optional().nullable(),
   embeddedVideoUrl: z.string().optional().or(z.literal('')),
 });
 

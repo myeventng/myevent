@@ -149,3 +149,16 @@ ColorZilla) add attributes before React loads and caused the repeated "tree hydr
 **Hero**: long titles are shortened in JS (80 characters) instead of CSS line-clamp, which was clipping letter tails (g, y, p). Date and place icons are white.
 
 **Line art**: `hall-lines.svg` (Explore events background) and `audience-lines.svg` (spare, not placed yet), traced from the venue and conference photos.
+
+## Mobile feature image for events
+
+Before this change an event had only a cover image, an optional social share image and a gallery. There was no phone-specific image.
+
+- **Schema:** `Event.mobileImageUrl`, `mobileImageWidth`, `mobileImageHeight` (all optional). Migration `20261118000000_event_mobile_image`.
+- **Upload:** UploadThing route `eventMobileImage` (4 MB, 1 file), also registered in `src/lib/storage/rules.ts` for R2.
+- **Server checks** (`validateAndMeasureMobileImage`): own storage host only, JPG/PNG/WebP, under 4 MB, at least 720x900, portrait ratio between 0.55 and 1.0. Create and update follow the share-image rules (undefined = keep, empty = remove, new URL = validate and replace).
+- **Forms:** new "Mobile Feature Image (optional)" field in the Event Media step (create and edit), with directions and a phone / laptop preview with a safe-area overlay (`mobile-image-guide.tsx`).
+- **Public site:** `EventImage` (`src/components/brand/event-image.tsx`) renders a `<picture>`: below 640px it uses the mobile image, otherwise the normal image. Used in the home slider, event tiles, event cards and the top of the event page. Only the matching file is downloaded.
+- `CACHE_VERSION` is now `'3'` so browsers drop cached events without the new field.
+
+Deploy: `npx prisma migrate deploy` then `npx prisma generate`.

@@ -1,5 +1,5 @@
 import { imageSize } from 'image-size';
-import { SHARE_IMAGE_RULES } from '@/lib/share-image';
+import { SHARE_IMAGE_RULES, MOBILE_IMAGE_RULES } from '@/lib/share-image';
 import { r2PublicHost } from '@/lib/storage/r2';
 
 // Only accept images uploaded through our own storage: UploadThing or our R2 public bucket (stops SSRF and hotlinked junk).
@@ -49,6 +49,52 @@ export async function validateAndMeasureShareImage(url: string): Promise<{ url: 
   } catch (e) {
     if (e instanceof ShareImageError) throw e;
     throw new ShareImageError('The share image could not be checked. Please try again.');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Same safety checks as the share image (own storage only, size, type), with portrait rules for the mobile image. */
+export async function validateAndMeasureMobileImage(url: string): Promise<{ url: string; width: number; height: number }> {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    throw new ShareImageError('The mobile image URL is not valid');
+  }
+  if (u.protocol !== 'https:' || !isAllowedHost(u.hostname)) {
+    throw new ShareImageError('Please upload the mobile image using the uploader');
+  }
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(u.toString(), { signal: ctrl.signal, redirect: 'error', cache: 'no-store' });
+    if (!res.ok) throw new ShareImageError('The mobile image could not be read. Try uploading it again.');
+    const declared = Number(res.headers.get('content-length') ?? 0);
+    if (declared > MOBILE_IMAGE_RULES.maxBytes) throw new ShareImageError('Mobile image must be under 4 MB');
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > MOBILE_IMAGE_RULES.maxBytes) throw new ShareImageError('Mobile image must be under 4 MB');
+    let dims: { width?: number; height?: number; type?: string };
+    try {
+      dims = imageSize(buf);
+    } catch {
+      throw new ShareImageError('That file is not a supported image (use JPG, PNG or WebP)');
+    }
+    const mime = dims.type === 'png' ? 'image/png' : dims.type === 'webp' ? 'image/webp' : dims.type === 'jpg' ? 'image/jpeg' : '';
+    if (!MOBILE_IMAGE_RULES.allowedTypes.includes(mime)) throw new ShareImageError('Mobile image must be a JPG, PNG or WebP');
+    if (!dims.width || !dims.height) throw new ShareImageError('Could not read the image size');
+    if (dims.width < MOBILE_IMAGE_RULES.minWidth || dims.height < MOBILE_IMAGE_RULES.minHeight) {
+      throw new ShareImageError(`Mobile image is too small (${dims.width}×${dims.height}). Use at least ${MOBILE_IMAGE_RULES.minWidth}×${MOBILE_IMAGE_RULES.minHeight}; recommended ${MOBILE_IMAGE_RULES.recommended}.`);
+    }
+    const ratio = dims.width / dims.height;
+    if (ratio < MOBILE_IMAGE_RULES.minRatio || ratio > MOBILE_IMAGE_RULES.maxRatio) {
+      throw new ShareImageError(`Mobile image should be portrait (about 4:5). Yours is ${dims.width}×${dims.height}.`);
+    }
+    return { url: u.toString(), width: dims.width, height: dims.height };
+  } catch (e) {
+    if (e instanceof ShareImageError) throw e;
+    throw new ShareImageError('The mobile image could not be checked. Please try again.');
   } finally {
     clearTimeout(timer);
   }

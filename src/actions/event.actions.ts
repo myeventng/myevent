@@ -3,7 +3,7 @@
 import { getPhysicalInventoryForEvents } from "@/lib/ticket-generation/offline-sales";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { validateAndMeasureShareImage, ShareImageError } from "@/lib/share-image-server";
+import { validateAndMeasureShareImage, validateAndMeasureMobileImage, ShareImageError } from "@/lib/share-image-server";
 import { resolveEventAccess, can } from "@/lib/staff/access";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
@@ -226,6 +226,7 @@ export async function createEvent(data: any): Promise<ActionResponse<any>> {
 
     // Optional social thumbnail: validated server-side (host, type, size, dimensions) before it is stored.
     const share = data.shareImageUrl ? await validateAndMeasureShareImage(data.shareImageUrl) : null;
+    const mobile = data.mobileImageUrl ? await validateAndMeasureMobileImage(data.mobileImageUrl) : null;
 
     // Create base event only - no type-specific nested data
     const newEvent = await prisma.event.create({
@@ -238,6 +239,9 @@ export async function createEvent(data: any): Promise<ActionResponse<any>> {
         shareImageUrl: share?.url ?? null,
         shareImageWidth: share?.width ?? null,
         shareImageHeight: share?.height ?? null,
+        mobileImageUrl: mobile?.url ?? null,
+        mobileImageWidth: mobile?.width ?? null,
+        mobileImageHeight: mobile?.height ?? null,
         startDateTime: data.startDateTime,
         endDateTime: data.endDateTime,
         isFree:
@@ -368,6 +372,15 @@ export async function updateEvent(data: any): Promise<ActionResponse<any>> {
       shareData = { shareImageUrl: m.url, shareImageWidth: m.width, shareImageHeight: m.height };
     }
 
+    // Mobile image: same semantics as the share image (undefined = keep, null/"" = remove, string = replace).
+    let mobileData: { mobileImageUrl: string | null; mobileImageWidth: number | null; mobileImageHeight: number | null } | undefined;
+    if (data.mobileImageUrl === null || data.mobileImageUrl === "") {
+      mobileData = { mobileImageUrl: null, mobileImageWidth: null, mobileImageHeight: null };
+    } else if (typeof data.mobileImageUrl === "string" && data.mobileImageUrl !== existingEvent.mobileImageUrl) {
+      const m = await validateAndMeasureMobileImage(data.mobileImageUrl);
+      mobileData = { mobileImageUrl: m.url, mobileImageWidth: m.width, mobileImageHeight: m.height };
+    }
+
     // Generate new slug if needed
     let slug = existingEvent.slug;
     if (data.title !== existingEvent.title || !existingEvent.slug) {
@@ -402,6 +415,7 @@ export async function updateEvent(data: any): Promise<ActionResponse<any>> {
         location: data.location,
         coverImageUrl: data.coverImageUrl,
         ...(shareData ?? {}),
+        ...(mobileData ?? {}),
         startDateTime: data.startDateTime,
         endDateTime: data.endDateTime,
         isFree:

@@ -59,3 +59,17 @@ export function truncateForShare(text: string | null | undefined, max = 200): st
   const clean = (text ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   return clean.length > max ? `${clean.slice(0, max - 1).trimEnd()}…` : clean;
 }
+
+// Mobile feature image: a portrait picture shown on phones (below 640px wide) in place of the cover.
+export const MOBILE_IMAGE_RULES = {
+  maxBytes: 4 * 1024 * 1024,
+  minWidth: 720,
+  minHeight: 900,
+  /** width / height the site crops to on phones (4:5 portrait). */
+  ratio: 4 / 5,
+  /** Accepted range so a near-miss is fine but a landscape picture is rejected. */
+  minRatio: 0.55,
+  maxRatio: 1.0,
+  recommended: '1080 × 1350 px (4:5 portrait), JPG, PNG or WebP, under 4 MB',
+  allowedTypes: ['image/jpeg', 'image/png', 'image/webp'] as string[],
+} as const;

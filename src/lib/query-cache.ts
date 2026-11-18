@@ -16,7 +16,7 @@
 export const CACHE_STORAGE_KEY = 'myevent-cache';
 
 /** Bump this string after a deploy that changes the shape of cached data. */
-export const CACHE_VERSION = '2';
+export const CACHE_VERSION = '3';
 
 export const PUBLIC_STALE_MS = 10 * 60 * 1000; // refresh in the background after 10 minutes
 export const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // drop saved data after 24 hours

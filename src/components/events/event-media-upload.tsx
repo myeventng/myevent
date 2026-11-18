@@ -18,12 +18,14 @@ import { Input } from '@/components/ui/input';
 import { FileUploader } from '@/components/layout/file-uploader';
 import { VideoIcon, Info } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { MobileImageGuide } from '@/components/events/mobile-image-guide';
 
 // Form schema for this step
 const formSchema = z.object({
   coverImageUrl: z.string().min(1, 'Cover image is required'),
   imageUrls: z.array(z.string()),
   shareImageUrl: z.string().optional().nullable(),
+  mobileImageUrl: z.string().optional().nullable(),
   embeddedVideoUrl: z.string().url().optional().or(z.literal('')),
 });
 
@@ -45,6 +47,7 @@ export function EventMediaUpload({
   const [coverFiles, setCoverFiles] = useState<File[]>([]);
   const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
   const [shareFiles, setShareFiles] = useState<File[]>([]);
+  const [mobileFiles, setMobileFiles] = useState<File[]>([]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -52,6 +55,7 @@ export function EventMediaUpload({
       coverImageUrl: formData.coverImageUrl || '',
       imageUrls: Array.isArray(formData.imageUrls) ? formData.imageUrls : [],
       shareImageUrl: formData.shareImageUrl || '',
+      mobileImageUrl: formData.mobileImageUrl || '',
       embeddedVideoUrl: formData.embeddedVideoUrl || '',
     },
   });
@@ -166,6 +170,62 @@ export function EventMediaUpload({
                   rejected when the event is saved.
                 </FormDescription>
                 <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="mobileImageUrl"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Mobile Feature Image (optional)</FormLabel>
+
+                <Alert className="mb-4">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Where it shows:</strong> On phones (screens narrower
+                    than 640px) in the homepage slider, event cards and the top
+                    of the event page. Laptops and tablets keep using the cover
+                    image.
+                    <br />
+                    <strong>Size:</strong> 1080x1350 pixels (4:5 portrait), JPG,
+                    PNG or WebP, under 4MB. Minimum 720x900.
+                    <br />
+                    <strong>Layout tips:</strong> Keep faces, logos and key text
+                    inside the green dashed area. The bottom quarter is covered
+                    by the event title and date, so leave it clear of text. Do
+                    not put small print near the edges because phones crop
+                    slightly differently.
+                    <br />
+                    If you skip this, phones show your cover image cropped to
+                    4:5.
+                  </AlertDescription>
+                </Alert>
+
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                  <div>
+                    <FormControl>
+                      <FileUploader
+                        onFieldChange={(v) => field.onChange(Array.isArray(v) ? v[0] ?? '' : v)}
+                        imageUrls={field.value || ''}
+                        setFiles={setMobileFiles}
+                        endpoint="eventMobileImage"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Use the remove button on the image to clear it and fall
+                      back to the cover image. Landscape or tiny images are
+                      rejected when the event is saved.
+                    </FormDescription>
+                    <FormMessage />
+                  </div>
+                  <MobileImageGuide
+                    mobileImageUrl={field.value}
+                    coverImageUrl={form.watch('coverImageUrl')}
+                    title={formData.title}
+                  />
+                </div>
               </FormItem>
             )}
           />

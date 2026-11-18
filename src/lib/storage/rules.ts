@@ -6,6 +6,7 @@ export type UploadEndpoint =
   | 'eventImage'
   | 'eventCover'
   | 'eventShareImage'
+  | 'eventMobileImage'
   | 'profileImage'
   | 'blogImage'
   | 'venueImage'
@@ -22,6 +23,7 @@ export const ENDPOINT_RULES: Record<UploadEndpoint, EndpointRule> = {
   eventImage: { maxFileSize: 2 * MB, maxFileCount: 10 },
   eventCover: { maxFileSize: 4 * MB, maxFileCount: 1 },
   eventShareImage: { maxFileSize: 4 * MB, maxFileCount: 1 },
+  eventMobileImage: { maxFileSize: 4 * MB, maxFileCount: 1 },
   profileImage: { maxFileSize: 2 * MB, maxFileCount: 1 },
   contestantImage: { maxFileSize: 2 * MB, maxFileCount: 1 },
   venueImage: { maxFileSize: 4 * MB, maxFileCount: 5 },

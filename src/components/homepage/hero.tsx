@@ -2,7 +2,7 @@
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { EventImage } from '@/components/brand/event-image';
 import { format } from 'date-fns';
 import { ArrowRight, Calendar, ChevronLeft, ChevronRight, MapPin } from 'lucide-react';
 import { BrandLoader } from '@/components/brand/brand-loader';
@@ -12,6 +12,7 @@ interface HeroEvent {
   slug: string;
   title: string;
   coverImageUrl?: string;
+  mobileImageUrl?: string | null;
   imageUrls?: string[];
   startDateTime: string;
   venue: { name: string; city?: { name: string } };
@@ -58,6 +59,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         // very long titles are shortened (CSS clamping clips the tails of letters like g and y)
         title: shortTitle(event.title),
         image: event.coverImageUrl || event.imageUrls?.[0] || '',
+        mobileImage: event.mobileImageUrl || null,
         date: format(new Date(event.startDateTime), 'EEE, d MMM yyyy'),
         place: event.venue.city?.name || event.venue.name,
       })),
@@ -153,10 +155,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             }`}
           >
             {slide.image ? (
-              <Image
+              <EventImage
                 src={slide.image}
-                alt=""
-                fill
+                mobileSrc={slide.mobileImage}
                 priority={i === 0}
                 quality={80}
                 sizes="100vw"

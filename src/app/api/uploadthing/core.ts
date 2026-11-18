@@ -55,6 +55,17 @@ export const ourFileRouter = {
       return { uploadedBy: metadata.userId, url: file.ufsUrl ?? file.url };
     }),
 
+  // Portrait feature image shown on phones. Server re-validates type, size and shape on save.
+  eventMobileImage: f({ image: { maxFileSize: '4MB', maxFileCount: 1 } })
+    .middleware(async () => {
+      const session = await auth.api.getSession({ headers: await headers() });
+      if (!session?.user) throw new Error('Unauthorized');
+      return { userId: session.user.id };
+    })
+    .onUploadComplete(async ({ metadata, file }) => {
+      return { uploadedBy: metadata.userId, url: file.ufsUrl ?? file.url };
+    }),
+
   profileImage: f({ image: { maxFileSize: '2MB', maxFileCount: 1 } })
     .middleware(async () => {
       const headersList = await headers();

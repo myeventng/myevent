@@ -1,4 +1,5 @@
 //src/app/(root)/events/[slug]/page.tsx
+import { EventImage } from '@/components/brand/event-image';
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
 import { format } from "date-fns";
@@ -239,7 +240,20 @@ export default async function EventPage({ params }: EventPageProps) {
             {/* Left: Featured Image */}
             <div className="mb-6 md:mb-20 relative">
               <div className="w-full max-w-md mx-auto">
-                {event.imageUrls && event.imageUrls[0] ? (
+                {event.mobileImageUrl ? (
+                  <div className="relative aspect-[4/5] overflow-hidden rounded-lg shadow-2xl sm:aspect-[4/3] md:aspect-square">
+                    <EventImage
+                      unoptimized
+                      priority
+                      quality={100}
+                      src={event.imageUrls?.[0] || event.coverImageUrl || event.mobileImageUrl}
+                      mobileSrc={event.mobileImageUrl}
+                      alt={event.title}
+                      sizes="(max-width: 640px) 100vw, 600px"
+                      className="object-cover"
+                    />
+                  </div>
+                ) : event.imageUrls && event.imageUrls[0] ? (
                   <div className="aspect-[4/3] md:aspect-square overflow-hidden rounded-lg shadow-2xl">
                     <Image
                       width={600}
