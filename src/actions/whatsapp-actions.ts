@@ -8,6 +8,7 @@ import { auth } from '@/lib/auth';
 import { clearSettingsCache } from '@/lib/platform-settings';
 import {
   WHATSAPP_MAX_MESSAGE,
+  WHATSAPP_MAX_NAME,
   WHATSAPP_SETTING_KEY,
   normalizeWhatsappNumber,
   type WhatsappSettings,
@@ -35,6 +36,8 @@ function readStored(value: unknown): WhatsappSettings {
     enabled: v.enabled === true,
     number: typeof v.number === 'string' ? v.number : '',
     message: typeof v.message === 'string' ? v.message : DEFAULT_MESSAGE,
+    contactName: typeof v.contactName === 'string' ? v.contactName : '',
+    contactImage: typeof v.contactImage === 'string' ? v.contactImage : '',
     updatedAt: v.updatedAt ?? null,
     updatedBy: v.updatedBy ?? null,
   };
@@ -51,7 +54,16 @@ export async function getWhatsappWidget(): Promise<Result<WhatsappWidgetConfig |
     if (!s.enabled || !normalizeWhatsappNumber(s.number)) {
       return { success: true, data: null };
     }
-    return { success: true, data: { enabled: true, number: s.number, message: s.message } };
+    return {
+      success: true,
+      data: {
+        enabled: true,
+        number: s.number,
+        message: s.message,
+        contactName: s.contactName,
+        contactImage: s.contactImage,
+      },
+    };
   } catch (error) {
     console.error('getWhatsappWidget failed:', error);
     return { success: false, message: 'Could not load WhatsApp settings' };
@@ -82,6 +94,19 @@ const saveSchema = z.object({
     .string()
     .trim()
     .max(WHATSAPP_MAX_MESSAGE, `Keep the message under ${WHATSAPP_MAX_MESSAGE} characters`),
+  contactName: z
+    .string()
+    .trim()
+    .max(WHATSAPP_MAX_NAME, `Keep the name under ${WHATSAPP_MAX_NAME} characters`)
+    .optional()
+    .default(''),
+  contactImage: z
+    .string()
+    .trim()
+    .max(500)
+    .refine((v) => v === '' || /^https:\/\//i.test(v), 'The photo link must start with https://')
+    .optional()
+    .default(''),
 });
 
 export async function saveWhatsappSettings(
@@ -97,7 +122,7 @@ export async function saveWhatsappSettings(
     return { success: false, message: parsed.error.issues[0]?.message ?? 'Check the form and try again' };
   }
 
-  const { enabled, message } = parsed.data;
+  const { enabled, message, contactName, contactImage } = parsed.data;
   const number = normalizeWhatsappNumber(parsed.data.number);
   if (parsed.data.number && !number) {
     return {
@@ -113,6 +138,8 @@ export async function saveWhatsappSettings(
     enabled,
     number: number ?? '',
     message: message || DEFAULT_MESSAGE,
+    contactName,
+    contactImage,
     updatedAt: new Date().toISOString(),
     updatedBy: session.user.name || session.user.email || null,
   };

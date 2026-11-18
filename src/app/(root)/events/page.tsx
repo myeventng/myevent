@@ -290,7 +290,7 @@ export default function EnhancedAllEventsPage() {
             {/* Filters Button */}
             <Sheet open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
               <SheetTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2 rounded-full border-2 border-[var(--me-violet)] bg-transparent text-white hover:bg-[var(--me-violet)] hover:text-white">
+                <Button variant="outline" className="flex items-center gap-2 rounded-full border-2 border-[var(--me-violet)] bg-transparent text-white hover:bg-transparent hover:text-white">
                   <SlidersHorizontal className="h-4 w-4" />
                   Filters
                   {activeFiltersCount > 0 && (
@@ -538,7 +538,7 @@ export default function EnhancedAllEventsPage() {
                       : `No ${filters.eventTypes.includes('VOTING_CONTEST') && filters.eventTypes.length === 1 ? 'contests' : 'events'} are currently available. Check back later for new ones.`}
                   </p>
                   {activeFiltersCount > 0 && (
-                    <Button variant="outline" onClick={clearAllFilters} className="rounded-full border-2 border-[var(--me-violet)] bg-transparent text-white hover:bg-[var(--me-violet)] hover:text-white">
+                    <Button variant="outline" onClick={clearAllFilters} className="rounded-full border-2 border-[var(--me-violet)] bg-transparent text-white hover:bg-transparent hover:text-white">
                       Clear filters
                     </Button>
                   )}

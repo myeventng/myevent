@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import React, { useState, useEffect, memo, useMemo } from "react";
-import Link from "next/link";
-import { toast } from "sonner";
-import { useRouter, usePathname } from "next/navigation";
+import React, { useState, useEffect, memo, useMemo } from 'react';
+import Link from 'next/link';
+import { toast } from 'sonner';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   useSession,
   signOut,
@@ -15,19 +15,10 @@ import {
   isOrganizer,
   convertSessionUser,
   type AuthUser,
-} from "@/lib/auth-client";
-import {
-  Menu,
-  X,
-  ChevronDown,
-  User,
-  Plus,
-  Instagram,
-  LogOut,
-  LayoutDashboard,
-} from "lucide-react";
-import Image from "next/image";
-import { INSTAGRAM_URL, INSTAGRAM_HANDLE } from "@/lib/social";
+} from '@/lib/auth-client';
+import { Menu, X, ChevronDown, User, Plus, Instagram, LogOut, LayoutDashboard } from 'lucide-react';
+import Image from 'next/image';
+import { INSTAGRAM_URL, INSTAGRAM_HANDLE } from '@/lib/social';
 
 interface NavLink {
   name: string;
@@ -54,9 +45,9 @@ const Logo = memo(() => (
   </Link>
 ));
 
-Logo.displayName = "Logo";
+Logo.displayName = 'Logo';
 
-const InstagramLink = ({ className = "" }: { className?: string }) => (
+const InstagramLink = ({ className = '' }: { className?: string }) => (
   <a
     href={INSTAGRAM_URL}
     target="_blank"
@@ -70,30 +61,30 @@ const InstagramLink = ({ className = "" }: { className?: string }) => (
 
 // Helper functions
 const getCreateEventUrl = (authUser: AuthUser | undefined): string => {
-  if (!authUser) return "/events/create";
+  if (!authUser) return '/events/create';
   if (isAdmin(authUser) || isSuperAdmin(authUser)) {
-    return "/admin/dashboard/events/create";
+    return '/admin/dashboard/events/create';
   } else if (isOrganizer(authUser)) {
-    return "/dashboard/events/create";
+    return '/dashboard/events/create';
   }
-  return "/events/create";
+  return '/events/create';
 };
 
 const getCreateEventText = (authUser: AuthUser | undefined): string => {
-  if (!authUser) return " Host Your Event";
+  if (!authUser) return ' Host Your Event';
   if (isAdmin(authUser) || isSuperAdmin(authUser)) {
-    return " Create Event";
+    return ' Create Event';
   } else if (isOrganizer(authUser)) {
-    return " New Event";
+    return ' New Event';
   }
-  return " Become Host";
+  return ' Become Host';
 };
 
 const navigation: NavLink[] = [
-  { name: "Home", href: "/" },
-  { name: "Events", href: "/events" },
-  { name: "Blog", href: "/blog" },
-  { name: "Contact", href: "/contact" },
+  { name: 'Home', href: '/' },
+  { name: 'Events', href: '/events' },
+  { name: 'Blog', href: '/blog' },
+  { name: 'Contact', href: '/contact' },
 ];
 
 const MainHeader: React.FC = () => {
@@ -107,7 +98,7 @@ const MainHeader: React.FC = () => {
 
   const authUser: AuthUser | undefined = useMemo(
     () => (session?.user ? convertSessionUser(session.user) : undefined),
-    [session?.user],
+    [session?.user]
   );
 
   const filteredNav = useMemo(
@@ -115,21 +106,21 @@ const MainHeader: React.FC = () => {
       authUser
         ? filterNavigation(navigation, authUser)
         : navigation.filter((item) => !item.requiresAuth),
-    [authUser],
+    [authUser]
   );
 
   const createEventUrl = useMemo(() => getCreateEventUrl(authUser), [authUser]);
   const createEventText = useMemo(
     () => getCreateEventText(authUser).trim(),
-    [authUser],
+    [authUser]
   );
 
   // Border appears once the page scrolls
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
     onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
   // Close menus on navigation
@@ -142,19 +133,19 @@ const MainHeader: React.FC = () => {
   useEffect(() => {
     if (!mobileMenuOpen) return;
     const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    document.body.style.overflow = 'hidden';
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMobileMenuOpen(false);
+      if (e.key === 'Escape') setMobileMenuOpen(false);
     };
-    window.addEventListener("keydown", onKey);
+    window.addEventListener('keydown', onKey);
     return () => {
       document.body.style.overflow = prev;
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener('keydown', onKey);
     };
   }, [mobileMenuOpen]);
 
   const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+    href === '/' ? pathname === '/' : pathname.startsWith(href);
 
   const handleLogout = async () => {
     setIsSigningOut(true);
@@ -162,34 +153,34 @@ const MainHeader: React.FC = () => {
       await signOut({
         fetchOptions: {
           onError: (ctx) => {
-            console.error("Logout error:", ctx.error);
+            console.error('Logout error:', ctx.error);
             toast.error(ctx.error.message);
             setIsSigningOut(false);
           },
           onSuccess: () => {
-            if (typeof window !== "undefined") {
+            if (typeof window !== 'undefined') {
               localStorage.clear();
               sessionStorage.clear();
             }
             toast.success("You've logged out. See you soon!");
             setIsSigningOut(false);
-            router.push("/auth/login");
+            router.push('/auth/login');
           },
         },
       });
     } catch (error) {
-      console.error("Sign out error:", error);
+      console.error('Sign out error:', error);
       setIsSigningOut(false);
     }
   };
 
   // On the home page the header floats over the full-screen hero: transparent at the top of
   // the page, solid as soon as the visitor scrolls (or opens the mobile menu).
-  const overHero = pathname === "/" && !scrolled && !mobileMenuOpen;
+  const overHero = pathname === '/' && !scrolled && !mobileMenuOpen;
   const shell = `fixed inset-x-0 top-0 z-50 border-b-2 transition-[background-color,border-color] duration-300 ${
     overHero
-      ? "border-transparent bg-transparent"
-      : `bg-[var(--me-bg)] ${scrolled ? "border-[var(--me-line)]" : "border-transparent"}`
+      ? 'border-transparent bg-transparent'
+      : `bg-[var(--me-bg)] ${scrolled ? 'border-[var(--me-line)]' : 'border-transparent'}`
   }`;
 
   if (isPending) {
@@ -205,7 +196,7 @@ const MainHeader: React.FC = () => {
 
   const navLinkClass = (href: string) =>
     `relative px-1 py-2 text-[15px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white rounded-sm ${
-      isActive(href) ? "text-white" : "text-[var(--me-muted)] hover:text-white"
+      isActive(href) ? 'text-white' : 'text-[var(--me-muted)] hover:text-white'
     }`;
 
   return (
@@ -223,13 +214,13 @@ const MainHeader: React.FC = () => {
               <Link
                 key={item.name}
                 href={item.href}
-                aria-current={isActive(item.href) ? "page" : undefined}
+                aria-current={isActive(item.href) ? 'page' : undefined}
                 className={navLinkClass(item.href)}
               >
                 {item.name}
                 <span
                   className={`absolute inset-x-0 -bottom-0.5 h-[3px] rounded-full bg-[var(--me-red)] transition-transform duration-200 origin-left ${
-                    isActive(item.href) ? "scale-x-100" : "scale-x-0"
+                    isActive(item.href) ? 'scale-x-100' : 'scale-x-0'
                   }`}
                 />
               </Link>
@@ -267,10 +258,10 @@ const MainHeader: React.FC = () => {
                     <User className="h-4 w-4" aria-hidden="true" />
                   </span>
                   <span className="max-w-[9rem] truncate">
-                    {authUser.name || "Account"}
+                    {authUser.name || 'Account'}
                   </span>
                   <ChevronDown
-                    className={`h-4 w-4 transition-transform ${accountOpen ? "rotate-180" : ""}`}
+                    className={`h-4 w-4 transition-transform ${accountOpen ? 'rotate-180' : ''}`}
                     aria-hidden="true"
                   />
                 </button>
@@ -302,8 +293,7 @@ const MainHeader: React.FC = () => {
                       href={getDashboardUrl(authUser)}
                       className="flex items-center gap-2 px-4 py-2.5 text-sm text-white hover:bg-[var(--me-raised)]"
                     >
-                      <LayoutDashboard className="h-4 w-4" aria-hidden="true" />{" "}
-                      Dashboard
+                      <LayoutDashboard className="h-4 w-4" aria-hidden="true" /> Dashboard
                     </Link>
                     <button
                       role="menuitem"
@@ -313,7 +303,7 @@ const MainHeader: React.FC = () => {
                       className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-white hover:bg-[var(--me-raised)] disabled:opacity-50"
                     >
                       <LogOut className="h-4 w-4" aria-hidden="true" />
-                      {isSigningOut ? "Signing out..." : "Sign out"}
+                      {isSigningOut ? 'Signing out...' : 'Sign out'}
                     </button>
                   </div>
                 )}
@@ -328,7 +318,7 @@ const MainHeader: React.FC = () => {
                 </Link>
                 <Link
                   href="/auth/register"
-                  className="rounded-full border-2 border-[var(--me-violet)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--me-violet)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  className="me-slide-right rounded-full border-2 border-[var(--me-violet)] px-4 py-2 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 >
                   Sign up
                 </Link>
@@ -379,19 +369,16 @@ const MainHeader: React.FC = () => {
                   <Link
                     href={item.href}
                     onClick={() => setMobileMenuOpen(false)}
-                    aria-current={isActive(item.href) ? "page" : undefined}
+                    aria-current={isActive(item.href) ? 'page' : undefined}
                     className={`font-display flex items-center justify-between rounded-xl px-4 py-4 text-3xl font-extrabold transition-colors ${
                       isActive(item.href)
-                        ? "bg-[var(--me-surface)] text-white"
-                        : "text-[var(--me-muted)] hover:bg-[var(--me-surface)] hover:text-white"
+                        ? 'bg-[var(--me-surface)] text-white'
+                        : 'text-[var(--me-muted)] hover:bg-[var(--me-surface)] hover:text-white'
                     }`}
                   >
                     {item.name}
                     {isActive(item.href) && (
-                      <span
-                        className="h-3 w-3 rounded-full bg-[var(--me-red)]"
-                        aria-hidden="true"
-                      />
+                      <span className="h-3 w-3 rounded-full bg-[var(--me-red)]" aria-hidden="true" />
                     )}
                   </Link>
                 </li>
@@ -411,31 +398,17 @@ const MainHeader: React.FC = () => {
               {authUser ? (
                 <>
                   <p className="px-4 pb-2 text-sm text-[var(--me-muted)]">
-                    Signed in as{" "}
-                    <span className="font-semibold text-white">
-                      {authUser.name}
-                    </span>
+                    Signed in as{' '}
+                    <span className="font-semibold text-white">{authUser.name}</span>
                   </p>
-                  <Link
-                    href={getProfileUrl(authUser)}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="block rounded-xl px-4 py-3 text-lg font-semibold text-white hover:bg-[var(--me-surface)]"
-                  >
+                  <Link href={getProfileUrl(authUser)} onClick={() => setMobileMenuOpen(false)} className="block rounded-xl px-4 py-3 text-lg font-semibold text-white hover:bg-[var(--me-surface)]">
                     Profile
                   </Link>
-                  <Link
-                    href={getDashboardUrl(authUser)}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="block rounded-xl px-4 py-3 text-lg font-semibold text-white hover:bg-[var(--me-surface)]"
-                  >
+                  <Link href={getDashboardUrl(authUser)} onClick={() => setMobileMenuOpen(false)} className="block rounded-xl px-4 py-3 text-lg font-semibold text-white hover:bg-[var(--me-surface)]">
                     Dashboard
                   </Link>
                   {(isSuperAdmin(authUser) || isAdmin(authUser)) && (
-                    <Link
-                      href="/admin/dashboard"
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="block rounded-xl px-4 py-3 text-lg font-semibold text-white hover:bg-[var(--me-surface)]"
-                    >
+                    <Link href="/admin/dashboard" onClick={() => setMobileMenuOpen(false)} className="block rounded-xl px-4 py-3 text-lg font-semibold text-white hover:bg-[var(--me-surface)]">
                       Admin panel
                     </Link>
                   )}
@@ -448,23 +421,15 @@ const MainHeader: React.FC = () => {
                     disabled={isSigningOut}
                     className="block w-full rounded-xl px-4 py-3 text-left text-lg font-semibold text-white hover:bg-[var(--me-surface)] disabled:opacity-50"
                   >
-                    {isSigningOut ? "Signing out..." : "Sign out"}
+                    {isSigningOut ? 'Signing out...' : 'Sign out'}
                   </button>
                 </>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
-                  <Link
-                    href="/auth/login"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="rounded-full border-2 border-[var(--me-line)] px-4 py-3 text-center text-base font-semibold text-white"
-                  >
+                  <Link href="/auth/login" onClick={() => setMobileMenuOpen(false)} className="me-slide-right rounded-full border-2 border-[var(--me-line)] px-4 py-3 text-center text-base font-semibold text-white">
                     Log in
                   </Link>
-                  <Link
-                    href="/auth/register"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="rounded-full border-2 border-[var(--me-violet)] bg-[var(--me-violet)] px-4 py-3 text-center text-base font-semibold text-white"
-                  >
+                  <Link href="/auth/register" onClick={() => setMobileMenuOpen(false)} className="me-slide-right rounded-full border-2 border-[var(--me-violet)] bg-[var(--me-violet)] px-4 py-3 text-center text-base font-semibold text-white [--slide-color:var(--me-red)] hover:border-[var(--me-red)]">
                     Sign up
                   </Link>
                 </div>
@@ -478,10 +443,7 @@ const MainHeader: React.FC = () => {
             rel="noopener noreferrer"
             className="flex shrink-0 items-center justify-center gap-2 border-t-2 border-[var(--me-line)] py-4 text-sm font-semibold text-white"
           >
-            <Instagram
-              className="h-5 w-5 text-[var(--me-magenta)]"
-              aria-hidden="true"
-            />
+            <Instagram className="h-5 w-5 text-[var(--me-magenta)]" aria-hidden="true" />
             Follow {INSTAGRAM_HANDLE} on Instagram
           </a>
         </div>

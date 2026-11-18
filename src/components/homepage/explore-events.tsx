@@ -96,7 +96,7 @@ export const ExploreEventsSection: React.FC<ExploreEventsSectionProps> = memo(
                 <button
                   type="button"
                   onClick={() => onCategoryChange('')}
-                  className="mt-6 rounded-full bg-[var(--me-red)] px-6 py-3 font-bold text-white"
+                  className="me-slide-right mt-6 rounded-full bg-[var(--me-red)] px-6 py-3 font-bold text-white"
                 >
                   Show all categories
                 </button>

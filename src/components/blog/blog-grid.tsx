@@ -138,7 +138,7 @@ export function BlogGrid({
             onClick={loadMore}
             variant="outline"
             size="lg"
-            className="rounded-full border-2 border-[var(--me-violet)] bg-transparent text-white hover:bg-[var(--me-violet)] hover:text-white"
+            className="rounded-full border-2 border-[var(--me-violet)] bg-transparent text-white hover:bg-transparent hover:text-white"
           >
             Load more articles
           </Button>

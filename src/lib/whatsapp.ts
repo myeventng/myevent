@@ -2,6 +2,7 @@
 
 export const WHATSAPP_SETTING_KEY = 'site.whatsapp';
 export const WHATSAPP_MAX_MESSAGE = 300;
+export const WHATSAPP_MAX_NAME = 60;
 
 export interface WhatsappWidgetConfig {
   enabled: boolean;
@@ -9,6 +10,10 @@ export interface WhatsappWidgetConfig {
   number: string;
   /** Text pre-filled in the visitor's chat. */
   message: string;
+  /** Optional: who visitors will be chatting with, e.g. "Amaka". Empty when not set. */
+  contactName?: string;
+  /** Optional: https URL of that person's photo. Empty when not set. */
+  contactImage?: string;
 }
 
 export interface WhatsappSettings extends WhatsappWidgetConfig {
@@ -33,4 +38,11 @@ export function normalizeWhatsappNumber(input: string): string | null {
 export function whatsappLink(number: string, message?: string): string {
   const text = message?.trim() ? `?text=${encodeURIComponent(message.trim())}` : '';
   return `https://wa.me/${number}${text}`;
+}
+
+/** Up to two letters for the avatar when there is a name but no photo. */
+export function initialsOf(name: string): string {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
 }

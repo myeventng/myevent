@@ -78,7 +78,7 @@ export const PageTitleHero: React.FC<PageTitleHeroProps> = ({
             />
             <button
               type="submit"
-              className="shrink-0 rounded-full bg-[var(--me-red)] px-5 py-2.5 text-sm font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="me-slide-right shrink-0 rounded-full bg-[var(--me-red)] px-5 py-2.5 text-sm font-bold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
               Search
             </button>

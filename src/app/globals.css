@@ -366,29 +366,32 @@
   .me-progress { animation: none; transform: scaleX(1); }
 }
 
-/* Slide-right button: a violet fill sweeps in from the left on hover or keyboard focus */
-.me-slide-right {
+/* Slide-right button: a fill sweeps in from the left on hover or keyboard focus.
+   Public site only (.me-theme). Fill colour defaults to violet; set --slide-color to change it. */
+.me-theme .me-slide-right {
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  transition: box-shadow 0.35s ease-out;
+  transition-property: box-shadow, color, border-color;
+  transition-duration: 0.35s;
+  transition-timing-function: ease-out;
 }
-.me-slide-right::before {
+.me-theme .me-slide-right::before {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
   width: 0;
-  background: var(--me-violet);
+  background: var(--slide-color, var(--me-violet));
   transition: width 0.35s ease-out;
   z-index: -1;
 }
-.me-slide-right:hover::before,
-.me-slide-right:focus-visible::before {
+.me-theme .me-slide-right:hover:not(:disabled)::before,
+.me-theme .me-slide-right:focus-visible::before {
   width: 100%;
 }
 @media (prefers-reduced-motion: reduce) {
-  .me-slide-right,
-  .me-slide-right::before { transition: none; }
+  .me-theme .me-slide-right,
+  .me-theme .me-slide-right::before { transition: none; }
 }

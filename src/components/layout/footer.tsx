@@ -29,7 +29,7 @@ const Footer: React.FC = () => {
           </div>
           <Link
             href="/events/create"
-            className="inline-flex shrink-0 items-center rounded-full bg-[var(--me-red)] px-7 py-3.5 text-base font-bold text-white shadow-[4px_4px_0_0_var(--me-violet)] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="me-slide-right inline-flex shrink-0 items-center rounded-full bg-[var(--me-red)] px-7 py-3.5 text-base font-bold text-white shadow-[4px_4px_0_0_var(--me-violet)] hover:shadow-[4px_4px_0_0_var(--me-red)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             Host your event
           </Link>
@@ -54,7 +54,7 @@ const Footer: React.FC = () => {
               href={INSTAGRAM_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-5 inline-flex items-center gap-2 rounded-full border-2 border-[var(--me-line)] px-4 py-2 text-sm font-semibold transition-colors hover:border-[var(--me-magenta)] hover:bg-[var(--me-magenta)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="me-slide-right mt-5 inline-flex items-center gap-2 rounded-full border-2 border-[var(--me-line)] px-4 py-2 text-sm font-semibold [--slide-color:var(--me-magenta)] hover:border-[var(--me-magenta)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
               <Instagram className="h-5 w-5" aria-hidden="true" />
               {INSTAGRAM_HANDLE}

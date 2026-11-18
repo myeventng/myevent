@@ -17,7 +17,7 @@ export function UnsubscribeForm({ token }: { token: string }) {
           {result.ok ? 'You are unsubscribed' : 'Something went wrong'}
         </h1>
         <p className="mt-3 text-[var(--me-muted)]">{result.message}</p>
-        <Link href="/" className="mt-6 inline-flex rounded-full bg-[var(--me-red)] px-6 py-3 font-bold text-white">
+        <Link href="/" className="me-slide-right mt-6 inline-flex rounded-full bg-[var(--me-red)] px-6 py-3 font-bold text-white">
           Back to MyEvent
         </Link>
       </div>
@@ -39,7 +39,7 @@ export function UnsubscribeForm({ token }: { token: string }) {
             setResult({ ok: r.success, message: r.message ?? '' });
           })
         }
-        className="mt-6 rounded-full bg-[var(--me-red)] px-7 py-3.5 font-bold text-white shadow-[4px_4px_0_0_var(--me-violet)] disabled:opacity-60"
+        className="me-slide-right mt-6 rounded-full bg-[var(--me-red)] px-7 py-3.5 font-bold text-white shadow-[4px_4px_0_0_var(--me-violet)] disabled:opacity-60"
       >
         {pending ? 'Unsubscribing...' : 'Yes, unsubscribe me'}
       </button>

@@ -101,7 +101,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             <button
               type="button"
               onClick={onRetry}
-              className="rounded-full bg-[var(--me-red)] px-7 py-3 font-bold text-white shadow-[4px_4px_0_0_var(--me-violet)]"
+              className="me-slide-right rounded-full bg-[var(--me-red)] px-7 py-3 font-bold text-white shadow-[4px_4px_0_0_var(--me-violet)] hover:shadow-[4px_4px_0_0_var(--me-red)]"
             >
               Try again
             </button>
@@ -115,7 +115,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
           )}
           <Link
             href="/events"
-            className="rounded-full border-2 border-[var(--me-line)] px-7 py-3 font-bold text-white hover:border-white"
+            className="me-slide-right rounded-full border-2 border-[var(--me-line)] px-7 py-3 font-bold text-white hover:border-[var(--me-violet)]"
           >
             Browse events
           </Link>

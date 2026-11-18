@@ -42,7 +42,7 @@ export default function FaqsPage() {
               <a
                 key={g.id}
                 href={`#${g.id}`}
-                className="rounded-full border-2 border-[var(--me-line)] px-4 py-2 text-sm font-semibold hover:border-[var(--me-violet)] hover:bg-[var(--me-violet)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                className="me-slide-right rounded-full border-2 border-[var(--me-line)] px-4 py-2 text-sm font-semibold hover:border-[var(--me-violet)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
               >
                 {g.title}
               </a>
@@ -79,7 +79,7 @@ export default function FaqsPage() {
             <p className="mt-2 text-[var(--me-muted)]">Send us a message and we will help.</p>
             <Link
               href="/contact"
-              className="mt-5 inline-flex rounded-full bg-[var(--me-red)] px-7 py-3.5 font-bold text-white shadow-[4px_4px_0_0_var(--me-violet)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="me-slide-right mt-5 inline-flex rounded-full bg-[var(--me-red)] px-7 py-3.5 font-bold text-white shadow-[4px_4px_0_0_var(--me-violet)] hover:shadow-[4px_4px_0_0_var(--me-red)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
               Contact us
             </Link>

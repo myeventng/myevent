@@ -49,7 +49,7 @@ export function ContactForm() {
         <button
           type="button"
           onClick={() => setDone(false)}
-          className="mt-6 rounded-full border-2 border-[var(--me-violet)] px-6 py-2.5 font-semibold text-white hover:bg-[var(--me-violet)]"
+          className="me-slide-right mt-6 rounded-full border-2 border-[var(--me-violet)] px-6 py-2.5 font-semibold text-white"
         >
           Send another message
         </button>
@@ -112,7 +112,7 @@ export function ContactForm() {
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--me-red)] px-7 py-4 text-base font-bold text-white shadow-[4px_4px_0_0_var(--me-violet)] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5 disabled:opacity-60 sm:w-auto"
+        className="me-slide-right inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--me-red)] px-7 py-4 text-base font-bold text-white shadow-[4px_4px_0_0_var(--me-violet)] hover:shadow-[4px_4px_0_0_var(--me-red)] disabled:opacity-60 sm:w-auto"
       >
         {pending ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Send className="h-5 w-5" aria-hidden="true" />}
         {pending ? 'Sending...' : 'Send message'}

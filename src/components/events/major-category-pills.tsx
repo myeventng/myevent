@@ -44,7 +44,7 @@ export function MajorCategoryPills({
             role="tab"
             aria-selected={active}
             onClick={() => onSelect(option.id)}
-            className={`shrink-0 whitespace-nowrap rounded-full border-2 px-5 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+            className={`me-slide-right shrink-0 whitespace-nowrap rounded-full border-2 px-5 py-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
               active
                 ? 'border-[var(--me-red)] bg-[var(--me-red)] text-white'
                 : 'border-[var(--me-line)] text-[var(--me-muted)] hover:border-[var(--me-violet)] hover:text-white'

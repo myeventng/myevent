@@ -46,11 +46,15 @@ function Button({
     asChild?: boolean
   }) {
   const Comp = asChild ? Slot : "button"
+  // Public-site buttons get the slide-right fill (the CSS only applies inside .me-theme).
+  const slide =
+    size !== "icon" &&
+    (variant === undefined || variant === null || variant === "default" || variant === "outline" || variant === "secondary")
 
   return (
     <Comp
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(buttonVariants({ variant, size, className }), slide && "me-slide-right")}
       {...props}
     />
   )

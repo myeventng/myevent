@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
-import { ExternalLink, Loader2, MessageCircle } from 'lucide-react';
+import { ExternalLink, ImagePlus, Loader2, Trash2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,8 +12,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { saveWhatsappSettings } from '@/actions/whatsapp-actions';
 import { queryKeys } from '@/lib/queries';
+import { useUploadThing } from '@/lib/uploadthings';
+import { WhatsappButtonView } from '@/components/layout/whatsapp-widget';
 import {
   WHATSAPP_MAX_MESSAGE,
+  WHATSAPP_MAX_NAME,
   normalizeWhatsappNumber,
   whatsappLink,
   type WhatsappSettings,
@@ -26,6 +29,14 @@ export function WhatsappSettingsForm({ initial }: { initial: WhatsappSettings })
   const [enabled, setEnabled] = useState(initial.enabled);
   const [number, setNumber] = useState(initial.number ? `+${initial.number}` : '');
   const [message, setMessage] = useState(initial.message);
+  const [contactName, setContactName] = useState(initial.contactName ?? '');
+  const [contactImage, setContactImage] = useState(initial.contactImage ?? '');
+  const fileInput = useRef<HTMLInputElement>(null);
+  const { startUpload, isUploading } = useUploadThing('whatsappAvatar', {
+    onUploadError: (e) => {
+      toast.error(e.message || 'Photo upload failed');
+    },
+  });
   const [saved, setSaved] = useState(initial);
 
   const normalized = normalizeWhatsappNumber(number);
@@ -33,11 +44,25 @@ export function WhatsappSettingsForm({ initial }: { initial: WhatsappSettings })
   const dirty =
     enabled !== saved.enabled ||
     (normalized ?? '') !== saved.number ||
-    message.trim() !== saved.message;
+    message.trim() !== saved.message ||
+    contactName.trim() !== (saved.contactName ?? '') ||
+    contactImage !== (saved.contactImage ?? '');
+
+  async function onPickImage(file?: File) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Choose an image file');
+      return;
+    }
+    const res = await startUpload([file]);
+    const url = res?.[0]?.url;
+    if (url) setContactImage(url);
+    if (fileInput.current) fileInput.current.value = '';
+  }
 
   function save() {
     startTransition(async () => {
-      const res = await saveWhatsappSettings({ enabled, number, message });
+      const res = await saveWhatsappSettings({ enabled, number, message, contactName, contactImage });
       if (!res.success) {
         toast.error(res.message);
         return;
@@ -47,6 +72,8 @@ export function WhatsappSettingsForm({ initial }: { initial: WhatsappSettings })
         setSaved(res.data);
         setNumber(res.data.number ? `+${res.data.number}` : '');
         setMessage(res.data.message);
+        setContactName(res.data.contactName ?? '');
+        setContactImage(res.data.contactImage ?? '');
       }
       // the visitor-facing copy saved in this browser is now out of date
       queryClient.invalidateQueries({ queryKey: queryKeys.whatsapp });
@@ -95,6 +122,76 @@ export function WhatsappSettingsForm({ initial }: { initial: WhatsappSettings })
             </p>
           </div>
 
+          <div className="space-y-4 rounded-lg border p-4">
+            <div>
+              <p className="text-base font-medium">Who visitors chat with (optional)</p>
+              <p className="text-sm text-muted-foreground">
+                Add a name and photo so the button feels personal. Leave both empty for the plain
+                green button.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="wa-name">Name</Label>
+              <Input
+                id="wa-name"
+                maxLength={WHATSAPP_MAX_NAME}
+                placeholder="e.g. Amaka from MyEvent"
+                value={contactName}
+                onChange={(e) => setContactName(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Photo</Label>
+              <div className="flex items-center gap-4">
+                {contactImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={contactImage}
+                    alt="Contact photo"
+                    className="h-16 w-16 rounded-full border object-cover"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full border border-dashed text-muted-foreground">
+                    <ImagePlus className="h-6 w-6" aria-hidden="true" />
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    ref={fileInput}
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(e) => onPickImage(e.target.files?.[0])}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isUploading}
+                    onClick={() => fileInput.current?.click()}
+                  >
+                    {isUploading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <ImagePlus className="mr-2 h-4 w-4" />
+                    )}
+                    {contactImage ? 'Change photo' : 'Upload photo'}
+                  </Button>
+                  {contactImage && (
+                    <Button type="button" variant="ghost" onClick={() => setContactImage('')}>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                A square photo works best (up to 2 MB). Remember to press Save changes.
+              </p>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="wa-message">First message</Label>
             <Textarea
@@ -139,13 +236,17 @@ export function WhatsappSettingsForm({ initial }: { initial: WhatsappSettings })
           <CardDescription>Bottom right of every public page.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="relative h-40 rounded-lg border bg-muted/40">
+          <div className="relative flex h-40 items-end justify-end rounded-lg border bg-muted/40 p-3">
             {enabled && normalized ? (
-              <span className="absolute bottom-3 right-3 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-md">
-                <MessageCircle className="h-7 w-7" aria-hidden="true" />
+              <span
+                className={`group flex items-center rounded-full bg-[#25D366] text-white shadow-md ${
+                  contactName.trim() || contactImage ? 'gap-2.5 p-1.5' : 'p-3.5'
+                }`}
+              >
+                <WhatsappButtonView name={contactName} image={contactImage} />
               </span>
             ) : (
-              <p className="p-4 text-sm text-muted-foreground">
+              <p className="mr-auto self-start p-1 text-sm text-muted-foreground">
                 {enabled ? 'Add a number to show the button.' : 'The button is hidden.'}
               </p>
             )}
